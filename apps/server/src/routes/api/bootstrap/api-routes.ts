@@ -101,6 +101,8 @@ export function mountApiRoutes(args: {
     c.set("pluginRegistry", registry);
     c.set("pluginServices", services);
     c.set("pluginExtensions", extensions);
+    c.set("appEvents", host.appEvents);
+    c.set("promptDiagnostics", host.promptDiagnostics);
     c.set("uiSlots", uiSlots);
     c.set("llmAdapter", config.llmAdapter);
     if (config.pluginGateway) {
@@ -122,6 +124,7 @@ export function mountApiRoutes(args: {
     c.set("rpcRegistry", rpc.rpcRegistry);
     c.set("rpcApprovalGate", rpc.rpcApprovalGate);
     c.set("trustedSources", trust.current);
+    c.set("permissionService", trust.permissions);
     c.set("sessionLock", sessionLock);
     c.set("memoryIngestLock", memoryIngestLock);
     c.set("runtimeJobWorker", jobs.runtimeJobWorker);

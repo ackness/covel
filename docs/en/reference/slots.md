@@ -171,6 +171,7 @@ A server-side `{PROVIDER}_API_KEY` from the environment is sent only to a same-o
 - Request tracing records only the body fields on an allowlist (`MODEL_FIELDS` in `packages/ai-provider/src/adapters/http/request-observation.ts`). If a new protocol uses new top-level field names, add them there. Otherwise they do not appear in the trace.
 - The plugin SDK cannot depend on `@covel/shared`. It keeps its own copy of the built-in protocol ID type (`PluginProviderProtocol`). If the two copies differ, `packages/shared/src/provider-protocols.ts` fails to compile.
 - **A plugin can provide a protocol**, and the framework does not need to change. The plugin registers it with `covel.registerWires({ text: [...] })`, and the role's `protocol` is written as `<pluginId>/<wireId>`. Only sessions that enable that plugin can select it. Otherwise the call fails with a configuration error. A request without a session (such as a connection test) can use a protocol from a built-in plugin. In a `self` deployment it can also use one from a community plugin. See [plugin-extensions.md § Text protocol wire](./plugin-extensions.md#text-protocol-wire).
+- **A plugin can manage provider credentials and connections**: see [Plugin-managed provider sources (`provider.source@1`)](#plugin-managed-provider-sources-providersource1) below.
 
 ## API key flow
 
@@ -190,7 +191,7 @@ Keys from the server's environment, and default credentials registered in the pr
 - If only the path changes within the same origin, the default credentials are kept.
 - A resolve request does not change a registered config.
 
-For a custom connection, the frontend uses the exact-connection result from [model lookup](./api.md#model-database-model-db) to determine server credential readiness. Matching a server preset's endpoint alone is insufficient. Protocol authentication headers also count. Results from an old lookup are not used after the connection, protocol or configuration revision changes.
+For a custom connection, the frontend uses the exact-connection result from [model lookup](./api.md#model-database-model-db) to determine server credential readiness. Matching a server preset's endpoint alone is insufficient. Protocol authentication headers also count. Results from an old lookup are not used after the connection, protocol or configuration revision changes. Presets bound to a `provider.source@1` source resolve short-lived credentials on the server via `source` and optional `account` bindings, and the client excludes source-backed providers from `X-Provider-Keys`.
 
 ## Config layers and the front end
 
@@ -220,7 +221,7 @@ Rules for the providers page:
 
 - Models are grouped by connection ID. A group shares one API key and one price multiplier.
 - A model from the TOML keeps its own address and protocol from its file. A model you add locally uses the address of the local connection, plus its own protocol override. Changing a local connection does not change the TOML models in the same group.
-- Model rows and role cards show the effective address, protocol, and config source.
+- Model rows and role cards show the effective address, protocol, and config source. For source-backed providers, the settings UI exposes source and account selectors together with the Config Flow sign-in trigger, renders the endpoint read-only, hides manual API-key entry, and evaluates readiness from server `credentialSource` state.
 
 Rules for the role picker:
 
@@ -882,6 +883,15 @@ Before it sends a request, `gateway.generateObject({ schema, messages })` conver
 `gateway.generateText` and `gateway.streamText` both accept `responseFormat`. It is passed to the adapter of each actual call, including fallback models. Streamed output is still text deltas. `responseFormat` does not provide incremental object parsing, and it does not replace the caller's check of the complete result.
 
 Agent completion uses the schema in tool arguments without `responseFormat`, `text.format` or JSON MIME instructions. See [completion conditions](./plugins.md#agent-output-submission) for submission and correction, and [tool submission capabilities](#tool-submission-capabilities) for target checks and strict policy. This adds no correction model calls to `gateway.generateObject`.
+
+## Plugin-managed provider sources (provider.source@1)
+
+Providers requiring OAuth logins, multi-account pools, subscription token exchange, or automatic refresh attach through the generic `provider.source@1` contract in instance-capable plugins (`apiVersion: 2`, `scope: instance` or `both`) without changing framework code:
+
+- **Manifest & capabilities**: Declare sources under `contributes.providerSources` (`protocol` must name a host-known protocol, plus `modes` and referenced `flows` in `contributes.flows`) and register `resolve`, optional `listModels`, `getUsage`, and error-classification handlers via `covel.registerProviderSources`. Access to `covel.secrets`, `permissions.http`, and instance sources obeys the [four-layer permission policy](./plugin-installation.md#permissions-and-the-four-layer-policy); hosted and `browser-private` deployments hard-disable `plugin.providerSource`.
+- **Dormant boot & warm restore**: Packages using lazy `activationEvents` (`onFlow:*`, `onAppAction:*`) stay dormant on boot while no credentials exist in `SecretVault`, and warm on startup once secrets are stored.
+- **Credential isolation & origin lock**: Every resolved `baseUrl` must belong to the package's declared `permissions.http` origins; bearer tokens and auth headers stay strictly on the server for that outbound request and never leak to web responses, `X-Provider-Keys`, traces, or error strings.
+- **Request shaping & failover**: A resolved source can return declarative `requestShape` options (such as setting `instructions`, `store: false`, `omitTemperature`, `omitMaxOutputTokens`, or `forceStream` SSE aggregation for `generateText`/`generateObject` on `openai-responses`), performs single-flight `401` refresh retries, fails over across accounts on `429` or auth failures, and enforces declared mode gates (`text`, `structured`, `stream`, `vision`, `tools`, `embed`, `image`, `audio`).
 
 ## Provider streaming responses
 

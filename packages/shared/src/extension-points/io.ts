@@ -1,5 +1,6 @@
 import type { ExtensionPoint } from "./definition.js";
 import type { kernelExtensionPoints } from "./contracts.js";
+import type { channelBridgeV1 } from "../platform/channel-bridge.js";
 import type { historyCompactV2 } from "./history-compact.js";
 import type { mediaImageFlowV1 } from "./media-image-flow.js";
 import type { promptHistoryTransformV1 } from "./prompt-history-transform.js";
@@ -23,6 +24,10 @@ type KernelPointId =
  * handler signatures to this map.
  */
 export interface KernelExtensionPointIo {
+  readonly "channel.bridge@1": {
+    readonly input: ExtensionPointInput<typeof channelBridgeV1>;
+    readonly output: ExtensionPointOutput<typeof channelBridgeV1>;
+  };
   readonly "history.compact@2": {
     readonly input: ExtensionPointInput<typeof historyCompactV2>;
     readonly output: ExtensionPointOutput<typeof historyCompactV2>;

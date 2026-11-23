@@ -83,12 +83,31 @@ export function assessPluginExecution({
       field,
       message: `${field} requires server-code authorization.`,
     });
+  const checkPermissions = (value: unknown, file: string, prefix = "") => {
+    const permissions = record(value);
+    if (nonempty(permissions.http)) code(file, `${prefix}permissions.http`);
+    for (const key of [
+      "secrets",
+      "authProxy",
+      "scheduler",
+      "sandboxWorker",
+    ] as const) {
+      if (permissions[key] === true) {
+        code(file, `${prefix}permissions.${key}`);
+      }
+    }
+    if (nonempty(permissions.loopbackCallback)) {
+      code(file, `${prefix}permissions.loopbackCallback`);
+    }
+    if (nonempty(permissions.appEvents)) {
+      code(file, `${prefix}permissions.appEvents`);
+    }
+  };
   const runtime = (value: unknown, file: string, prefix = "") => {
     const declaration = record(value);
     for (const field of ["function", "guard"])
       if (declaration[field] !== undefined) code(file, `${prefix}${field}`);
-    if (nonempty(record(declaration.permissions).http))
-      code(file, `${prefix}permissions.http`);
+    checkPermissions(declaration.permissions, file, prefix);
   };
   const inspect = (
     data: Record<string, unknown>,
@@ -97,7 +116,15 @@ export function assessPluginExecution({
   ) => {
     if (!packageRoot) return runtime(data, file);
     if (data.entry !== undefined) code(file, "entry");
-    if (nonempty(record(data.permissions).http)) code(file, "permissions.http");
+    checkPermissions(data.permissions, file);
+    if (
+      (data.scope === "instance" || data.scope === "both") &&
+      (data.entry !== undefined ||
+        nonempty(data.permissions) ||
+        nonempty(data.activationEvents))
+    ) {
+      code(file, "scope");
+    }
     const contributes = record(data.contributes);
     for (const field of [
       "hooks",
@@ -105,6 +132,11 @@ export function assessPluginExecution({
       "wires",
       "services",
       "actions",
+      "appActions",
+      "flows",
+      "appEvents",
+      "schedules",
+      "providerSources",
       "forms",
       "extensions",
       "worldProjections",

@@ -14,6 +14,7 @@ export type ExtensionMode = "single" | "collect" | "pipeline";
 export interface ExtensionPoint<I, O, M extends ExtensionMode = ExtensionMode> {
   readonly id: string;
   readonly mode: M;
+  readonly scope?: "session" | "instance";
   readonly input: { parse(value: unknown): I };
   readonly output: { parse(value: unknown): O };
   readonly timeoutMs: number;

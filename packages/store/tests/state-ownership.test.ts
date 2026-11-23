@@ -197,7 +197,9 @@ describe("kernel-state ownership", () => {
   it("assigns plugin-data rows to plugins and other state to the kernel", () => {
     for (const [table, ownership] of Object.entries(KERNEL_TABLE_OWNERSHIP)) {
       expect(ownership.owner, table).toBe(
-        table === "plugin_data" ? "plugin" : "kernel",
+        table === "plugin_data" || table === "instance_data"
+          ? "plugin"
+          : "kernel",
       );
     }
     for (const [field, ownership] of Object.entries(SESSION_FIELD_OWNERSHIP)) {

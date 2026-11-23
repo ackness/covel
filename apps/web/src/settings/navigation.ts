@@ -62,6 +62,7 @@ const ADVANCED_KEYS = [
 const INTERNAL_KEYS = new Set(["ui.onboardedVersion"]);
 
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
+const PERMISSIONS_NODE_ID = "permissions";
 const RAW_CONFIG_NODE_ID = "raw-config";
 const MEDIA_LIBRARY_NODE_ID = "media-library";
 const DATA_NODE_ID = "data";
@@ -93,6 +94,7 @@ function navigationLabels(locale: string) {
     rawConfig: t("settings.rawConfigNavLabel", "Configuration file"),
     mediaLibrary: t("settings.mediaLibraryNavLabel", "Stored media"),
     operatorAccess: t("settings.operatorAccessNavLabel", "Operator access"),
+    permissions: t("settings.permissionsNavLabel", "Permissions & security"),
     advancedOptions: t("settings.advancedNavLabel", "Options"),
     packages: t("settings.packages.navLabel", "Install & manage"),
   };
@@ -268,6 +270,13 @@ export function buildNavTree(
     children: [...pick(ADVANCED_KEYS), ...extraAdvanced],
   });
   nodes.push({
+    id: PERMISSIONS_NODE_ID,
+    label: labels.permissions,
+    kind: "subgroup",
+    parentId: ADVANCED_HEADER_ID,
+    children: all.filter((entry) => entry.key === "permissions.policy"),
+  });
+  nodes.push({
     id: RAW_CONFIG_NODE_ID,
     label: labels.rawConfig,
     kind: "subgroup",
@@ -307,6 +316,7 @@ export {
   MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
+  PERMISSIONS_NODE_ID,
   RAW_CONFIG_NODE_ID,
 };
 

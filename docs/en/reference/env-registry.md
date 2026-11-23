@@ -297,6 +297,9 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 | `COVEL_PG_LOCK_POOL_MAX` | `16` | Size of the connection pool used only for PostgreSQL session locks |
 | `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4` | Size of the PostgreSQL lock connection pool used only for semantic memory ingestion |
 | `COVEL_LOG_QUIET_PATHS` | `/api/health` | Paths that are not logged in request logs, separated by commas |
+| `COVEL_DISABLED_CAPABILITIES` | — | Comma-separated `CapabilityKey` names forced to `disabled` on the host capability ceiling at startup (downward-only) |
+| `COVEL_PERMISSIONS_POLICY` | — | Comma-separated `CapabilityKey=allow|ask|deny` entries fixing the L2 instance capability policy at startup |
+| `COVEL_CREDENTIALS_KEY` | — | Optional secret key/passphrase enabling authenticated at-rest encryption for `<config>/secrets/` plugin secrets |
 | `COVEL_APP_VERSION` | The app's `package.json` | Overrides the framework version shown in the desktop preload and the server health check |
 
 **Desktop and paths**
@@ -321,15 +324,15 @@ The variables below are also in `registry.ts`. For variables whose use is alread
 
 **Models**
 
-| Variable                             | Default                 | Purpose                                                                                                                                                                      |
-| ------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable                             | Default              | Purpose                                                                                                                                                                      |
+| ------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-flash` | When there is no `llm.toml`, the built-in `story` role uses this OpenAI-compatible endpoint and model instead (provider `default`). `e2e:replay --record` also records to it |
-| `DEFAULT_API_KEY`                    | —                       | Key for the `default` provider. The built-in role above and the sessions in `tests/llm-replay/` both use it                                                                  |
-| `COVEL_LLM_RETRY_DISABLED`           | `false`                 | Set to `1` to turn off provider HTTP retries                                                                                                                                 |
-| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | Limit on text model calls running at the same time across the whole process                                                                                                  |
-| `COVEL_MODEL_DB_PATH`                | —                       | Overrides the path of the model database JSON                                                                                                                                |
-| `COVEL_PROMPTS_DIR`                  | —                       | Overrides the root folder of prompt templates                                                                                                                                |
-| `COVEL_IMG_KEY`                      | —                       | Key for the offline portrait and scene generation scripts. It takes priority over the provider's own key                                                                     |
+| `DEFAULT_API_KEY`                    | —                    | Key for the `default` provider. The built-in role above and the sessions in `tests/llm-replay/` both use it                                                                  |
+| `COVEL_LLM_RETRY_DISABLED`           | `false`              | Set to `1` to turn off provider HTTP retries                                                                                                                                 |
+| `COVEL_LLM_MAX_CONCURRENT`           | `4`                  | Limit on text model calls running at the same time across the whole process                                                                                                  |
+| `COVEL_MODEL_DB_PATH`                | —                    | Overrides the path of the model database JSON                                                                                                                                |
+| `COVEL_PROMPTS_DIR`                  | —                    | Overrides the root folder of prompt templates                                                                                                                                |
+| `COVEL_IMG_KEY`                      | —                    | Key for the offline portrait and scene generation scripts. It takes priority over the provider's own key                                                                     |
 
 **Feature switches**
 
@@ -459,6 +462,23 @@ This section explains, one by one, the variables whose behavior is more detailed
 - The default is `false`. It decides whether `POST /api/media/cleanup` can be used.
 - With `DEPLOYMENT_TIER=commercial` this endpoint always returns 503, so setting it to `true` on that tier makes the server refuse to start.
 - For details, see the media management section of [`api.md`](./api.md).
+
+**`COVEL_DISABLED_CAPABILITIES`**
+
+- Comma-separated capability keys from `CAPABILITY_KEYS` (`packages/shared/src/permissions/catalog.ts`) forced to `disabled` on the L1 host capability ceiling at startup.
+- Tightening is strictly downward-only and cannot re-enable any capability that the deployment form already locks to `disabled`. Unknown capability keys stop the server from starting.
+- See [Security · Capability ceilings](../internals/security.md#capability-ceilings-l1).
+
+**`COVEL_PERMISSIONS_POLICY`**
+
+- Comma-separated `CapabilityKey=allow|ask|deny` list that fixes the `permissions.policy` L2 instance capability policy at startup (`env > stored > default`).
+- When valid and present, `/api/config/server-settings` and `/api/permissions/snapshot` report `source: "env"` and `settable: false`, and policy updates return `409 server_setting_fixed`; setting `allow` on a capability that forbids instance-level auto-allow invalidates the override so the environment value is ignored.
+- See [Security · Instance policy and persistent grants](../internals/security.md#instance-policy-and-persistent-grants).
+
+**`COVEL_CREDENTIALS_KEY`**
+
+- Optional secret passphrase (SHA-256 derived 256-bit key with AES-256-GCM authenticated encryption) for protecting file-backed plugin secrets managed via `ctx.secrets` under `<config>/secrets/`.
+- When unset, secret files are still written atomically with `0600` permissions in the local config directory and remain excluded from the database and `/api/config/raw/*`. Do not rotate away an active passphrase while secret files encrypted under it remain on disk.
 
 ### Desktop proxy
 

@@ -297,6 +297,9 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 | `COVEL_PG_LOCK_POOL_MAX` | `16` | PostgreSQL 会话锁专用连接池的大小 |
 | `COVEL_PG_INGEST_LOCK_POOL_MAX` | `4` | 语义记忆摄取专用的 PostgreSQL 锁连接池的大小 |
 | `COVEL_LOG_QUIET_PATHS` | `/api/health` | 请求日志里不记录的路径，逗号分隔 |
+| `COVEL_DISABLED_CAPABILITIES` | — | 逗号分隔的 `CapabilityKey` 名称，用于只在启动时向下禁用宿主能力天花板 |
+| `COVEL_PERMISSIONS_POLICY` | — | 逗号分隔的 `CapabilityKey=allow|ask|deny` 列表，用于在启动时固定实例级能力策略 |
+| `COVEL_CREDENTIALS_KEY` | — | 可选主密钥，用于给 `<config>/secrets/` 下的文件型插件机密做落盘认证加密 |
 | `COVEL_APP_VERSION` | 对应应用的 `package.json` | 覆盖桌面 preload 和服务端 health 里的框架版本 |
 
 **桌面与路径**
@@ -321,15 +324,15 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 **模型**
 
-| 变量                                 | 默认值                  | 用途                                                                                                                        |
-| ------------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 变量                                 | 默认值               | 用途                                                                                                                        |
+| ------------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `DEFAULT_BASE_URL` / `DEFAULT_MODEL` | — / `deepseek-flash` | 没有 `llm.toml` 时，内置的 `story` 用途改用这个 OpenAI 兼容端点和模型（服务商 `default`）；`e2e:replay --record` 也向它录制 |
-| `DEFAULT_API_KEY`                    | —                       | `default` 服务商的密钥：上面的内置用途和 `tests/llm-replay/` 的会话都用它                                                   |
-| `COVEL_LLM_RETRY_DISABLED`           | `false`                 | 设为 `1` 时关闭服务商 HTTP 重试                                                                                             |
-| `COVEL_LLM_MAX_CONCURRENT`           | `4`                     | 整个进程同时进行的文本模型调用上限                                                                                          |
-| `COVEL_MODEL_DB_PATH`                | —                       | 覆盖模型数据库 JSON 的路径                                                                                                  |
-| `COVEL_PROMPTS_DIR`                  | —                       | 覆盖提示词模板根目录                                                                                                        |
-| `COVEL_IMG_KEY`                      | —                       | 离线立绘、场景生成脚本用的密钥，优先于服务商自己的密钥                                                                      |
+| `DEFAULT_API_KEY`                    | —                    | `default` 服务商的密钥：上面的内置用途和 `tests/llm-replay/` 的会话都用它                                                   |
+| `COVEL_LLM_RETRY_DISABLED`           | `false`              | 设为 `1` 时关闭服务商 HTTP 重试                                                                                             |
+| `COVEL_LLM_MAX_CONCURRENT`           | `4`                  | 整个进程同时进行的文本模型调用上限                                                                                          |
+| `COVEL_MODEL_DB_PATH`                | —                    | 覆盖模型数据库 JSON 的路径                                                                                                  |
+| `COVEL_PROMPTS_DIR`                  | —                    | 覆盖提示词模板根目录                                                                                                        |
+| `COVEL_IMG_KEY`                      | —                    | 离线立绘、场景生成脚本用的密钥，优先于服务商自己的密钥                                                                      |
 
 **功能开关**
 
@@ -459,6 +462,23 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 - 默认 `false`，决定 `POST /api/media/cleanup` 能不能用。
 - `DEPLOYMENT_TIER=commercial` 时这个接口固定返回 503，所以在这个档位上设为 `true` 会让服务端拒绝启动。
 - 详见 [`api.md`](./api.md) 的媒体管理章节。
+
+**`COVEL_DISABLED_CAPABILITIES`**
+
+- 逗号分隔的能力目录名称（`packages/shared/src/permissions/catalog.ts` 中的 `CAPABILITY_KEYS`），用于在服务端启动时把对应能力的天花板向下收紧为 `disabled`。
+- 只能向下收紧，不能重新开启在当前部署形态默认已经为 `disabled` 的能力；填写未知能力名会阻止服务端启动。
+- 详见 [安全边界 · 能力天花板](../internals/security.md#能力天花板l1)。
+
+**`COVEL_PERMISSIONS_POLICY`**
+
+- 逗号分隔的 `CapabilityKey=allow|ask|deny` 映射列表，用于在启动时固定 `permissions.policy` 实例级能力策略（优先级：`env > stored > default`）。
+- 解析成功后，`/api/config/server-settings` 与 `/api/permissions/snapshot` 会将其报告为 `source: "env"`、`settable: false`，写入策略会返回 `409 server_setting_fixed`；对禁止实例自动放行的高风险能力配置 `allow` 会被视为无效并忽略该变量覆盖。
+- 详见 [安全边界 · 实例策略与持久化授权](../internals/security.md#实例策略与持久化授权)。
+
+**`COVEL_CREDENTIALS_KEY`**
+
+- 可选对称加密口令（使用 SHA-256 派生 256 位密钥并采用 AES-256-GCM 认证加密），用于保护 `<config>/secrets/` 下由 `ctx.secrets` 托管的插件机密文件。
+- 未设置时文件仍以 `0600` 权限与原子重命名方式保存于本地配置目录，不进入数据库与 `/api/config/raw/*` 接口；切勿使用空字符串覆盖或丢失既有密钥。
 
 ### 桌面代理
 

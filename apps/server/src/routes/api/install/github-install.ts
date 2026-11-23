@@ -166,6 +166,12 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
               ]),
         root,
       );
+      if (kind === "world") {
+        void c.get("appEvents")?.emit("WorldInstalled", {
+          worldId: summary.id,
+          source: "github",
+        });
+      }
       return c.json(
         { ok: true, kind, id: summary.id, restartRequired: kind === "plugin" },
         201,

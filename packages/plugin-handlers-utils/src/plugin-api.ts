@@ -350,6 +350,11 @@ export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly random: import("./function-runtime.js").PluginRandom;
   readonly sessionId: string;
+  readonly scope?: "session" | "instance";
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly http?: PluginHttp;
   readonly locale?: string;
   /** The provider's session translations and labels in every shipped language. */
   readonly messages?: PluginMessages;
@@ -371,7 +376,7 @@ export interface PluginServiceContext {
  */
 export interface PluginWriteServiceContext extends Omit<
   PluginServiceContext,
-  "pluginData" | "gateway" | "utils"
+  "pluginData" | "gateway" | "utils" | "secrets" | "http" | "instanceData"
 > {
   readonly pluginData: import("./function-runtime.js").PluginDataWriter;
   readonly random: import("./function-runtime.js").PluginRandom;
@@ -518,6 +523,29 @@ export interface PluginServiceGateway {
     readonly model?: string;
     readonly provider?: string;
   }>;
+  streamText?(input: {
+    readonly presetId?: string;
+    readonly prompt?: string;
+    readonly system?: string;
+    readonly messages?: readonly {
+      readonly role: "system" | "user" | "assistant";
+      readonly content: string;
+    }[];
+    readonly defaults?: {
+      readonly reasoningEffort?: "disabled";
+      readonly toolChoice?: "required" | { readonly name: string };
+    };
+    readonly responseFormat?: {
+      readonly type: "json_schema";
+      readonly schema: Readonly<Record<string, unknown>>;
+    };
+    readonly maxOutputTokens?: number;
+    readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+    readonly providerOptions?: Readonly<
+      Record<string, Readonly<Record<string, unknown>>>
+    >;
+    readonly signal?: AbortSignal;
+  }): AsyncIterable<PluginGatewayStreamEvent>;
   resolveSlot(input: {
     readonly presetId?: string;
     readonly fallbackTag?: string;
@@ -530,6 +558,7 @@ export interface PluginServiceGateway {
     readonly headers?: Readonly<Record<string, string>>;
     readonly model: string;
     readonly tag: string;
+    readonly credentialSource?: PluginProviderSourceCredentialStatus;
     readonly metadata: Readonly<Record<string, unknown>>;
     /** Effective limits, present when the model declares a context window. */
     readonly limits?: {
@@ -769,6 +798,8 @@ export interface PluginHttp {
     init?: RequestInit & {
       readonly maxRetries?: number;
       readonly signal?: AbortSignal;
+      readonly timeoutMs?: number;
+      readonly proxy?: "direct" | "instance-auth";
     },
   ): Promise<Response>;
 }
@@ -964,6 +995,78 @@ export interface PluginMusicWire {
     warnings: string[];
   }>;
 }
+export interface PluginLlmDiagnostics {
+  readonly warnings?: readonly {
+    readonly type: "unsupported" | "compatibility" | "other";
+    readonly feature?: string;
+    readonly message: string;
+  }[];
+  readonly sources?: readonly (
+    | {
+        readonly type: "url";
+        readonly id: string;
+        readonly url: string;
+        readonly title?: string;
+      }
+    | {
+        readonly type: "document";
+        readonly id: string;
+        readonly title?: string;
+        readonly fileName?: string;
+        readonly documentIndex?: number;
+      }
+  )[];
+  readonly citations?: readonly {
+    readonly sourceId: string;
+    readonly location?: "response" | "source";
+    readonly citedText?: string;
+    readonly startIndex?: number;
+    readonly endIndex?: number;
+    readonly startPage?: number;
+    readonly endPage?: number;
+    readonly startBlockIndex?: number;
+    readonly endBlockIndex?: number;
+  }[];
+  readonly refusal?: {
+    readonly reason: "refusal" | "content-filter";
+    readonly message?: string;
+  };
+}
+
+export interface PluginProviderContinuation {
+  readonly protocol: string;
+  readonly model: string;
+  readonly baseUrl?: string;
+  readonly items: readonly Readonly<Record<string, unknown>>[];
+}
+
+export type PluginGatewayStreamEvent =
+  | {
+      readonly type: "tool-argument-delta";
+      readonly index?: number;
+      readonly id?: string;
+      readonly name?: string;
+      readonly argumentsDelta?: string;
+      readonly arguments?: string;
+    }
+  | { readonly type: "stream-reset" }
+  | { readonly type: "text-delta"; readonly textDelta: string }
+  | { readonly type: "reasoning-delta"; readonly reasoningDelta: string }
+  | {
+      readonly type: "tool-call";
+      readonly id: string;
+      readonly name: string;
+      readonly arguments: string;
+    }
+  | {
+      readonly type: "done";
+      readonly diagnostics?: PluginLlmDiagnostics;
+      readonly finishReason: string;
+      readonly reasoningContent?: string;
+      readonly usage: PluginUsageSummary;
+      readonly providerContinuation?: PluginProviderContinuation;
+    };
+
 export interface PluginTextMessage {
   role: string;
   content:
@@ -979,6 +1082,7 @@ export interface PluginTextMessage {
   toolCallId?: string;
   /** Reasoning of an earlier assistant turn, for providers that want it back. */
   reasoningContent?: string;
+  providerContinuation?: PluginProviderContinuation;
 }
 export interface PluginTextParams {
   model: string;
@@ -1005,11 +1109,13 @@ export interface PluginTextParams {
 }
 export interface PluginTextResult {
   text: string;
+  diagnostics?: PluginLlmDiagnostics;
   /** The provider's own word is accepted; the gateway unifies it. */
   finishReason: string;
   usage: PluginUsageSummary;
   toolCalls?: { id: string; name: string; arguments: string }[];
   reasoningContent?: string;
+  providerContinuation?: PluginProviderContinuation;
 }
 export type PluginTextStreamEvent =
   | { type: "text-delta"; textDelta: string }
@@ -1033,9 +1139,11 @@ export type PluginTextStreamEvent =
   /** Last event of every stream. */
   | {
       type: "done";
+      diagnostics?: PluginLlmDiagnostics;
       finishReason: string;
       usage: PluginUsageSummary;
       reasoningContent?: string;
+      providerContinuation?: PluginProviderContinuation;
     };
 /**
  * A text protocol this plugin provides. A model slot whose `protocol` is
@@ -1071,12 +1179,431 @@ export interface PluginWireModule {
   readonly text?: readonly PluginTextWire[];
 }
 
+export interface PluginInstanceDataEntry {
+  readonly key: string;
+  readonly value: unknown;
+  readonly updatedAt?: string;
+}
+
+export interface PluginInstanceDataStore {
+  get(namespace: string, key: string): Promise<unknown>;
+  list(namespace: string): Promise<readonly PluginInstanceDataEntry[]>;
+  set(namespace: string, key: string, value: JsonValue): Promise<void>;
+  delete(namespace: string, key: string): Promise<boolean>;
+}
+
+export interface PluginSecretEntry<T extends JsonValue = JsonValue> {
+  readonly value: T;
+  readonly generation: number;
+  readonly updatedAt: string;
+}
+
+export interface PluginSecretSummary {
+  readonly key: string;
+  readonly generation: number;
+  readonly updatedAt: string;
+}
+
+export interface PluginSecretStore {
+  get<T extends JsonValue = JsonValue>(
+    key: string,
+  ): Promise<PluginSecretEntry<T> | null>;
+  list(): Promise<readonly PluginSecretSummary[]>;
+  set<T extends JsonValue = JsonValue>(
+    key: string,
+    value: T,
+  ): Promise<PluginSecretEntry<T>>;
+  delete(key: string): Promise<boolean>;
+  compareAndSwap<T extends JsonValue = JsonValue>(
+    key: string,
+    expectedGeneration: number | null,
+    nextValue: T,
+  ): Promise<
+    | { readonly ok: true; readonly entry: PluginSecretEntry<T> }
+    | {
+        readonly ok: false;
+        readonly reason: "generation_mismatch";
+        readonly current: PluginSecretEntry<JsonValue> | null;
+      }
+  >;
+  withLock<TResult>(
+    key: string,
+    fn: (current: PluginSecretEntry<JsonValue> | null) => Promise<TResult>,
+  ): Promise<TResult>;
+}
+
+export interface PluginSandboxWorkerRunner {
+  run<I = unknown, O = unknown>(params: {
+    readonly code: string;
+    readonly input: I;
+    readonly timeoutMs?: number;
+    readonly maxOutputBytes?: number;
+    readonly signal?: AbortSignal;
+  }): Promise<O>;
+}
+
+export interface PluginSchedulerClient {
+  scheduleOnce(taskId: string, delayMs: number): Promise<void>;
+}
+
+export type PluginAppEventName =
+  | "AppStarted"
+  | "BeforeShutdown"
+  | "SessionCreated"
+  | "SessionTurnCommitted"
+  | "SessionDeleted"
+  | "WorldInstalled"
+  | "WorldRemoved";
+
+export interface PluginAppEventPayloads {
+  readonly AppStarted: { readonly hostId?: string; readonly startedAt: string };
+  readonly BeforeShutdown: {
+    readonly hostId?: string;
+    readonly reason: string;
+  };
+  readonly SessionCreated: {
+    readonly sessionId: string;
+    readonly worldId: string;
+    readonly locale: string;
+  };
+  readonly SessionTurnCommitted: {
+    readonly sessionId: string;
+    readonly turnId: string;
+    readonly logicalTurn: number;
+    readonly committedAt: string;
+  };
+  readonly SessionDeleted: { readonly sessionId: string };
+  readonly WorldInstalled: {
+    readonly worldId: string;
+    readonly source?: string;
+  };
+  readonly WorldRemoved: { readonly worldId: string };
+}
+
+export interface PluginAppEventContext {
+  readonly signal: AbortSignal;
+  readonly pluginId: string;
+  readonly event: PluginAppEventName;
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly http: PluginHttp;
+}
+
+export type PluginAppEventHandler<
+  E extends PluginAppEventName = PluginAppEventName,
+> = (
+  payload: PluginAppEventPayloads[E],
+  context: PluginAppEventContext,
+) => void | Promise<void>;
+
+export interface PluginScheduledTaskContext {
+  readonly signal: AbortSignal;
+  readonly pluginId: string;
+  readonly taskId: string;
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly sandbox?: PluginSandboxWorkerRunner;
+  readonly http: PluginHttp;
+}
+
+export type PluginScheduledTaskHandler = (
+  context: PluginScheduledTaskContext,
+) => void | Promise<void>;
+
+export interface PluginAppActionContext {
+  readonly signal: AbortSignal;
+  readonly pluginId: string;
+  readonly action: string;
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly sandbox?: PluginSandboxWorkerRunner;
+  readonly scheduler?: PluginSchedulerClient;
+  readonly http: PluginHttp;
+}
+
+export type PluginAppActionHandler<I = unknown, O = unknown> = (
+  input: I,
+  context: PluginAppActionContext,
+) => O | Promise<O>;
+
+export interface PluginAppActionOptions<I = unknown, O = unknown> {
+  readonly description?: string;
+  readonly inputSchema?: ZodType<I>;
+  readonly outputSchema?: ZodType<O>;
+  readonly requiredCapabilities?: readonly string[];
+}
+
+export type PluginConfigFlowStepKind =
+  "form" | "browser" | "device" | "import" | "confirm" | "done" | "error";
+
+export type PluginConfigFlowText = string | Record<string, string>;
+
+export interface PluginConfigFlowFieldOption {
+  value: string;
+  label: PluginConfigFlowText;
+}
+
+export interface PluginConfigFlowField {
+  name: string;
+  label: PluginConfigFlowText;
+  type: "text" | "secret" | "url" | "number" | "boolean" | "select";
+  required?: boolean;
+  placeholder?: PluginConfigFlowText;
+  description?: PluginConfigFlowText;
+  defaultValue?: string | number | boolean;
+  options?: PluginConfigFlowFieldOption[];
+}
+
+export type PluginConfigFlowStep =
+  | {
+      kind: "form";
+      stepId: string;
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      fields: PluginConfigFlowField[];
+      submitLabel?: PluginConfigFlowText;
+    }
+  | {
+      kind: "browser";
+      stepId: string;
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      authorizeUrl: string;
+      completion: "loopback-or-paste" | "paste" | "loopback";
+      callbackUrl?: string;
+      expiresAt?: string;
+    }
+  | {
+      kind: "device";
+      stepId: string;
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      userCode: string;
+      verificationUri: string;
+      verificationUriComplete?: string;
+      intervalSec?: number;
+      expiresAt?: string;
+    }
+  | {
+      kind: "import";
+      stepId: string;
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      accept?: string;
+      maxBytes?: number;
+      placeholder?: PluginConfigFlowText;
+    }
+  | {
+      kind: "confirm";
+      stepId: string;
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      confirmLabel?: PluginConfigFlowText;
+      cancelLabel?: PluginConfigFlowText;
+      destructive?: boolean;
+      details?: { label: PluginConfigFlowText; value: string }[];
+    }
+  | {
+      kind: "done";
+      title: PluginConfigFlowText;
+      description?: PluginConfigFlowText;
+      summary?: Record<string, unknown>;
+      refreshSections?: string[];
+    }
+  | {
+      kind: "error";
+      code?: string;
+      title: PluginConfigFlowText;
+      message: PluginConfigFlowText;
+      retryable?: boolean;
+    };
+
+export interface PluginLoopbackCallbackResult {
+  readonly callbackUrl: string;
+  readonly query: Readonly<Record<string, string>>;
+}
+
+export interface PluginLoopbackCallbackSession {
+  readonly callbackUrl: string;
+  readonly port: number;
+  waitForCallback(): Promise<PluginLoopbackCallbackResult>;
+  close(): Promise<void>;
+}
+
+export interface PluginConfigFlowContext {
+  readonly signal: AbortSignal;
+  readonly pluginId: string;
+  readonly flowId: string;
+  readonly runId: string;
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly sandbox?: PluginSandboxWorkerRunner;
+  readonly http: PluginHttp;
+  startLoopbackCallback?(): Promise<PluginLoopbackCallbackSession>;
+}
+
+export interface PluginConfigFlowStartInput {
+  readonly initial?: JsonValue;
+}
+
+export interface PluginConfigFlowStepInput {
+  readonly stepId: string;
+  readonly data?: Record<string, unknown>;
+  readonly callbackUrl?: string;
+  readonly cancelled?: boolean;
+}
+
+export interface PluginConfigFlowDefinition {
+  readonly description?: string;
+  readonly requiredCapabilities?: readonly string[];
+  start(
+    input: PluginConfigFlowStartInput,
+    context: PluginConfigFlowContext,
+  ): PluginConfigFlowStep | Promise<PluginConfigFlowStep>;
+  step(
+    input: PluginConfigFlowStepInput,
+    context: PluginConfigFlowContext,
+  ): PluginConfigFlowStep | Promise<PluginConfigFlowStep>;
+  poll?(
+    context: PluginConfigFlowContext,
+  ): PluginConfigFlowStep | null | Promise<PluginConfigFlowStep | null>;
+  cancel?(context: PluginConfigFlowContext): void | Promise<void>;
+}
+
+export interface PluginProviderSourceCredentialStatus {
+  readonly sourceId: string;
+  readonly accountId?: string;
+  readonly ready: boolean;
+  readonly reason?: string;
+}
+
+export interface PluginProviderSourceRequestShape {
+  readonly omit?: readonly string[];
+  readonly force?: Readonly<Record<string, unknown>>;
+  readonly systemAs?: "instructions" | "input";
+  readonly transform?: (
+    body: Record<string, unknown>,
+  ) => Record<string, unknown>;
+}
+
+export interface PluginProviderSourceAccountSummary {
+  readonly id: string;
+  readonly label?: string;
+  readonly status: "ready" | "needs_reauth" | "disabled" | "rate_limited";
+  readonly isDefault?: boolean;
+  readonly expiresAt?: string;
+  readonly updatedAt?: string;
+  readonly plan?: string;
+}
+
+export interface PluginProviderSourceUsageSummary {
+  readonly accountId?: string;
+  readonly label?: string;
+  readonly remaining?: number;
+  readonly limit?: number;
+  readonly resetAt?: string;
+  readonly summary?: string;
+  readonly windows?: readonly {
+    readonly name: string;
+    readonly usedPercent?: number;
+    readonly remainingPercent?: number;
+    readonly resetAt?: string;
+  }[];
+}
+
+export interface PluginProviderSourceContext {
+  readonly signal: AbortSignal;
+  readonly pluginId: string;
+  readonly sourceId: string;
+  readonly hostId?: string;
+  readonly secrets?: PluginSecretStore;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly sandbox?: PluginSandboxWorkerRunner;
+  readonly http: PluginHttp;
+}
+
+export interface PluginProviderSourceResolveRequest {
+  readonly mode: PluginOperationMode;
+  readonly model: string;
+  readonly accountId?: string;
+}
+
+export interface PluginProviderSourceResolved {
+  readonly baseUrl?: string;
+  readonly protocol?: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly accountId?: string;
+  readonly credentialGeneration?: number;
+  readonly requestShape?: PluginProviderSourceRequestShape;
+}
+
+export interface PluginProviderSourceRefreshRequest {
+  readonly accountId?: string;
+  readonly failedGeneration?: number;
+  readonly statusCode: number;
+}
+
+export interface PluginProviderSourceErrorClassification {
+  readonly kind:
+    | "auth"
+    | "quota"
+    | "rate_limited"
+    | "overloaded"
+    | "not_found"
+    | "timeout"
+    | "unreachable"
+    | "server"
+    | "bad_request"
+    | "refused"
+    | "config"
+    | "missing_key"
+    | "unknown";
+  readonly retryAfterMs?: number;
+  readonly message?: string;
+}
+
+export interface PluginProviderSource {
+  readonly id: string;
+  resolve(
+    request: PluginProviderSourceResolveRequest,
+    context: PluginProviderSourceContext,
+  ): Promise<PluginProviderSourceResolved>;
+  refresh?(
+    request: PluginProviderSourceRefreshRequest,
+    context: PluginProviderSourceContext,
+  ): Promise<PluginProviderSourceResolved | null>;
+  listAccounts?(
+    context: PluginProviderSourceContext,
+  ): Promise<readonly PluginProviderSourceAccountSummary[]>;
+  listModels?(
+    request: { readonly accountId?: string },
+    context: PluginProviderSourceContext,
+  ): Promise<readonly string[]>;
+  getUsage?(
+    request: { readonly accountId?: string },
+    context: PluginProviderSourceContext,
+  ): Promise<PluginProviderSourceUsageSummary | null>;
+  classifyError?(error: {
+    readonly statusCode?: number;
+    readonly body?: unknown;
+    readonly message: string;
+  }): PluginProviderSourceErrorClassification | null | undefined;
+}
+
 /** Registrations are valid only while the entry factory is running. */
 export interface PluginAPI extends PluginExtensionApi {
   readonly signal: AbortSignal;
   readonly pluginId: string;
   readonly toolkit: PluginToolkit;
   readonly http: PluginHttp;
+  readonly hostId?: string;
+  readonly instanceData?: PluginInstanceDataStore;
+  readonly secrets?: PluginSecretStore;
+  readonly sandbox?: PluginSandboxWorkerRunner;
   onDispose(cleanup: () => void | Promise<void>): void;
   registerService<I, O>(definition: PluginServiceDefinition<I, O>): void;
   registerTool(toolModule: PluginToolModule): void;
@@ -1090,8 +1617,26 @@ export interface PluginAPI extends PluginExtensionApi {
     handler: PluginRpcHandler,
     options?: PluginRpcOptions,
   ): void;
+  registerAppAction<I = unknown, O = unknown>(
+    action: string,
+    handler: PluginAppActionHandler<I, O>,
+    options?: PluginAppActionOptions<I, O>,
+  ): void;
+  registerConfigFlow(
+    flowId: string,
+    definition: PluginConfigFlowDefinition,
+  ): void;
+  onAppEvent<E extends PluginAppEventName>(
+    event: E,
+    handler: PluginAppEventHandler<E>,
+  ): void;
+  registerScheduledTask(
+    taskId: string,
+    handler: PluginScheduledTaskHandler,
+  ): void;
   registerFormValidator(name: string, validator: PluginFormValidator): void;
   registerWires(wires: PluginWireModule): void;
+  registerProviderSources(sources: readonly PluginProviderSource[]): void;
 }
 
 export type PluginEntryFactory = (covel: PluginAPI) => void | Promise<void>;

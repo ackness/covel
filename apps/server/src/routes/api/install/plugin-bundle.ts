@@ -23,7 +23,10 @@ import {
   withDerivedPackageFields,
   type ParsedRuntimeMd,
 } from "@covel/plugin-loader";
-import { assertHostVersionInRange } from "../../../lib/app-version.js";
+import {
+  assertHostVersionInRange,
+  assertPluginApiVersion,
+} from "../../../lib/app-version.js";
 import {
   assertNoReservedInstallFiles,
   httpError,
@@ -254,6 +257,7 @@ export function validatePluginBundle(
     );
     // Refuse a package written for another host before any file is written.
     assertHostVersionInRange(`Plugin ${pluginId}`, parsed.plugin.covel);
+    assertPluginApiVersion(`Plugin ${pluginId}`, parsed.plugin.apiVersion);
     if (entries.some((entry) => entry.relativePath.startsWith("runtimes/"))) {
       const diagnostics = multiRuntimeRootDiagnostics(parsed.rawFrontmatter);
       if (diagnostics.length)

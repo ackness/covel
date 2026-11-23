@@ -1,5 +1,8 @@
 import { applyPendingPackageUpdates } from "../install/package-updates.js";
-import { assertHostVersionInRange } from "../../../lib/app-version.js";
+import {
+  assertHostVersionInRange,
+  assertPluginApiVersion,
+} from "../../../lib/app-version.js";
 import { resolveSessionPluginSet } from "../session/plugins.js";
 import path from "node:path";
 import type { EventBus } from "@covel/events";
@@ -77,6 +80,10 @@ export async function discoverAndRegisterPlugins(
       assertHostVersionInRange(
         `Plugin ${discovery.id}`,
         definition.packageManifest.plugin.covel,
+      );
+      assertPluginApiVersion(
+        `Plugin ${discovery.id}`,
+        definition.packageManifest.plugin.apiVersion,
       );
       // The root's localized variants belong to the package. A variant that
       // does not parse fails this package here, like any other load error,

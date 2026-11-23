@@ -45,7 +45,16 @@ export type EvaluateResult =
   | {
       readonly status: "allow";
       readonly reason:
-        "trusted" | "trusted-source" | "session-cached" | "one-time-grant";
+        | "trusted"
+        | "trusted-source"
+        | "persistent-grant"
+        | "session-cached"
+        | "one-time-grant";
+    }
+  | {
+      readonly status: "denied";
+      readonly reason: "ceiling" | "policy" | "grant";
+      readonly capability?: string;
     }
   | {
       readonly status: "pending";
@@ -112,6 +121,19 @@ export interface RpcApprovalGate {
    * Clears explicit consent mid-session; instance implicit policy is unchanged.
    */
   revoke(sessionId: string, pluginId?: string): number;
+  /**
+   * List active session-scoped L4 grants matching current session incarnation
+   * scopes, ordered by `(pluginId, action)`.
+   */
+  listSessionGrants(
+    sessionId: string,
+    scopeForPlugin: (pluginId: string) => string,
+  ): readonly { readonly pluginId: string; readonly action: string }[];
+  /**
+   * Revoke all cached session grants, one-time grants, and pending approvals
+   * for `pluginId` across every session.
+   */
+  revokePlugin(pluginId: string): number;
 }
 
 interface OneTimeGrantEntry {
@@ -222,8 +244,23 @@ export interface ImplicitGrantQuery {
   readonly pluginId: string;
   readonly action: string;
 }
+
+export type PolicyDecisionResult =
+  | {
+      readonly decision: "allow";
+      readonly reason: "trusted-source" | "persistent-grant";
+    }
+  | {
+      readonly decision: "deny";
+      readonly reason: "ceiling" | "policy" | "grant";
+      readonly capability?: string;
+    }
+  | { readonly decision: "ask" };
+
 export interface RpcApprovalGateOptions {
   readonly implicitGrant?: (query: ImplicitGrantQuery) => boolean;
+  /** Unified L1–L3 policy pre-check evaluated ahead of L4 session grants. */
+  readonly policyDecision?: (query: ImplicitGrantQuery) => PolicyDecisionResult;
   /** Maximum number of session-scoped grants retained in LRU order. */
   readonly maxSessionCache?: number;
 }
@@ -237,6 +274,34 @@ export function createRpcApprovalGate(
 
   let lastImplicitErrorWarnMs: number | undefined;
   let suppressedImplicitErrors = 0;
+  function warnPolicyFailure(label: string, error: unknown): void {
+    const now = Date.now();
+    if (
+      lastImplicitErrorWarnMs === undefined ||
+      now - lastImplicitErrorWarnMs >= IMPLICIT_ERROR_WARN_INTERVAL_MS
+    ) {
+      const suppressedNote =
+        suppressedImplicitErrors > 0
+          ? ` (${suppressedImplicitErrors} suppressed since last warning)`
+          : "";
+      console.warn(`[rpc-approval] ${label}${suppressedNote}:`, error);
+      lastImplicitErrorWarnMs = now;
+      suppressedImplicitErrors = 0;
+    } else {
+      suppressedImplicitErrors += 1;
+    }
+  }
+
+  function evaluatePolicy(query: ImplicitGrantQuery): PolicyDecisionResult {
+    if (!options.policyDecision) return { decision: "ask" };
+    try {
+      return options.policyDecision(query);
+    } catch (error) {
+      warnPolicyFailure("policy evaluation failed", error);
+      return { decision: "ask" };
+    }
+  }
+
   function implicitlyGranted(query: ImplicitGrantQuery): boolean {
     if (
       query.action !== COMMUNITY_SERVER_CODE_ACTION &&
@@ -246,24 +311,7 @@ export function createRpcApprovalGate(
     try {
       return options.implicitGrant?.(query) === true;
     } catch (error) {
-      const now = Date.now();
-      if (
-        lastImplicitErrorWarnMs === undefined ||
-        now - lastImplicitErrorWarnMs >= IMPLICIT_ERROR_WARN_INTERVAL_MS
-      ) {
-        const suppressedNote =
-          suppressedImplicitErrors > 0
-            ? ` (${suppressedImplicitErrors} suppressed since last warning)`
-            : "";
-        console.warn(
-          `[rpc-approval] implicit grant failed${suppressedNote}:`,
-          error,
-        );
-        lastImplicitErrorWarnMs = now;
-        suppressedImplicitErrors = 0;
-      } else {
-        suppressedImplicitErrors += 1;
-      }
+      warnPolicyFailure("implicit grant failed", error);
       return false;
     }
   }
@@ -403,12 +451,53 @@ export function createRpcApprovalGate(
     return n;
   }
 
+  function clearGrantsMatching(
+    matches: (sessionId: string, pluginId: string) => boolean,
+  ): number {
+    const now = Date.now();
+    sweepStalePending(now);
+    sweepExpiredOneTimeGrants(now);
+    let cleared = 0;
+    for (const [key, grant] of state.sessionCache) {
+      if (matches(grant.sessionId, grant.pluginId)) {
+        state.sessionCache.delete(key);
+        cleared += 1;
+      }
+    }
+    for (const [key, entries] of state.oneTimeGrants) {
+      const first = entries[0];
+      if (first && matches(first.grant.sessionId, first.grant.pluginId)) {
+        state.oneTimeGrants.delete(key);
+        cleared += entries.length;
+      }
+    }
+    for (const [approvalId, pending] of state.pending) {
+      if (matches(pending.record.sessionId, pending.record.pluginId)) {
+        state.pending.delete(approvalId);
+        cleared += 1;
+      }
+    }
+    return cleared;
+  }
+
   return {
     evaluate(input) {
       const sessionScope = resolveSessionScope(input.sessionScope);
       // 1. Builtin → always allowed, no dialog.
       if (isAutoTrusted(input.trustLevel)) {
         return { status: "allow", reason: "trusted" };
+      }
+
+      const policy = evaluatePolicy(input);
+      if (policy.decision === "deny") {
+        return {
+          status: "denied",
+          reason: policy.reason,
+          ...(policy.capability ? { capability: policy.capability } : {}),
+        };
+      }
+      if (policy.decision === "allow") {
+        return { status: "allow", reason: policy.reason };
       }
 
       if (implicitlyGranted(input))
@@ -588,6 +677,9 @@ export function createRpcApprovalGate(
         pluginId,
         action,
       );
+      const policy = evaluatePolicy({ sessionId, pluginId, action });
+      if (policy.decision === "deny") return false;
+      if (policy.decision === "allow") return true;
       if (implicitlyGranted({ sessionId, pluginId, action })) return true;
       if (hasSessionCacheGrant(exactKey)) {
         return true;
@@ -600,41 +692,38 @@ export function createRpcApprovalGate(
       return entries.some((entry) => samePayload(entry.payload, payloadArg[0]));
     },
 
-    revoke(sessionId, pluginId) {
-      const now = Date.now();
-      sweepStalePending(now);
-      sweepExpiredOneTimeGrants(now);
-      let cleared = 0;
-      for (const [key, grant] of state.sessionCache) {
+    listSessionGrants(sessionId, scopeForPlugin) {
+      const grants: { readonly pluginId: string; readonly action: string }[] =
+        [];
+      for (const grant of state.sessionCache.values()) {
         if (
           grant.sessionId === sessionId &&
-          (!pluginId || grant.pluginId === pluginId)
+          grant.sessionScope === scopeForPlugin(grant.pluginId)
         ) {
-          state.sessionCache.delete(key);
-          cleared += 1;
+          grants.push({ pluginId: grant.pluginId, action: grant.action });
         }
       }
-      for (const [key, entries] of state.oneTimeGrants) {
-        const first = entries[0];
-        if (
-          first &&
-          first.grant.sessionId === sessionId &&
-          (!pluginId || first.grant.pluginId === pluginId)
-        ) {
-          state.oneTimeGrants.delete(key);
-          cleared += entries.length;
-        }
-      }
-      for (const [approvalId, pending] of state.pending) {
-        if (
-          pending.record.sessionId === sessionId &&
-          (!pluginId || pending.record.pluginId === pluginId)
-        ) {
-          state.pending.delete(approvalId);
-          cleared += 1;
-        }
-      }
-      return cleared;
+      return grants.sort((a, b) =>
+        a.pluginId < b.pluginId
+          ? -1
+          : a.pluginId > b.pluginId
+            ? 1
+            : a.action < b.action
+              ? -1
+              : a.action > b.action
+                ? 1
+                : 0,
+      );
+    },
+
+    revoke(sessionId, pluginId) {
+      return clearGrantsMatching(
+        (sid, pid) => sid === sessionId && (!pluginId || pid === pluginId),
+      );
+    },
+
+    revokePlugin(pluginId) {
+      return clearGrantsMatching((_sid, pid) => pid === pluginId);
     },
   };
 }

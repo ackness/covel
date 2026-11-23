@@ -89,6 +89,16 @@ function frameworkSettingText(
       label: t("settings.trustedSources.title"),
       description: t("settings.trustedSources.explanation"),
     },
+    "permissions.policy": {
+      label: t(
+        "settings.permissions.policyTitle",
+        "Instance capability policy",
+      ),
+      description: t(
+        "settings.permissions.policyDescription",
+        "Default capability rules applied across plugins below the host ceiling.",
+      ),
+    },
     "diagnostics.traceRetention": {
       label: t(
         "settings.frameworkEntries.traceRetention.label",

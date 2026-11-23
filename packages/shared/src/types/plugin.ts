@@ -402,7 +402,19 @@ export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
  * - `view`: Full-column pages replacing the story column
  * - `segment`: Display-only templates for committed story paragraphs
  */
-export type UISlotType = "right" | "message" | "view" | "segment" | "theme";
+export type UISlotType =
+  | "right"
+  | "message"
+  | "view"
+  | "segment"
+  | "theme"
+  | "settingsSection"
+  | "appPage"
+  | "topbarStatus"
+  | "composerAction"
+  | "messageAction"
+  | "messageBelow"
+  | "window";
 
 /**
  * UI contribution spec — declares which JSON files a plugin contributes
@@ -422,6 +434,20 @@ export interface UISpec {
   readonly view?: readonly string[];
   /** Story paragraph template specs, each with a `match`. */
   readonly segment?: readonly string[];
+  /** Host settings sections (`ui.settings.section`). */
+  readonly settingsSection?: readonly string[];
+  /** App-level tool workbench pages (`ui.app.page`). */
+  readonly appPage?: readonly string[];
+  /** Compact topbar status badges (`ui.topbar.status`). */
+  readonly topbarStatus?: readonly string[];
+  /** Chat composer action icon buttons (`ui.composer.action`). */
+  readonly composerAction?: readonly string[];
+  /** Per-message action icon buttons (`ui.message.action`). */
+  readonly messageAction?: readonly string[];
+  /** Display-only cards below messages (`ui.message.below`). */
+  readonly messageBelow?: readonly string[];
+  /** Host-managed floating windows (`ui.window`). */
+  readonly window?: readonly string[];
 }
 
 // ── Slash commands ──────────────────────────────────────────────
@@ -464,7 +490,14 @@ export interface SlashCommandSpec {
   readonly aliases?: readonly string[];
   readonly description: import("./world.js").I18nText;
   readonly arguments?: readonly SlashCommandArgumentSpec[];
-  readonly action: string;
+  readonly scope?: "session" | "instance";
+  readonly palette?: boolean;
+  readonly shortcutHint?: string;
+  readonly action?: string;
+  readonly appAction?: string;
+  readonly openFlow?: string;
+  readonly openPage?: string;
+  readonly openWindow?: string;
   /** Extra environment facets to inject. Omitted means no environment snapshot. */
   readonly context?: readonly SlashCommandContextScope[];
 }
@@ -476,6 +509,7 @@ export interface SessionSlashCommand extends SlashCommandSpec {
   readonly pluginId: string;
   readonly source: "framework" | "plugin";
   readonly sourceLabel?: import("./world.js").I18nText;
+  readonly action: string;
 }
 
 /** Parsed, type-coerced invocation passed to the registered RPC handler. */
@@ -696,6 +730,12 @@ export interface RuntimeManifest {
    */
   readonly permissions?: {
     readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];
+    readonly secrets?: boolean;
+    readonly authProxy?: boolean;
+    readonly scheduler?: boolean;
+    readonly sandboxWorker?: boolean;
+    readonly loopbackCallback?: import("../platform/index.js").LoopbackCallbackPermission;
+    readonly appEvents?: readonly import("../platform/index.js").AppEventName[];
   };
   readonly trigger?: TriggerConfig;
   /**

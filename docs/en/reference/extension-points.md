@@ -61,7 +61,7 @@ An extension point can have several providers. The kernel decides how to use the
 | Mode       | How they are combined                                                                    | Current examples                                                     |
 | ---------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `single`   | Resolves one valid provider. If none exists, the call site decides the default behavior. | `session.world-context@1`, `history.compact@2`, `media.image-flow@1` |
-| `collect`  | Collects the output of every provider that passes validation                             | `prompt.segment@1`                                                   |
+| `collect`  | Collects the output of every provider that passes validation                             | `prompt.segment@1`, `channel.bridge@1`                               |
 | `pipeline` | Passes the previous valid result along, in declared order                                | `prompt.history-transform@1`, `ui.slot@1`                            |
 
 Each extension point defines its own inputs, outputs, mode, timeout, and failure policy in `packages/shared/src/extension-points/`. The failure policy `onError` has two values: `skip` (skip this provider and continue) and `fail-turn` (the whole turn fails).
@@ -136,12 +136,17 @@ Within the same `volatility` level, segments are sorted by `order` in ascending 
 
 When several plugins use the same `order`, the order is decided by `providerPluginId` (in dictionary order), and then by `id`. This order is deterministic, but it is an implementation detail, not a promise. Renaming a plugin quietly changes its position within its level. A plugin that needs a definite order should set a different `order`.
 
+### Four-pass prompt governance and `when` predicates
+
+Both static `contributes.prompt` entries and `prompt.segment@1` outputs participate in four-pass prompt governance with cross-plugin fact-registry `when` predicates, priorities, and segment budgets (default budget 2000). Protected framework blocks (`framework.preamble`, `world.lore`, `plugin.instructions`, `player.message`, `history`) cannot be suppressed by plugins, whereas suppressible blocks (`world.info.before`, `world.info.after`, `session.events`, `operation.notices`) and plugin segments fit within deterministic token budgets.
+
 ## Where the other extension points are described
 
 - `ui.slot@1`: the provider also declares a `slot`, and may declare `order`, `watch`, or `preview`. The server handles projection, validation, and caching. The front end uses generic slots and does not read a plugin's namespace. See [UI slots](./ui-panels.md#kernel-ui-slots).
 - The three stage data slots are `stage.backdrop@1`, `stage.cast@1` and `stage.choices@1`. Speaker name tags come from story segments, not from a slot. The handler returns the selected slot's value or `null`, or returns `previous` when no change is needed. See [Stage slot values](./ui-panels.md#stage-slot-values) for fields, required values, enums and limits. Each output is validated against the selected slot. An invalid output skips only that provider and keeps the previous valid value. `stage.cast@1` can opt into inferred departures with `exitTransition`; omission disables them independently of delivered explicit exits. See [stage cast](./ui-panels.md#stagecast1). No new extension point or persistent cache is needed.
 - To show a plugin's state on the player's status bar or on the scene HUD, provide `session.summary@1`. See [Session summary](./ui-panels.md#session-summary).
 - To give a session background music, provide `stage.music@1`. See [Background music](./ui-panels.md#stage-music).
+- `channel.bridge@1`: an instance-scoped `collect` extension point gated by the `channel.bridge` capability. It receives `inboundMessage`, `beforeRender`, and `outboundEvent` phases (5 s timeout, `onError: "skip"`) so external messaging bridges attach without kernel changes.
 - For where world context, history transforms, and compression sit in the flow, see [Plugin contracts](./plugins.md#prompt-and-memory-extensions).
 
 ## Session world context

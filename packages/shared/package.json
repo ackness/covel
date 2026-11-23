@@ -47,6 +47,14 @@
     "./plugin-runtime": {
       "types": "./src/plugin-runtime/index.ts",
       "import": "./src/plugin-runtime/index.ts"
+    },
+    "./permissions": {
+      "types": "./src/permissions/index.ts",
+      "import": "./src/permissions/index.ts"
+    },
+    "./platform": {
+      "types": "./src/platform/index.ts",
+      "import": "./src/platform/index.ts"
     }
   },
   "scripts": {

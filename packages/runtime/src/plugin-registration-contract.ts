@@ -28,6 +28,13 @@ export function enforcePluginRegistrationContract(
   };
   for (const id of declarations.tools ?? []) declare("tool", id);
   for (const id of declarations.actions ?? []) declare("action", id);
+  for (const id of declarations.appActions ?? []) declare("appAction", id);
+  for (const id of declarations.flows ?? []) declare("flow", id);
+  for (const event of declarations.appEvents ?? []) declare("appEvent", event);
+  for (const schedule of declarations.schedules ?? [])
+    declare("schedule", schedule.id);
+  for (const source of declarations.providerSources ?? [])
+    declare("providerSource", source.id);
   // Offering a service to models, and letting it write, are part of what is
   // declared: the markers make a registration that says otherwise a mismatch.
   const serviceKey = (
@@ -85,6 +92,22 @@ export function enforcePluginRegistrationContract(
         api.registerRpc(action, handler, options);
         record("action", action);
       },
+      registerAppAction(action, handler, options) {
+        api.registerAppAction(action, handler, options);
+        record("appAction", action);
+      },
+      registerConfigFlow(flowId, definition) {
+        api.registerConfigFlow(flowId, definition);
+        record("flow", flowId);
+      },
+      onAppEvent(event, handler) {
+        api.onAppEvent(event, handler);
+        record("appEvent", event);
+      },
+      registerScheduledTask(taskId, handler) {
+        api.registerScheduledTask(taskId, handler);
+        record("schedule", taskId);
+      },
       registerService(definition) {
         if (!definition || typeof definition !== "object")
           throw invalid("Invalid service definition");
@@ -134,6 +157,23 @@ export function enforcePluginRegistrationContract(
           for (const wire of group ?? []) record("wire", wire.id);
         }
       },
+      registerProviderSources(sources) {
+        if (!Array.isArray(sources))
+          throw invalid("Invalid provider sources list");
+        for (const source of sources) {
+          if (
+            !source ||
+            typeof source !== "object" ||
+            typeof source.id !== "string" ||
+            !source.id ||
+            typeof source.resolve !== "function"
+          ) {
+            throw invalid("Invalid provider source definition");
+          }
+        }
+        api.registerProviderSources(sources);
+        for (const source of sources) record("providerSource", source.id);
+      },
     },
     validate() {
       for (const key of expectedHooks) {
@@ -149,9 +189,26 @@ export function enforcePluginRegistrationContract(
           );
       }
       for (const command of declarations.commands ?? []) {
-        if (!declarations.actions?.includes(command.action))
+        if (
+          command.action !== undefined &&
+          !declarations.actions?.includes(command.action)
+        )
           throw invalid(
             `Command "${command.name}" references undeclared action "${command.action}"`,
+          );
+        if (
+          command.appAction !== undefined &&
+          !declarations.appActions?.includes(command.appAction)
+        )
+          throw invalid(
+            `Command "${command.name}" references undeclared appAction "${command.appAction}"`,
+          );
+        if (
+          command.openFlow !== undefined &&
+          !declarations.flows?.includes(command.openFlow)
+        )
+          throw invalid(
+            `Command "${command.name}" references undeclared openFlow "${command.openFlow}"`,
           );
       }
     },

@@ -334,6 +334,13 @@ describe("Plugin Routes", () => {
         "message",
         "view",
         "segment",
+        "settingsSection",
+        "appPage",
+        "topbarStatus",
+        "composerAction",
+        "messageAction",
+        "messageBelow",
+        "window",
         "theme",
       ]);
       expect(body.framework.scheduling.effectsPolicy).toBe(

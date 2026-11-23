@@ -10,16 +10,20 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { readRuntimeEnv } from "@covel/shared";
+import { CAPABILITY_KEYS } from "@covel/shared/permissions";
 import { PERSONAL_PROVIDER_HOST_POLICY } from "@covel/ai-provider";
 import type { StoreBackend } from "@covel/store";
 import {
   HOST_ACTIONS,
+  allowsCapability,
   bindWarnings,
+  capabilityGuard,
   deriveHostProfile,
   desktopHome,
   hostProfileMiddleware,
   hostProfileOf,
   requireAccess,
+  requireCapability,
   resolveHostProfile,
   type HostAccessRule,
   type HostAction,
@@ -466,5 +470,128 @@ describe("desktopHome", () => {
     expect(desktopHome(env)).toBeNull();
     mkdirSync(join(home, ".covel"));
     expect(desktopHome(env)).toBe(join(home, ".covel"));
+  });
+});
+
+describe("L1 capability ceilings", () => {
+  const PUBLIC_WEB_DISABLED = [
+    "compute.sandboxWorker",
+    "plugin.instanceScope",
+    "plugin.providerSource",
+    "channel.bridge",
+    "plugin.globalAutoEnable",
+    "secrets.own",
+    "net.authProxy",
+    "net.loopbackCallback",
+    "network.localModels",
+    "app.scheduler",
+    "exec.localBridge",
+  ] as const;
+
+  it("enables all capabilities on personal (except production install API without opt-in)", () => {
+    const dev = profile();
+    for (const key of CAPABILITY_KEYS) {
+      expect(dev.capabilities[key]).toBe("enabled");
+    }
+    const prod = profile({ NODE_ENV: "production" });
+    expect(prod.capabilities["host.installPackages"]).toBe("disabled");
+    expect(prod.capabilities["plugin.providerSource"]).toBe("enabled");
+  });
+
+  it("hard-disables high-risk instance, secret, network, bridge and exec capabilities on browser-private and hosted", () => {
+    const browserPrivate = profile({ NODE_ENV: "production" }, "memory");
+    const demo = profile({ DEPLOYMENT_TIER: "demo", ...HOSTED_SECRETS });
+    const commercial = profile({
+      DEPLOYMENT_TIER: "commercial",
+      CORS_ORIGIN: "https://game.example.com",
+      ...HOSTED_SECRETS,
+    });
+
+    for (const p of [browserPrivate, demo, commercial]) {
+      for (const key of PUBLIC_WEB_DISABLED) {
+        expect(p.capabilities[key], `${p.form}:${key}`).toBe("disabled");
+      }
+      expect(p.capabilities["plugin.communityCode"]).toBe("operator-only");
+      expect(p.capabilities["net.httpDeclared"]).toBe("operator-only");
+      expect(p.capabilities["plugin.declarative"]).toBe("enabled");
+      expect(p.capabilities["session.bridgeWrite"]).toBe("enabled");
+      expect(p.capabilities["runtime.highRiskTools"]).toBe("enabled");
+    }
+  });
+
+  it("tightens personal capabilities downward via COVEL_DISABLED_CAPABILITIES and enforces them in access/credentials", () => {
+    const tightened = profile({
+      COVEL_DISABLED_CAPABILITIES:
+        "plugin.communityCode, network.localModels, host.installPackages, plugin.providerSource",
+    });
+    expect(tightened.capabilities["plugin.communityCode"]).toBe("disabled");
+    expect(tightened.capabilities["network.localModels"]).toBe("disabled");
+    expect(tightened.capabilities["host.installPackages"]).toBe("disabled");
+    expect(tightened.capabilities["plugin.providerSource"]).toBe("disabled");
+    expect(tightened.capabilities["plugin.declarative"]).toBe("enabled");
+
+    expect(table(tightened)["plugin.community"]).toBe("closed");
+    expect(table(tightened)["host.files"]).toBe("closed");
+    expect(tightened.credentials.provider).toEqual({
+      localNetwork: false,
+      sessionlessCommunityWires: false,
+    });
+  });
+
+  it("rejects unknown keys in COVEL_DISABLED_CAPABILITIES and allows idempotent disabling on shared hosts", () => {
+    expect(() =>
+      profile({ COVEL_DISABLED_CAPABILITIES: "plugin.providerSource,bad.key" }),
+    ).toThrow(/COVEL_DISABLED_CAPABILITIES.*bad\.key/);
+
+    const bp = profile(
+      {
+        NODE_ENV: "production",
+        COVEL_DISABLED_CAPABILITIES:
+          "plugin.providerSource,plugin.communityCode",
+      },
+      "memory",
+    );
+    expect(bp.capabilities["plugin.providerSource"]).toBe("disabled");
+    expect(bp.capabilities["plugin.communityCode"]).toBe("disabled");
+    expect(table(bp)["plugin.community"]).toBe("closed");
+  });
+
+  it("enforces allowsCapability, requireCapability, and capabilityGuard for enabled, operator-only, and disabled", async () => {
+    const p = profile({
+      DEPLOYMENT_TIER: "demo",
+      COVEL_DISABLED_CAPABILITIES: "plugin.providerSource",
+      ...HOSTED_SECRETS,
+    });
+    const app = new Hono();
+    app.use("*", hostProfileMiddleware(p));
+    app.get("/enabled", capabilityGuard("session.bridgeWrite"), (c) =>
+      c.json({ allowed: allowsCapability(c, "session.bridgeWrite") }),
+    );
+    app.get("/operator", capabilityGuard("plugin.communityCode"), (c) =>
+      c.json({ allowed: allowsCapability(c, "plugin.communityCode") }),
+    );
+    app.get("/disabled", (c) => {
+      const denied = requireCapability(c, "plugin.providerSource");
+      return denied ?? c.text("unexpected");
+    });
+
+    expect((await app.request("/enabled")).status).toBe(200);
+    expect((await app.request("/operator")).status).toBe(401);
+    expect(
+      (
+        await app.request("/operator", {
+          headers: { Authorization: "Bearer operator-secret" },
+        })
+      ).status,
+    ).toBe(200);
+
+    // Even with an operator token, an L1-disabled capability stays 403.
+    const disabledRes = await app.request("/disabled", {
+      headers: { Authorization: "Bearer operator-secret" },
+    });
+    expect(disabledRes.status).toBe(403);
+    expect(await disabledRes.json()).toMatchObject({
+      code: "capability_disabled",
+    });
   });
 });

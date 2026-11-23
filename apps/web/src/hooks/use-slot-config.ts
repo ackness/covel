@@ -80,6 +80,49 @@ export function formatSlotLabel(
   return slot.slotId;
 }
 
+function hasSlotCredentials(
+  slot: ResolvedSlot,
+  server: NonNullable<LlmConfigResponse["slots"]>[string] | undefined,
+): boolean {
+  const provider = slot.preset?.provider ?? slot.serverProvider;
+  if (slot.preset?.source) {
+    if (slot.preset.credentialSource) {
+      return slot.preset.credentialSource.ready;
+    }
+    if (slot.preset.scope === "custom") {
+      return slot.preset.serverCredentialsAvailable === true;
+    }
+    return server?.credentialSource ? server.credentialSource.ready : false;
+  }
+  if (
+    server?.credentialSource &&
+    (!slot.presetId || slot.preset?.baseUrl === server.baseUrl)
+  ) {
+    return server.credentialSource.ready;
+  }
+  const localKey = provider
+    ? getSettings().get<string>(`keys.${provider}`)
+    : undefined;
+  if (localKey?.trim()) return true;
+  if (slot.preset?.scope === "custom") {
+    // The registry checked this exact endpoint/protocol as request-scoped.
+    // A server slot's preset override is not a trusted provider default.
+    return (
+      isLoopbackBaseUrl(slot.preset.baseUrl) ||
+      slot.preset.serverCredentialsAvailable === true
+    );
+  }
+  // A service on this machine (Ollama, a local gateway) takes no key.
+  if (isLoopbackBaseUrl(slot.preset?.baseUrl ?? server?.baseUrl)) {
+    return true;
+  }
+  return (
+    !!server?.serverKeyConfigured &&
+    server.provider === provider &&
+    (!slot.presetId || slot.preset?.baseUrl === server.baseUrl)
+  );
+}
+
 /**
  * Hook that reactively reads slot config + custom presets from SettingsStore,
  * merged with server presets and llm.toml slot definitions. `refresh()` is
@@ -125,6 +168,8 @@ export function useSlotConfig(
       id: p.id,
       name: p.name,
       provider: p.provider,
+      ...(p.source ? { source: p.source } : {}),
+      ...(p.account ? { account: p.account } : {}),
       model: p.model,
       baseUrl: p.baseUrl,
       reasoningEffort: p.reasoningEffort,
@@ -256,30 +301,7 @@ export function useSlotConfig(
 
     return out.map((slot) => ({
       ...slot,
-      hasCredentials: (() => {
-        const provider = slot.preset?.provider ?? slot.serverProvider;
-        const localKey = provider
-          ? getSettings().get<string>(`keys.${provider}`)
-          : undefined;
-        if (localKey?.trim()) return true;
-        if (slot.preset?.scope === "custom") {
-          // The registry checked this exact endpoint/protocol as request-scoped.
-          // A server slot's preset override is not a trusted provider default.
-          return (
-            isLoopbackBaseUrl(slot.preset.baseUrl) ||
-            slot.preset.serverCredentialsAvailable === true
-          );
-        }
-        const server = llmConfig?.slots[slot.slotId];
-        // A service on this machine (Ollama, a local gateway) takes no key.
-        if (isLoopbackBaseUrl(slot.preset?.baseUrl ?? server?.baseUrl))
-          return true;
-        return (
-          !!server?.serverKeyConfigured &&
-          server.provider === provider &&
-          (!slot.presetId || slot.preset?.baseUrl === server.baseUrl)
-        );
-      })(),
+      hasCredentials: hasSlotCredentials(slot, llmConfig?.slots[slot.slotId]),
       reasoningEffort:
         parameterOverrides?.[slot.slotId]?.reasoningEffort ??
         slot.preset?.reasoningEffort ??

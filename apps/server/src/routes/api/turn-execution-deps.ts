@@ -26,8 +26,15 @@ export function buildTurnExecutorDeps(
   const hookPipeline = c.get("hookPipeline");
   const executionSignal = c.get("requestWork")?.signal;
 
+  const promptDiagnostics = c.get("promptDiagnostics");
   return {
     ...(c.get("pluginFaults") ? { pluginFaults: c.get("pluginFaults") } : {}),
+    ...(promptDiagnostics
+      ? {
+          onPromptDiagnostics: (sessionId, diagnostics) =>
+            promptDiagnostics.record(sessionId, diagnostics),
+        }
+      : {}),
     ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
     loadPluginDatasets: pluginDatasetsLoader(c.get("pluginRegistry")),

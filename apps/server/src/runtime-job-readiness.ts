@@ -36,11 +36,20 @@ export function hasRuntimeJobCredentials(
 
 export function hasResolvedRuntimeJobCredentials(
   slot:
-    | Pick<ResolvedSlotConfig, "apiKey" | "headers" | "baseUrl">
+    | {
+        readonly apiKey?: string;
+        readonly headers?: Readonly<Record<string, string>>;
+        readonly baseUrl?: string;
+        readonly credentialSource?: {
+          readonly sourceId: string;
+          readonly ready?: boolean;
+        };
+      }
     | null
     | undefined,
 ): boolean {
   if (!slot) return false;
+  if (slot.credentialSource) return slot.credentialSource.ready === true;
   if (slot.apiKey?.trim()) return true;
   // A service on this machine (Ollama, a local gateway) takes no key.
   if (isLoopbackBaseUrl(slot.baseUrl)) return true;

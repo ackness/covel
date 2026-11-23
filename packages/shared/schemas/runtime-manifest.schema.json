@@ -929,6 +929,71 @@
             "additionalProperties": false
           },
           "description": "Upper bound of the HTTP origins and methods the runtime may use."
+        },
+        "secrets": {
+          "type": "boolean",
+          "description": "Whether the plugin may read and write host-managed secrets."
+        },
+        "authProxy": {
+          "type": "boolean",
+          "description": "Whether bounded instance authentication requests may use the configured proxy."
+        },
+        "scheduler": {
+          "type": "boolean",
+          "description": "Whether the plugin may register bounded instance background schedules."
+        },
+        "sandboxWorker": {
+          "type": "boolean",
+          "description": "Whether the plugin uses bounded Tier 1 sandboxed workers."
+        },
+        "loopbackCallback": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^\\/[a-zA-Z0-9._/-]*$",
+              "description": "Loopback HTTP path mounted on localhost during authorization."
+            },
+            "ports": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "ephemeral"
+                },
+                {
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 65535
+                  }
+                }
+              ],
+              "description": "Port strategy (`\"ephemeral\"` default) or ordered fallback port list."
+            }
+          },
+          "required": ["path"],
+          "additionalProperties": false,
+          "description": "Temporary localhost callback listener permissions for OAuth flows."
+        },
+        "appEvents": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "AppStarted",
+              "BeforeShutdown",
+              "SessionCreated",
+              "SessionTurnCommitted",
+              "SessionDeleted",
+              "WorldInstalled",
+              "WorldRemoved"
+            ]
+          },
+          "description": "Read-only application lifecycle events this plugin subscribes to."
         }
       },
       "additionalProperties": false,

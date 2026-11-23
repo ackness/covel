@@ -132,6 +132,10 @@ worldCrudRoutes.post("/", async (c) => {
       409,
     );
   }
+  void c.get("appEvents")?.emit("WorldInstalled", {
+    worldId: id,
+    source: "api",
+  });
   return c.json(redactWorldForResponse(c, record), 201);
 });
 

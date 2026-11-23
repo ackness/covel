@@ -13,6 +13,7 @@ import {
 import type { PluginDetail } from "@covel/shared";
 import { resolveEffectsPolicy } from "@covel/runtime";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
+import { PLUGIN_UI_SLOTS } from "@covel/plugin-loader";
 import type { DataStore, PluginDataRecord } from "@covel/store";
 import { buildPluginDetail } from "../../lib/plugin-descriptor.js";
 import { runnablePluginIds } from "./session/plugins.js";
@@ -103,7 +104,7 @@ export function buildFrameworkCapabilities(
         inputInjectKinds: inputInjectDeclSchema.options.map(
           (option) => option.shape.kind.value,
         ),
-        uiSlots: ["right", "message", "view", "segment", "theme"],
+        uiSlots: [...PLUGIN_UI_SLOTS],
       },
       scheduling: {
         effectsPolicy: resolveEffectsPolicy(),

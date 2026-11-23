@@ -9,6 +9,8 @@ import {
 export function useModelCapabilities<
   T extends {
     provider: string;
+    source?: string;
+    account?: string;
     scope?: string;
     baseUrl?: string;
     model?: string;
@@ -25,6 +27,8 @@ export function useModelCapabilities<
       model.model,
       model.protocol ?? null,
       model.scope === "custom" ? (model.baseUrl ?? "") : null,
+      model.scope === "custom" ? (model.source ?? null) : null,
+      model.scope === "custom" ? (model.account ?? null) : null,
     ]);
   const pending = [
     ...new Set(
@@ -45,19 +49,29 @@ export function useModelCapabilities<
     let active = true;
     void Promise.all(
       pending.map(async (key) => {
-        const [provider, model, protocol, baseUrl] = JSON.parse(key) as [
-          string,
-          string,
-          string | null,
-          string | null,
-        ];
+        const [provider, model, protocol, baseUrl, source, account] =
+          JSON.parse(key) as [
+            string,
+            string,
+            string | null,
+            string | null,
+            string | null,
+            string | null,
+          ];
         try {
           const result = await lookupModelCapabilityDetails(
             model,
             provider,
             protocol ?? undefined,
             undefined,
-            baseUrl === null ? undefined : { baseUrl, revision },
+            baseUrl === null && source === null
+              ? undefined
+              : {
+                  baseUrl: baseUrl ?? undefined,
+                  ...(source ? { source } : {}),
+                  ...(account ? { account } : {}),
+                  revision,
+                },
           );
           return [key, result] as const;
         } catch {

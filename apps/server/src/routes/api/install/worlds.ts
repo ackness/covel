@@ -125,6 +125,10 @@ worldInstallRoutes.post("/world", async (c) => {
     const summary = validateWorldBundle(entries, fileName);
 
     await activateWorldPackage(c, summary.worldId, entries);
+    void c.get("appEvents")?.emit("WorldInstalled", {
+      worldId: summary.worldId,
+      source: "upload",
+    });
 
     return c.json(
       {

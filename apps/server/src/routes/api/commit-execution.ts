@@ -5,6 +5,7 @@ import {
   type PreparedExecution,
 } from "@covel/runtime";
 import { recordExecutionFaults } from "./plugin-faults.js";
+import { getAppEventDispatcherForBus } from "./bootstrap/app-events.js";
 import type { MemorySystem } from "@covel/memory";
 
 /** Schedule only durable state; the memory system tracks work for shutdown drain. */
@@ -35,6 +36,14 @@ export async function commitExecution(
   });
   if (outcome.status === "committed") {
     scheduleMemoryIngest(args.memorySystem, args.execution.commit.sessionId);
+    void getAppEventDispatcherForBus(args.eventBus)
+      ?.emit("SessionTurnCommitted", {
+        sessionId: args.execution.commit.sessionId,
+        turnId: args.completion.turnId,
+        logicalTurn: args.execution.commit.executionContext.logicalTurn ?? 0,
+        committedAt: new Date().toISOString(),
+      })
+      .catch(() => {});
   }
   return outcome;
 }

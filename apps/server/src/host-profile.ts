@@ -45,6 +45,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Context, MiddlewareHandler } from "hono";
 import { readRuntimeEnv, type DeploymentTier } from "@covel/shared";
+import {
+  CAPABILITY_KEYS,
+  isCapabilityKey,
+  tightenCapabilityCeiling,
+  type CapabilityCeiling,
+  type CapabilityKey,
+} from "@covel/shared/permissions";
 import type { ProviderHostPolicy } from "@covel/ai-provider";
 import type { StoreBackend } from "@covel/store";
 import { errorBody } from "./api-error.js";
@@ -124,6 +131,8 @@ export interface HostProfile {
   readonly tier: DeploymentTier;
   readonly form: HostForm;
   readonly access: Readonly<Record<HostAction, HostAccessRule>>;
+  /** L1 capability ceilings after deployment defaults and downward env overrides. */
+  readonly capabilities: Readonly<Record<CapabilityKey, CapabilityCeiling>>;
   /** True when `token` is this server's operator token; false when it has none. */
   readonly isOperatorToken: (token: string) => boolean;
   readonly network: {
@@ -194,6 +203,75 @@ interface AccessFacts {
   readonly installApiEnabled: boolean;
 }
 
+const CAPABILITY_DISABLED_CODE = "capability_disabled";
+
+function capabilityDisabledDenial(key: CapabilityKey): HostDenial {
+  return {
+    status: 403,
+    code: CAPABILITY_DISABLED_CODE,
+    message: `Capability "${key}" is disabled on this host`,
+  };
+}
+
+function defaultCapabilityCeilings(
+  f: AccessFacts,
+): Record<CapabilityKey, CapabilityCeiling> {
+  const installPackagesCeiling = (): CapabilityCeiling => {
+    if (f.form === "hosted") return "operator-only";
+    if (f.form === "personal") {
+      return f.production && !f.operatorTokenSet && !f.installApiEnabled
+        ? "disabled"
+        : "enabled";
+    }
+    // browser-private
+    if (f.operatorTokenSet) return "operator-only";
+    return f.installApiEnabled ? "enabled" : "disabled";
+  };
+
+  if (f.form === "personal") {
+    const personal = Object.fromEntries(
+      CAPABILITY_KEYS.map((key) => [key, "enabled"]),
+    ) as Record<CapabilityKey, CapabilityCeiling>;
+    personal["host.installPackages"] = installPackagesCeiling();
+    return personal;
+  }
+
+  // Both shared forms (browser-private and hosted) hard-disable high-risk
+  // instance, secret, local-network, bridge, and execution capabilities.
+  return {
+    "plugin.declarative": "enabled",
+    "compute.sandboxWorker": "disabled",
+    "plugin.communityCode": "operator-only",
+    "plugin.instanceScope": "disabled",
+    "plugin.providerSource": "disabled",
+    "channel.bridge": "disabled",
+    "plugin.globalAutoEnable": "disabled",
+    "secrets.own": "disabled",
+    "net.httpDeclared": "operator-only",
+    "net.authProxy": "disabled",
+    "net.loopbackCallback": "disabled",
+    "network.localModels": "disabled",
+    "session.bridgeWrite": "enabled",
+    "runtime.highRiskTools": "enabled",
+    "app.scheduler": "disabled",
+    "host.installPackages": installPackagesCeiling(),
+    "exec.localBridge": "disabled",
+  };
+}
+
+function resolveCapabilityCeilings(
+  f: AccessFacts,
+  disabledCapabilities: readonly string[],
+): Record<CapabilityKey, CapabilityCeiling> {
+  const ceilings = defaultCapabilityCeilings(f);
+  for (const entry of disabledCapabilities) {
+    if (isCapabilityKey(entry)) {
+      ceilings[entry] = tightenCapabilityCeiling(ceilings[entry], "disabled");
+    }
+  }
+  return ceilings;
+}
+
 /**
  * The access table: one rule per action for the facts of this server.
  *
@@ -202,7 +280,10 @@ interface AccessFacts {
  * settings page lists a provider's models and tests a key this way). The
  * other global entries are the operator's, as on a hosted tier.
  */
-function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
+function accessRules(
+  f: AccessFacts,
+  capabilities: Readonly<Record<CapabilityKey, CapabilityCeiling>>,
+): Record<HostAction, HostAccessRule> {
   const open: HostAccessRule = { kind: "open" };
   const operatorDenial = (
     message = "Operator token required on this tier",
@@ -242,6 +323,17 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
     bearerOnly: true,
     denial: operatorDenial(),
   };
+  const defaultHostFiles: HostAccessRule = hosted
+    ? operatorBearer
+    : f.operatorTokenSet
+      ? desktopToken
+      : f.production && !f.installApiEnabled
+        ? closed(
+            403,
+            "install_api_disabled",
+            "Install API is disabled in production",
+          )
+        : open;
 
   return {
     "session.access": personal
@@ -270,7 +362,13 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
     "world.generate": operatorWhenHosted,
     // Community server code runs unsandboxed in the process every visitor's
     // keys pass through, so only the operator may approve or run it.
-    "plugin.community": operatorWhenShared,
+    "plugin.community":
+      capabilities["plugin.communityCode"] === "disabled"
+        ? {
+            kind: "closed",
+            denial: capabilityDisabledDenial("plugin.communityCode"),
+          }
+        : operatorWhenShared,
     "server.diagnostics": operatorWhenShared,
     // A visitor lists their provider's models and tests their own key.
     "model.probe": operatorWhenHosted,
@@ -287,17 +385,14 @@ function accessRules(f: AccessFacts): Record<HostAction, HostAccessRule> {
     "host.config": personal ? desktopConfig : operatorBearer,
     // A production server without the token writes packages to disk only
     // when the operator opted in (COVEL_INSTALL_API_ENABLED=1).
-    "host.files": hosted
-      ? operatorBearer
-      : f.operatorTokenSet
-        ? desktopToken
-        : f.production && !f.installApiEnabled
-          ? closed(
-              403,
-              "install_api_disabled",
-              "Install API is disabled in production",
-            )
-          : open,
+    "host.files":
+      defaultHostFiles.kind !== "closed" &&
+      capabilities["host.installPackages"] === "disabled"
+        ? {
+            kind: "closed",
+            denial: capabilityDisabledDenial("host.installPackages"),
+          }
+        : defaultHostFiles,
     // No admin authentication is wired for commercial; the closed rule makes
     // that explicit to callers. On browser-private the server sees only the
     // sessions mirrored right now, so a sweep would delete media that saves
@@ -341,26 +436,33 @@ export function deriveHostProfile(
       : "personal";
   const operatorToken = env.desktopRestToken;
   const personal = form === "personal";
+  const accessFacts: AccessFacts = {
+    tier,
+    form,
+    sharedMirrors,
+    production,
+    operatorTokenSet: operatorToken !== undefined,
+    debugRoutes: env.debugRoutes,
+    installApiEnabled: env.installApiEnabled,
+  };
+  const capabilities = resolveCapabilityCeilings(
+    accessFacts,
+    env.disabledCapabilities,
+  );
   return {
     tier,
     form,
-    access: accessRules({
-      tier,
-      form,
-      sharedMirrors,
-      production,
-      operatorTokenSet: operatorToken !== undefined,
-      debugRoutes: env.debugRoutes,
-      installApiEnabled: env.installApiEnabled,
-    }),
+    access: accessRules(accessFacts, capabilities),
+    capabilities,
     isOperatorToken: (token) =>
       operatorToken !== undefined && safeEqual(token, operatorToken),
     network: { checkHost: personal, allowedHosts: env.allowedHosts },
     credentials: {
       capabilityOverrides: hosted ? "restrict-only" : "full",
       provider: {
-        localNetwork: personal,
-        sessionlessCommunityWires: personal,
+        localNetwork: capabilities["network.localModels"] === "enabled",
+        sessionlessCommunityWires:
+          personal && capabilities["plugin.communityCode"] === "enabled",
       },
       modelRelay: !personal,
     },
@@ -413,6 +515,14 @@ function hostProfileProblems(env: RuntimeEnv, form: HostForm): string[] {
   if (tier === "commercial" && env.mediaCleanupEnabled) {
     problems.push(
       "COVEL_MEDIA_CLEANUP_ENABLED cannot be used with DEPLOYMENT_TIER=commercial: the cleanup endpoint stays closed on this tier. Remove it",
+    );
+  }
+  const invalidCapabilities = env.disabledCapabilities.filter(
+    (entry) => !isCapabilityKey(entry),
+  );
+  if (invalidCapabilities.length > 0) {
+    problems.push(
+      `COVEL_DISABLED_CAPABILITIES contains unknown capability key(s): ${invalidCapabilities.join(", ")}. Accepted values: ${CAPABILITY_KEYS.join(", ")}`,
     );
   }
   return problems;
@@ -541,6 +651,56 @@ export function requireAccess(
 export function accessGuard(action: HostGlobalAction): MiddlewareHandler {
   return async (c, next) => {
     const denied = requireAccess(c, action);
+    if (denied) return denied;
+    await next();
+  };
+}
+
+function capabilityDenialFor(
+  c: Context,
+  key: CapabilityKey,
+): HostDenial | null {
+  const profile = hostProfileOf(c);
+  const ceiling = profile.capabilities[key];
+  if (ceiling === "disabled") {
+    return capabilityDisabledDenial(key);
+  }
+  if (ceiling === "operator-only") {
+    const token = presentedToken(c);
+    return token !== undefined && profile.isOperatorToken(token)
+      ? null
+      : {
+          status: 401,
+          code: OPERATOR_TOKEN_REQUIRED_CODE,
+          message: `Operator token required for capability "${key}"`,
+        };
+  }
+  return null;
+}
+
+/** True when the L1 host capability ceiling permits `key` for this request. */
+export function allowsCapability(c: Context, key: CapabilityKey): boolean {
+  return capabilityDenialFor(c, key) === null;
+}
+
+/**
+ * Undefined when the L1 capability ceiling allows `key` for this request;
+ * otherwise the refusal response to return directly.
+ */
+export function requireCapability(
+  c: Context,
+  key: CapabilityKey,
+): Response | undefined {
+  const denial = capabilityDenialFor(c, key);
+  return denial
+    ? c.json(errorBody(denial.message, { code: denial.code }), denial.status)
+    : undefined;
+}
+
+/** {@link requireCapability} as route middleware. */
+export function capabilityGuard(key: CapabilityKey): MiddlewareHandler {
+  return async (c, next) => {
+    const denied = requireCapability(c, key);
     if (denied) return denied;
     await next();
   };

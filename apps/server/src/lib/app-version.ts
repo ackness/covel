@@ -1,5 +1,9 @@
 import { createRequire } from "node:module";
 import { satisfiesHostVersionRange } from "@covel/shared";
+import {
+  isSupportedPluginApiVersion,
+  SUPPORTED_PLUGIN_API_VERSIONS,
+} from "@covel/shared/platform";
 
 /**
  * Running server version. Sourced from the @covel/server package.json so it
@@ -32,4 +36,19 @@ export function assertHostVersionInRange(
     throw new Error(
       `${subject} needs Covel ${range}; this host runs ${APP_VERSION}`,
     );
+}
+
+/**
+ * Fail-closed check for integer `apiVersion` in PLUGIN.md before loading or
+ * importing any package code.
+ */
+export function assertPluginApiVersion(
+  subject: string,
+  apiVersion: number | undefined,
+): void {
+  if (apiVersion !== undefined && !isSupportedPluginApiVersion(apiVersion)) {
+    throw new Error(
+      `${subject} requires plugin apiVersion ${apiVersion}; this host supports [${SUPPORTED_PLUGIN_API_VERSIONS.join(", ")}]`,
+    );
+  }
 }

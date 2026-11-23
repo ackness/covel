@@ -1365,3 +1365,14 @@ UI slots consume committed owned presentation state. Missing public story, asset
 ## Separate theme placement
 
 `contributes.ui.theme` has its own strict schema. It executes no view/webview, reads no session and requests no bridge. Bitmap roots have no HTML entry and remain separate from page listings. A broken theme produces only its own diagnostic; valid panels and themes remain discoverable. Styles mount only after an explicit **Session theme** choice. Narrative text and a separate decorative plane receive the restricted palette; host bars, settings, approvals, composer and recovery controls stay outside those nodes. Views and themes are selected independently; theme selection changes neither content consent nor the write protocol. Existing sandbox snapshots receive only the session’s safe palette/identity and host fonts/radii, without CSS, resource listings or setting entries. See [plugin themes](./theme-packages.md#restricted-themes-supplied-by-plugins).
+
+## Instance UI slots and session micro-slots
+
+Alongside session right panels and full-column views, Platform v2 adds two strict json-render placement groups under `contributes.ui`:
+
+- **Instance slots** (requires `scope: instance` or `scope: both`): `settingsSection` (rendered inside a declared settings `sectionGroup`, prohibiting webviews and secret/session bindings), `appPage` (instance application sub-page), and `topbarStatus` (top bar status pill).
+- **Session micro-slots and windows**: `composerAction`, `messageAction`, `messageBelow`, and named `window` specs, dispatching declarative `action`, `command`, `openFlow`, or `openWindow` triggers through the host.
+
+## Declarative Config Flows
+
+Plugins needing external OAuth sign-in, device-code polling, or credential import (such as `provider.source@1` sources) declare flow IDs in `contributes.flows` and register a step machine via `covel.registerConfigFlow`. Supported step kinds (`CONFIG_FLOW_STEP_KINDS`) are `form`, `browser` (paired with `loopbackCallback`), `device`, `import`, `confirm`, `done`, and `error`. Host views launch the generic wizard dialog via `openPluginConfigFlow`; completion automatically notifies settings panes and refreshes provider-source summaries while secrets remain solely inside the host [secret vault](./glossary.md#secret-vault).

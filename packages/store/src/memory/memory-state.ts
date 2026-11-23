@@ -20,6 +20,8 @@ export function createMemoryState(): MemoryState {
     sessionVectorTargets: new Map(),
     worlds: new Map(),
     serverSettings: new Map(),
+    pluginGrants: new Map(),
+    instanceData: new Map(),
     traceEvents: [],
     runtimeOutputs: [],
     interactionRecords: [],

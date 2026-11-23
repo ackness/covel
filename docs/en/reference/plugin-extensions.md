@@ -532,7 +532,7 @@ When a plugin needs to call a model, or connect a new provider, choose the appro
 
 ### Use the model features that already exist
 
-- Text, images, speech, and music: use `ctx.gateway`, `ctx.images`, `ctx.speech`, and `ctx.music`. Their types (`PluginServiceGateway`, `PluginImages`, `PluginSpeech`, `PluginMusic`, `PluginMedia`) are exported by `@covel/plugin-handlers-utils`, and the host implements exactly these types.
+- Text, images, speech, and music: use `ctx.gateway` (`generateText`, `generateObject`, `streamText`), `ctx.images`, `ctx.speech`, and `ctx.music`. Their types (`PluginServiceGateway`, `PluginImages`, `PluginSpeech`, `PluginMusic`, `PluginMedia`) are exported by `@covel/plugin-handlers-utils`, and the host implements exactly these types.
 - Evaluation: `ctx.gateway.evaluate({ presetId, state, questions, signal })`. It supports three kinds of questions: Boolean, Choice, and Score.
 
 ### Budget when you build a long prompt yourself
@@ -557,12 +557,13 @@ This way, operators can see warnings and errors without digging through session 
 
 ### A new provider or a new protocol
 
-| Case                                                                                       | What to do                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A new provider that uses an existing wire                                                  | Only configure the provider, the base URL, the model, and the model role. No plugin or framework change is needed.                                                                                                                                                                             |
-| A new wire, or a new kind of response                                                      | Inside a service, use `ctx.gateway.resolveSlot` to get the model configuration for this request. Then use `ctx.utils.validateBaseUrl` / `fetchWithRetry` to implement the protocol, and define your own input and output schemas. Give the result to other plugins through a service contract. |
-| Images, speech, transcription, or music, where you want to reuse the shared media pipeline | Use `covel.registerWires`. Saving media still goes through the existing media interface.                                                                                                                                                                                                       |
-| A new text protocol (a request and response format beyond the four built in)               | Also register it with `covel.registerWires`. See [text protocol wire](#text-protocol-wire) below. Once registered, it works like a built-in protocol: any text role can select it, and so can the main narrative.                                                                              |
+| Case                                                                                             | What to do                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A new provider that uses an existing wire                                                        | Only configure the provider, the base URL, the model, and the model role. No plugin or framework change is needed.                                                                                                                                                                             |
+| A provider using OAuth, multi-account pools, or plugin-managed credentials (`provider.source@1`) | Declare `contributes.providerSources` and `contributes.flows` in a `scope: instance` / `both` plugin and register handlers with `covel.registerProviderSources`; secrets stay inside the host `SecretVault` (see [Slots](./slots.md#plugin-managed-provider-sources-providersource1)).         |
+| A new wire, or a new kind of response                                                            | Inside a service, use `ctx.gateway.resolveSlot` to get the model configuration for this request. Then use `ctx.utils.validateBaseUrl` / `fetchWithRetry` to implement the protocol, and define your own input and output schemas. Give the result to other plugins through a service contract. |
+| Images, speech, transcription, or music, where you want to reuse the shared media pipeline       | Use `covel.registerWires`. Saving media still goes through the existing media interface.                                                                                                                                                                                                       |
+| A new text protocol (a request and response format beyond the four built in)                     | Also register it with `covel.registerWires`. See [text protocol wire](#text-protocol-wire) below. Once registered, it works like a built-in protocol: any text role can select it, and so can the main narrative.                                                                              |
 
 Keys stay on the server only. They are not written into results, logs, or the interface.
 
@@ -587,6 +588,8 @@ A gateway used by a service inherits the request settings, tracing, cancellation
 ### The scope of "no framework change needed"
 
 This means a plugin can build a feature with its own contracts. If you want the framework's general model settings, scheduler, or media system to know directly about a brand-new kind of capability (beyond text, images, speech, transcription, music, and evaluation), you still have to change the host's public contracts. Registering a service does not add a new item to that list of capabilities by itself.
+
+For instance-wide integrations (`apiVersion: 2`, `scope: instance` / `both`), packages can combine host-governed primitives (`covel.secrets`, `covel.instanceData`, `covel.sandbox`, `registerAppAction`, `registerConfigFlow`, `onAppEvent`, `registerScheduledTask`, `channel.bridge@1`, and `registerProviderSources`) to build MCP tool bridges, backup/import-export suites, external chat-channel bridges, or OAuth/subscription model sources without changing the core framework.
 
 ### Text protocol wire
 

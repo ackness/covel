@@ -9,9 +9,17 @@
  */
 
 import { AiProviderError } from "./errors.js";
-import { assertLlmRequestBudget } from "@covel/shared";
+import {
+  assertLlmRequestBudget,
+  type ProviderFailureKind,
+} from "@covel/shared";
 import { classifyProviderFailure } from "./provider-failure.js";
 import type { ProviderResolution } from "./provider-registry.js";
+import {
+  hasSameOrigin,
+  type ProviderSourceAttemptContext,
+  type ProviderSourceResolver,
+} from "./provider-source.js";
 import {
   normalizeError,
   notifyError,
@@ -22,14 +30,16 @@ import {
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import type {
   OperationMode,
+  ProviderConfig,
   ProviderProtocol,
   ResolvedTarget,
 } from "./types.js";
 
 /**
  * A missing/refused key (401) or empty balance fails every model of the account, so
- * a backup with the same provider, base URL and key is skipped. A 403 or a rate
- * limit can apply to one model only, so such a backup still runs.
+ * a backup with the same provider, base URL and key is skipped (or same
+ * `(sourceId, accountId)` when backed by a plugin provider source). A 403 or a
+ * rate limit can apply to one model only, so such a backup still runs.
  */
 function failsWholeAccount(error: unknown): boolean {
   const failure = classifyProviderFailure(error);
@@ -40,27 +50,61 @@ function failsWholeAccount(error: unknown): boolean {
   );
 }
 
+type FailedAccountIdentity =
+  | {
+      readonly kind: "source";
+      readonly sourceId: string;
+      readonly accountId: string;
+    }
+  | {
+      readonly kind: "key";
+      readonly provider: string;
+      readonly baseUrl?: string;
+      readonly apiKey?: string;
+    };
+
 /** Per-call account failures; credentials never enter diagnostics or traces. */
 export function createFailedAccountTracker() {
-  const accounts: Array<{
-    provider: string;
-    baseUrl?: string;
-    apiKey?: string;
-  }> = [];
-  const identity = (provider: string, resolved: ProviderResolution) => ({
-    provider,
-    baseUrl: resolved.config.baseUrl?.replace(/\/+$/, ""),
-    apiKey: resolved.config.apiKey,
-  });
+  const accounts: FailedAccountIdentity[] = [];
+  const identity = (
+    provider: string,
+    resolved: ProviderResolution,
+  ): FailedAccountIdentity => {
+    const source = resolved.config.credentialSource;
+    if (source) {
+      return {
+        kind: "source",
+        sourceId: source.sourceId,
+        accountId: source.accountId ?? "__default__",
+      };
+    }
+    return {
+      kind: "key",
+      provider,
+      baseUrl: resolved.config.baseUrl?.replace(/\/+$/, ""),
+      apiKey: resolved.config.apiKey,
+    };
+  };
   return {
     has(provider: string, resolved: ProviderResolution): boolean {
       const candidate = identity(provider, resolved);
-      return accounts.some(
-        (account) =>
-          account.provider === candidate.provider &&
-          account.baseUrl === candidate.baseUrl &&
-          account.apiKey === candidate.apiKey,
-      );
+      return accounts.some((account) => {
+        if (account.kind !== candidate.kind) return false;
+        if (account.kind === "source" && candidate.kind === "source") {
+          return (
+            account.sourceId === candidate.sourceId &&
+            account.accountId === candidate.accountId
+          );
+        }
+        if (account.kind === "key" && candidate.kind === "key") {
+          return (
+            account.provider === candidate.provider &&
+            account.baseUrl === candidate.baseUrl &&
+            account.apiKey === candidate.apiKey
+          );
+        }
+        return false;
+      });
     },
     record(
       provider: string,
@@ -77,8 +121,10 @@ export interface ProviderRegistryLike {
   resolve(
     target: {
       provider: string;
+      source?: string;
       baseUrl?: string;
       protocol?: ProviderProtocol;
+      requestScoped?: boolean;
     },
     options?: { mode: OperationMode },
   ): ProviderResolution;
@@ -90,11 +136,35 @@ export interface ProviderRegistryLike {
   ): ProviderResolution;
 }
 
+export interface PreparedTarget {
+  readonly provider: string;
+  readonly resolved: ProviderResolution;
+  readonly sourceAttempt?: ProviderSourceAttemptContext;
+}
+
+function rethrowPrepareError(
+  error: unknown,
+  provider: string,
+  target: ResolvedTarget,
+): never {
+  const failure =
+    error instanceof AiProviderError
+      ? error
+      : new AiProviderError({
+          code: "CONFIG_ERROR",
+          message: error instanceof Error ? error.message : String(error),
+          provider,
+          retriable: false,
+          cause: error,
+        });
+  throw targetFailure(failure, target);
+}
+
 /**
  * Resolve a target into its provider resolution, applying per-request API keys
  * when supplied. Identical setup used by both fallback paths.
  */
-export function prepareTarget(
+function prepareTarget(
   providerRegistry: ProviderRegistryLike,
   target: ResolvedTarget,
   mode: OperationMode,
@@ -115,24 +185,232 @@ export function prepareTarget(
     }
     return { provider, resolved };
   } catch (error) {
-    const failure =
-      error instanceof AiProviderError
-        ? error
-        : new AiProviderError({
-            code: "CONFIG_ERROR",
-            message: error instanceof Error ? error.message : String(error),
-            provider,
-            retriable: false,
-            cause: error,
-          });
-    throw targetFailure(failure, target);
+    rethrowPrepareError(error, provider, target);
   }
+}
+
+function buildSourceProviderResolution(
+  providerRegistry: ProviderRegistryLike,
+  provider: string,
+  mode: OperationMode,
+  attempt: ProviderSourceAttemptContext,
+): ProviderResolution {
+  if (!hasSameOrigin(attempt.baseUrl, attempt.declaredBaseUrl)) {
+    throw new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: `Provider source "${attempt.sourceId}" resolved baseUrl origin outside declared origin.`,
+      provider,
+      retriable: false,
+    });
+  }
+  const base = providerRegistry.resolve(
+    {
+      provider,
+      source: attempt.sourceId,
+      baseUrl: attempt.baseUrl,
+      protocol: attempt.protocol,
+      requestScoped: true,
+    },
+    { mode },
+  );
+  const nextConfig: ProviderConfig = {
+    ...base.config,
+    protocol: attempt.protocol,
+    baseUrl: attempt.baseUrl,
+    headers: { ...attempt.headers },
+    ...(attempt.requestShape ? { requestShape: attempt.requestShape } : {}),
+    credentialSource: {
+      sourceId: attempt.sourceId,
+      ...(attempt.accountId !== undefined
+        ? { accountId: attempt.accountId }
+        : {}),
+      ...(attempt.credentialGeneration !== undefined
+        ? { credentialGeneration: attempt.credentialGeneration }
+        : {}),
+    },
+  };
+  delete nextConfig.apiKey;
+  delete nextConfig.relayable;
+  return {
+    ...base,
+    protocol: attempt.protocol,
+    config: nextConfig,
+    envKeyAllowed: false,
+  };
+}
+
+/**
+ * Async target preparation handling both regular API-key targets and
+ * `provider.source@1`-backed targets (which run L1-L3/mode/origin checks).
+ */
+export async function prepareTargetAsync(
+  providerRegistry: ProviderRegistryLike,
+  providerSources: ProviderSourceResolver | undefined,
+  target: ResolvedTarget,
+  mode: OperationMode,
+  options: GatewayOptions | undefined,
+): Promise<PreparedTarget> {
+  const sourceId = target.preset?.source;
+  if (!sourceId) {
+    return prepareTarget(providerRegistry, target, mode, options);
+  }
+  const provider = targetProvider(target);
+  try {
+    if (!providerSources) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Provider source "${sourceId}" cannot be resolved because provider sources are unavailable.`,
+        provider,
+        model: targetModel(target),
+        retriable: false,
+      });
+    }
+    const attempt = await providerSources.resolve({
+      sourceId,
+      ...(target.preset?.account ? { accountId: target.preset.account } : {}),
+      mode,
+      model: targetModel(target),
+      ...(target.preset?.baseUrl
+        ? { declaredBaseUrl: target.preset.baseUrl }
+        : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    });
+    if (
+      target.preset?.baseUrl &&
+      !hasSameOrigin(target.preset.baseUrl, attempt.declaredBaseUrl)
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message: `Provider source "${sourceId}" baseUrl origin does not match declared source origin.`,
+        provider,
+        model: targetModel(target),
+        retriable: false,
+      });
+    }
+    const resolved = buildSourceProviderResolution(
+      providerRegistry,
+      provider,
+      mode,
+      attempt,
+    );
+    return { provider, resolved, sourceAttempt: attempt };
+  } catch (error) {
+    rethrowPrepareError(error, provider, target);
+  }
+}
+
+/**
+ * Attempt a single generation-aware refresh when a source-backed request fails
+ * with HTTP 401. Returns the updated resolution + attempt, or `null`.
+ */
+export async function tryRefreshSourceTarget(args: {
+  readonly providerRegistry: ProviderRegistryLike;
+  readonly providerSources: ProviderSourceResolver | undefined;
+  readonly provider: string;
+  readonly mode: OperationMode;
+  readonly sourceAttempt: ProviderSourceAttemptContext | undefined;
+  readonly error: unknown;
+  readonly signal?: AbortSignal;
+}): Promise<{
+  readonly resolved: ProviderResolution;
+  readonly sourceAttempt: ProviderSourceAttemptContext;
+} | null> {
+  const {
+    providerRegistry,
+    providerSources,
+    provider,
+    mode,
+    sourceAttempt,
+    error,
+    signal,
+  } = args;
+  if (!sourceAttempt || !providerSources?.refresh) return null;
+  const normalized = normalizeError(error, provider);
+  if (normalized.statusCode !== 401) return null;
+  const refreshed = await providerSources.refresh({
+    sourceId: sourceAttempt.sourceId,
+    ...(sourceAttempt.accountId !== undefined
+      ? { accountId: sourceAttempt.accountId }
+      : {}),
+    ...(sourceAttempt.credentialGeneration !== undefined
+      ? { failedGeneration: sourceAttempt.credentialGeneration }
+      : {}),
+    statusCode: 401,
+    ...(signal ? { signal } : {}),
+  });
+  if (!refreshed) return null;
+  return {
+    resolved: buildSourceProviderResolution(
+      providerRegistry,
+      provider,
+      mode,
+      refreshed,
+    ),
+    sourceAttempt: refreshed,
+  };
+}
+
+const SOURCE_ERROR_CODES: Partial<
+  Record<ProviderFailureKind, AiProviderError["code"]>
+> = {
+  rate_limited: "RATE_LIMITED",
+  config: "CONFIG_ERROR",
+  missing_key: "MISSING_API_KEY",
+  refused: "REFUSAL",
+};
+
+const RETRIABLE_SOURCE_FAILURE_KINDS = new Set<ProviderFailureKind>([
+  "rate_limited",
+  "overloaded",
+  "server",
+  "timeout",
+  "unreachable",
+]);
+
+/**
+ * Allow a provider source to supply protocol/vendor-specific error semantics
+ * without baking vendor knowledge into core gateway code.
+ */
+function applySourceErrorClassification(
+  error: unknown,
+  provider: string,
+  sourceAttempt: ProviderSourceAttemptContext | undefined,
+): unknown {
+  if (!sourceAttempt?.classifyError) return error;
+  const normalized = normalizeError(error, provider);
+  const classified = sourceAttempt.classifyError({
+    statusCode: normalized.statusCode,
+    body: normalized.details,
+    message: normalized.message,
+  });
+  if (!classified) return error;
+  const code = SOURCE_ERROR_CODES[classified.kind] ?? "PROVIDER_ERROR";
+  const retriable = RETRIABLE_SOURCE_FAILURE_KINDS.has(classified.kind);
+  return new AiProviderError({
+    code,
+    message: classified.message ?? normalized.message,
+    provider,
+    ...(normalized.model ? { model: normalized.model } : {}),
+    retriable,
+    ...(normalized.statusCode !== undefined
+      ? { statusCode: normalized.statusCode }
+      : {}),
+    details: {
+      ...normalized.details,
+      providerFailureKind: classified.kind,
+      ...(classified.retryAfterMs !== undefined
+        ? { retryAfterMs: classified.retryAfterMs }
+        : {}),
+    },
+    cause: error,
+  });
 }
 
 /**
  * Apply the shared per-target failure handling.
  *
- * Notifies the lifecycle hooks, normalizes the error, and decides — given the
+ * Applies optional source error classification, records failed accounts,
+ * notifies the lifecycle hooks, normalizes the error, and decides — given the
  * caller-supplied `canFallback` predicate — whether to rethrow now or let the
  * caller advance to the next target. Returns the normalized error so the caller
  * can retain it as `lastError`.
@@ -156,6 +434,8 @@ export async function handleTargetFailure(args: {
   canFallback: boolean;
   /** The failure of the target tried before this one, when there was one. */
   previous?: AiProviderError | null;
+  sourceAttempt?: ProviderSourceAttemptContext;
+  failedAccounts?: ReturnType<typeof createFailedAccountTracker>;
 }): Promise<AiProviderError> {
   const {
     error,
@@ -168,7 +448,14 @@ export async function handleTargetFailure(args: {
     canFallback,
   } = args;
 
-  let failure = error;
+  const classifiedError = applySourceErrorClassification(
+    error,
+    provider,
+    args.sourceAttempt,
+  );
+  args.failedAccounts?.record(provider, resolved, classifiedError);
+
+  let failure: unknown = classifiedError;
   try {
     await notifyError(
       resolved.hooks,
@@ -176,7 +463,7 @@ export async function handleTargetFailure(args: {
       resolved.protocol,
       mode,
       targetModel(target),
-      error,
+      classifiedError,
       Date.now() - startTime,
       options?.traceId,
       options,

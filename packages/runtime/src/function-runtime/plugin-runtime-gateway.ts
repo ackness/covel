@@ -16,6 +16,7 @@ import { functionRequestBudget } from "./function-request-budget.js";
  */
 
 import type {
+  PluginGatewayStreamEvent,
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
   SlotTokenLimits,
@@ -24,6 +25,7 @@ import type {
   EvaluationQuestions,
   EvaluationResult,
 } from "@covel/shared/plugin-runtime";
+import type { ProviderSourceCredentialStatus } from "@covel/shared/platform";
 import {
   instructionLocaleFor,
   resolveLlmTokenLimits,
@@ -102,6 +104,22 @@ export interface FullGatewayLike {
     provider?: string;
   }>;
 
+  streamText?(
+    input: {
+      presetId?: string;
+      instructionLocale?: "en" | "zh";
+      messages: Array<{ role: string; content: string | null }>;
+      defaults?: import("@covel/shared").LLMRequestDefaults;
+      responseFormat?: import("@covel/shared").LLMResponseFormat;
+      providerRequestMetadata?: Record<string, unknown>;
+      providerOptions?: Readonly<
+        Record<string, Readonly<Record<string, unknown>>>
+      >;
+      promptCacheKey?: string;
+    },
+    options?: FullGatewayOptions,
+  ): AsyncIterable<PluginGatewayStreamEvent>;
+
   resolveSlot(
     presetId: string | undefined,
     options?: FullGatewayOptions & { fallbackTag?: string },
@@ -114,6 +132,7 @@ export interface FullGatewayLike {
     headers?: Record<string, string>;
     model: string;
     tag: string;
+    credentialSource?: ProviderSourceCredentialStatus;
     metadata: Record<string, unknown>;
     capability?: { contextWindow?: number; maxOutputTokens?: number };
     parameterOverrides?: { maxOutputTokens?: number };
@@ -359,11 +378,44 @@ export function createPluginRuntimeGateway(
           : {}),
         model: resolved.model,
         tag: resolved.tag,
+        ...(resolved.credentialSource !== undefined
+          ? { credentialSource: resolved.credentialSource }
+          : {}),
         metadata: { ...resolved.metadata },
         ...slotLimits(resolved),
       };
     },
   };
+
+  if (gateway.streamText) {
+    const streamTextFn = gateway.streamText.bind(gateway);
+    facade.streamText = (input) => {
+      const messages = input.messages
+        ? input.messages.map((m) => ({ role: m.role, content: m.content }))
+        : toMessages({ system: input.system, prompt: input.prompt });
+      return streamTextFn(
+        {
+          ...(input.presetId ? { presetId: input.presetId } : {}),
+          messages,
+          instructionLocale: input.instructionLocale,
+          ...(input.defaults ? { defaults: input.defaults } : {}),
+          ...(input.responseFormat
+            ? { responseFormat: input.responseFormat }
+            : {}),
+          ...(input.providerOptions
+            ? { providerOptions: input.providerOptions }
+            : {}),
+          ...(input.providerRequestMetadata
+            ? { providerRequestMetadata: { ...input.providerRequestMetadata } }
+            : {}),
+          ...(input.promptCacheKey
+            ? { promptCacheKey: input.promptCacheKey }
+            : {}),
+        },
+        callOptions(input),
+      );
+    };
+  }
 
   if (gateway.evaluate) {
     const evaluate = gateway.evaluate.bind(gateway);
@@ -570,5 +622,17 @@ export function withRuntimeTextDefaults(
           ? { presetId: input.presetId ?? defaultModel }
           : {}),
       }),
+    ...(gateway.streamText
+      ? {
+          streamText: (input) =>
+            gateway.streamText!({
+              ...input,
+              instructionLocale,
+              ...(defaultModel !== undefined
+                ? { presetId: input.presetId ?? defaultModel }
+                : {}),
+            }),
+        }
+      : {}),
   };
 }

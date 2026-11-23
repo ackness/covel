@@ -23,6 +23,9 @@ import { readPlainYamlFrontmatter } from "./plain-yaml-frontmatter.js";
 export const EXTRACTED_KINDS = [
   "tools",
   "actions",
+  "appActions",
+  "flows",
+  "appEvents",
   "services",
   "forms",
   "wires",
@@ -42,6 +45,9 @@ export type ExtensionContribution =
 export interface ExtractedDeclarations {
   readonly tools: readonly string[];
   readonly actions: readonly string[];
+  readonly appActions?: readonly string[];
+  readonly flows?: readonly string[];
+  readonly appEvents?: readonly string[];
   readonly services: readonly ServiceContribution[];
   readonly forms: readonly string[];
   readonly wires: readonly string[];
@@ -228,18 +234,19 @@ export function rewriteContributes(
   const doc = parseDocument(yaml, { keepSourceTokens: true });
   if (doc.errors.length) throw doc.errors[0];
   const fields = pluginManifestSchema.shape.contributes.unwrap().shape;
+  const valuesFor = (key: Kind) => extracted[key] ?? [];
   for (const key of EXTRACTED_KINDS) fields[key].parse(extracted[key]);
   if (doc.contents === null) {
-    const changed = EXTRACTED_KINDS.filter((key) => extracted[key].length > 0);
+    const changed = EXTRACTED_KINDS.filter((key) => valuesFor(key).length > 0);
     const drift = changed.map((key) => ({
       key,
-      added: names(extracted[key], key),
+      added: names(valuesFor(key), key),
       removed: [],
     }));
     const rendered = changed.length
       ? new Document({
           contributes: Object.fromEntries(
-            changed.map((key) => [key, extracted[key]]),
+            changed.map((key) => [key, valuesFor(key)]),
           ),
         })
           .toString({ lineWidth: 0 })
@@ -275,7 +282,7 @@ export function rewriteContributes(
         ? []
         : fields[key].unwrap().parse(previous.toJSON());
     const raw: unknown = previous?.toJSON();
-    const values = extracted[key];
+    const values = valuesFor(key);
     if (
       previous === undefined
         ? values.length === 0
@@ -411,9 +418,9 @@ export function rewriteContributes(
     }
   } else {
     const values = Object.fromEntries(
-      EXTRACTED_KINDS.filter((key) => extracted[key].length).map((key) => [
+      EXTRACTED_KINDS.filter((key) => valuesFor(key).length).map((key) => [
         key,
-        extracted[key],
+        valuesFor(key),
       ]),
     );
     insertPairs(root, [

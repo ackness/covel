@@ -163,6 +163,7 @@ export function registerSessionPluginRoutes(
       paused: c.get("pluginFaults")?.latched(id),
       isEntryPublished: c.get("isPluginEntryPublished"),
       trustedSources: c.get("trustedSources"),
+      permissionService: c.get("permissionService"),
       isServerCodeApproved: (pluginId) =>
         hasServerCodeGrant(c.get("rpcApprovalGate"), guard.session, pluginId),
       authorized: authorizedSessionPluginIds(
@@ -170,6 +171,7 @@ export function registerSessionPluginRoutes(
         c.get("rpcApprovalGate"),
         guard.session,
         c.get("trustedSources"),
+        { permissionService: c.get("permissionService") },
       ),
     });
     return c.json({
@@ -218,8 +220,10 @@ export function registerSessionPluginRoutes(
           c.get("rpcApprovalGate"),
           session,
           c.get("trustedSources"),
+          { permissionService: c.get("permissionService") },
         ),
         trustedSources: c.get("trustedSources"),
+        permissionService: c.get("permissionService"),
         isServerCodeApproved: (candidate) =>
           hasServerCodeGrant(c.get("rpcApprovalGate"), session, candidate),
         isEntryPublished: c.get("isPluginEntryPublished"),
@@ -253,6 +257,12 @@ export function registerSessionPluginRoutes(
       pluginId,
     );
     const trust = getPluginTrustInfo(pluginId, pluginEntry.source);
+    if (trust.source === "community" && declarative) {
+      const declarativeDenied = c
+        .get("permissionService")
+        ?.requireCapabilityForPlugin(c, "plugin.declarative", pluginId);
+      if (declarativeDenied) return declarativeDenied;
+    }
     if (trust.source === "community" && !declarative) {
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
@@ -336,6 +346,7 @@ export function registerSessionPluginRoutes(
             c.get("rpcApprovalGate"),
             session,
             c.get("trustedSources"),
+            { permissionService: c.get("permissionService") },
           ),
         },
       );
@@ -508,6 +519,7 @@ export function registerSessionPluginRoutes(
             c.get("rpcApprovalGate"),
             session,
             c.get("trustedSources"),
+            { permissionService: c.get("permissionService") },
           ),
         },
       );

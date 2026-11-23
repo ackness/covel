@@ -30,6 +30,24 @@ export function approvalVerdictResponse(
     readonly code: string;
   },
 ): Response | undefined {
+  if (verdict.status === "denied") {
+    const code =
+      verdict.reason === "ceiling"
+        ? "capability_disabled"
+        : verdict.reason === "policy"
+          ? "capability_denied_by_policy"
+          : "capability_denied_by_grant";
+    const subject = verdict.capability
+      ? `Capability "${verdict.capability}"`
+      : "Operation";
+    const reasonText =
+      verdict.reason === "ceiling"
+        ? "is disabled on this host"
+        : verdict.reason === "policy"
+          ? "is denied by instance policy"
+          : "is denied by persistent plugin grant";
+    return c.json(errorBody(`${subject} ${reasonText}`, { code }), 403);
+  }
   if (verdict.status === "pending") {
     return c.json(
       {

@@ -1454,6 +1454,14 @@
     "desktopProxyMode": "代理模式",
     "desktopProxyUrl": "代理地址",
     "providerIdLabel": "服务商 ID",
+    "providerSource": "凭据来源",
+    "providerSourceManual": "手动配置（API 密钥 / 端点）",
+    "providerSourceAccount": "账号",
+    "providerSourceDefaultAccount": "当前默认账号",
+    "providerSourceReady": "已就绪",
+    "providerSourceNotReady": "需要登录",
+    "providerSourceSignIn": "登录 / 管理",
+    "providerSourceManagedCredentials": "凭据与端点来源由插件服务源 {{source}} 托管。",
     "description": "调整外观、模型、扩展包和本地数据。",
     "desktopRefreshFailed": "无法刷新桌面信息，请重试。",
     "providerImportSucceeded": "已导入服务商和模型。",
@@ -1568,6 +1576,187 @@
       "extensions": "扩展",
       "forms": "表单",
       "datasets": "数据集"
+    },
+    "permissionsNavLabel": "权限与安全",
+    "panePermissionsDescription": "查看宿主机能力天花板（L1）、配置实例默认策略（L2）、审计单插件持久授权（L3）与当前会话临时授权（L4）。",
+    "permissions": {
+      "policyTitle": "实例能力默认策略",
+      "policyDescription": "在宿主机天花板约束下，对各类插件能力应用全实例默认规则。",
+      "refresh": "刷新",
+      "loadFailed": "加载权限状态失败。",
+      "policySaved": "实例权限策略已更新。",
+      "policyResetDone": "实例权限策略已恢复默认值。",
+      "resetPolicy": "恢复默认策略",
+      "grantSaved": "插件持久化授权已更新。",
+      "grantRevoked": "已清除该插件的持久化授权。",
+      "sessionGrantsRevoked": "已撤销当前会话的活动授权。",
+      "deploymentSummaryTitle": "宿主能力天花板（L1）",
+      "desktopShellBadge": "Electron 桌面端",
+      "deploymentSummaryDesc": "宿主能力天花板在服务端启动时解析完成；任何实例策略或插件授权都只能向下收紧，不能突破此上限。",
+      "ceilingCountEnabled": "允许：{{count}}",
+      "ceilingCountOperator": "仅运维：{{count}}",
+      "ceilingCountDisabled": "已禁用：{{count}}",
+      "deploymentForm": {
+        "personal": "个人版（Personal）",
+        "browser_private": "公开隐私体验（Browser-private）",
+        "hosted": "托管共享（Hosted）"
+      },
+      "risk": {
+        "critical": "极高风险",
+        "high": "高风险",
+        "medium": "中风险",
+        "low": "低风险"
+      },
+      "ceiling": {
+        "enabled": "允许",
+        "operator_only": "仅运维",
+        "disabled": "已禁用"
+      },
+      "mode": {
+        "allow": "放行",
+        "ask": "询问",
+        "deny": "拒绝"
+      },
+      "capabilityItems": {
+        "plugin_declarative": {
+          "label": "纯声明式插件",
+          "description": "仅包含静态提示词、声明式 UI 与数据集定义的无代码包。"
+        },
+        "compute_sandboxWorker": {
+          "label": "沙箱计算 Worker",
+          "description": "限时纯计算工作线程，禁止文件、网络、密钥与 DOM 访问。"
+        },
+        "plugin_communityCode": {
+          "label": "社区服务端代码",
+          "description": "在宿主 Node 进程内加载并运行第三方 JavaScript 入口与处理函数。"
+        },
+        "plugin_instanceScope": {
+          "label": "实例级插件作用域",
+          "description": "允许社区插件脱离单局会话常驻于整个应用实例。"
+        },
+        "plugin_providerSource": {
+          "label": "模型来源接入",
+          "description": "向模型网关提供外部账号认证与凭据解析来源。"
+        },
+        "channel_bridge": {
+          "label": "外部聊天通道桥接",
+          "description": "将外部聊天软件或命令行消息桥接到会话中。"
+        },
+        "plugin_globalAutoEnable": {
+          "label": "跨会话全局默认启用",
+          "description": "允许辅助型插件按全局默认自动加入新开的会话。"
+        },
+        "secrets_own": {
+          "label": "宿主托管机密存储",
+          "description": "允许插件读写归属于自身的隔离凭据与令牌。"
+        },
+        "net_httpDeclared": {
+          "label": "声明白名单出站 HTTP",
+          "description": "允许向插件清单声明的来源域名发起带 SSRF 防护的直连请求。"
+        },
+        "net_authProxy": {
+          "label": "受限认证出站代理",
+          "description": "仅对清单声明的源站域名，将实例认证请求路由到配置的出站代理。"
+        },
+        "net_loopbackCallback": {
+          "label": "本机回环 OAuth 回调",
+          "description": "临时在 localhost 开启回调端口以完成浏览器授权跳转。"
+        },
+        "network_localModels": {
+          "label": "本机与局域网模型访问",
+          "description": "允许服务端直连回环地址或局域网上的本地模型端点。"
+        },
+        "session_bridgeWrite": {
+          "label": "沙箱面板会话写入",
+          "description": "允许沙箱化插件界面经批准后通过 bridge 向会话写入数据或调用操作。"
+        },
+        "runtime_highRiskTools": {
+          "label": "高风险模型工具调用",
+          "description": "允许模型调用需要玩家明确确认的高风险工具。"
+        },
+        "app_scheduler": {
+          "label": "实例后台定时调度",
+          "description": "允许实例级插件注册受限的后台周期或延迟任务。"
+        },
+        "host_installPackages": {
+          "label": "安装与管理扩展包",
+          "description": "安装、更新、热重载与卸载插件包及世界包。"
+        },
+        "exec_localBridge": {
+          "label": "本地子进程桥接",
+          "description": "预留给声明式白名单本地子进程（如 stdio 工具）的高危桥接能力。"
+        }
+      },
+      "pluginsTitle": "按插件持久化授权与审计（L3）",
+      "pluginsDescription": "社区插件的持久化决策绑定至当前内容摘要与能力快照；显式拒绝具备粘性，会覆盖全局可信来源并在版本变更后继续生效直至清除。",
+      "pluginsOperatorRequired": "请先在上方输入运维 token，再查看该宿主上的插件权限审计与持久化授权。",
+      "showBuiltinCount": "显示内置插件（{{count}}）",
+      "noCommunityPlugins": "当前未安装第三方社区插件。",
+      "source": {
+        "builtin": "内置",
+        "community": "社区"
+      },
+      "tier": {
+        "0": "Tier 0 · 纯声明式",
+        "3": "Tier 3 · 未沙箱化 JS"
+      },
+      "integrity": {
+        "builtin": "框架内置",
+        "verified": "安装回执校验通过",
+        "modified": "磁盘文件已修改",
+        "no_receipt": "无安装回执",
+        "unreadable": "包内容不可读"
+      },
+      "integrityDesc": {
+        "modified": "磁盘上的插件文件与安装回执不一致。",
+        "unreadable": "无法从磁盘完整读取包清单或文件列表。"
+      },
+      "grantStatus": {
+        "none": "未配置授权",
+        "valid": "授权有效",
+        "stale_digest": "内容摘要已变化",
+        "capability_escalated": "申请能力已膨胀",
+        "unreadable": "包不可读",
+        "builtin": "框架内置"
+      },
+      "grantStatusDesc": {
+        "stale_digest": "包文件自上次授权后已发生变化；既有持久化放行已失效，需重新审阅确认。",
+        "capability_escalated": "当前包声明了超出已授权快照的新能力；既有持久化放行已失效，需重新审阅确认。",
+        "unreadable": "无法读取当前包摘要或能力声明；既有持久化放行已失效。"
+      },
+      "viewCapabilities": "查看声明的能力清单",
+      "dangerZoneTitle": "高危确认 · 宿主进程内直接执行代码",
+      "dangerZoneWarning": "社区插件的服务端 JavaScript 会在宿主 Node 进程中直接运行，享有宿主进程同等访问权限。",
+      "dangerZoneConfirm": "我已了解风险，并确认允许此插件在宿主进程中运行未沙箱化代码。",
+      "grantServerCode": "永久授权运行代码",
+      "denyServerCode": "显式拒绝代码运行",
+      "allowDeclarative": "允许声明式启用",
+      "denyDeclarative": "禁止声明式启用",
+      "revokePluginGrant": "清除持久化授权",
+      "diagnosticsTitle": "插件故障诊断汇总",
+      "diagnosticsDescription": "集中显示插件加载错误、注册契约不匹配、声明式分类提示、授权失效及当前会话中的拒绝与调用失败记录。",
+      "diagnosticsEmpty": "未检测到插件加载异常或权限告警。",
+      "diagLoadError": "加载失败",
+      "diagLoadErrorFallback": "插件未能在宿主机上成功加载。",
+      "diagRegistrationError": "注册声明不匹配",
+      "diagExecutionNotice": "清单分类提示",
+      "diagGrantInvalidated": "授权已失效",
+      "diagIntegrity": "包完整性告警",
+      "diagBlocked": "已被策略拦截",
+      "diagBlockedCode": "当前策略或授权禁止该插件执行服务端代码。",
+      "diagSessionRejection": "会话启用被拒",
+      "diagServiceCall": "服务调用异常",
+      "sessionGrantsTitle": "当前会话临时授权（L4）",
+      "sessionPendingCount": "待处理审批：{{count}}",
+      "revokeAllSessionGrants": "撤销全部会话授权",
+      "noSessionGrants": "当前会话没有处于活动状态的临时授权缓存。",
+      "revokePlugin": "撤销",
+      "desktopSecurityTitle": "桌面壳层固定安全边界（只读）",
+      "desktopSecurityDesc": "由 Electron 主进程原生强制执行：",
+      "desktopRuleExternalNav": "外部链接统一交由系统默认浏览器打开，主窗口锁定在本地受控来源。",
+      "desktopRuleSubframeIpc": "沙箱化插件子页面无法调用桌面高权限 IPC 通道。",
+      "desktopRuleClipboard": "剪贴板访问仅限于玩家显式交互触发的受限范围。",
+      "desktopRuleFileMode": "本地 API 密钥与托管机密文件均以 0600 权限存储在桌面配置目录。"
     },
     "liveOutput": {
       "text": "边写边显示",
@@ -2740,5 +2929,28 @@
         "failed": "有命令执行失败"
       }
     }
+  },
+  "platform": {
+    "openExternalFailed": "无法打开外部链接",
+    "webviewNotAllowed": "此挂载位不允许使用 Webview。",
+    "flowLoading": "正在启动配置向导...",
+    "fieldRequired": "请填写 {{field}}",
+    "flowSubmit": "继续",
+    "openInBrowser": "在浏览器中打开授权页",
+    "waitingCallback": "正在等待授权回调...",
+    "pasteCallbackUrl": "或粘贴跳转后的回调 URL",
+    "codeCopied": "已复制验证码",
+    "openVerificationPage": "打开验证页面",
+    "pollingAuthorization": "正在等待授权确认...",
+    "importTooLarge": "内容超过 {{maxBytes}} 字节上限",
+    "importSubmit": "导入",
+    "windowRestore": "还原",
+    "windowMinimize": "最小化",
+    "commandWorldsDesc": "浏览并启动世界观",
+    "commandSettingsDesc": "打开应用设置",
+    "commandPaletteTitle": "命令面板",
+    "commandPalettePlaceholder": "输入命令或跳转目标...",
+    "commandPaletteEmpty": "没有匹配的命令",
+    "confirmAction": "确认"
   }
 }

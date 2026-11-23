@@ -7,7 +7,13 @@ import {
   joinReasoning,
   splitThinkTags,
 } from "./think-tags.js";
-import type { ProviderConfig } from "../types.js";
+import type {
+  ProviderConfig,
+  StreamEvent,
+  TextGenerationResult,
+} from "../types.js";
+import { AiProviderError } from "../errors.js";
+import type { ProviderSourceRequestShape } from "../provider-source.js";
 import {
   readResponsesReasoning,
   ResponsesReasoningAccumulator,
@@ -57,6 +63,7 @@ import {
   extractParameterOverrides,
   IMAGE_PLACEHOLDER_TEXT,
   imagePartUrl,
+  lateSystemMessagesAsUser,
   lateSystemOption,
 } from "./common.js";
 import type {
@@ -310,6 +317,69 @@ function statelessReplayItems(
   return carried.map(({ id: _id, ...item }) => item);
 }
 
+function prepareResponsesMessagesAndInstructions(
+  messages: TextMessage[],
+  metadata: Record<string, unknown> | undefined,
+  requestShape: ProviderSourceRequestShape | undefined,
+): {
+  readonly inputMessages: TextMessage[];
+  readonly instructions?: string;
+} {
+  if (requestShape?.systemAs !== "instructions") {
+    return { inputMessages: lateSystemOption(messages, metadata) };
+  }
+  const normalized = lateSystemOption(messages, metadata);
+  const firstNonSystem = normalized.findIndex(
+    (m) => m.role !== "system" && m.role !== "developer",
+  );
+  const leading =
+    firstNonSystem < 0 ? normalized : normalized.slice(0, firstNonSystem);
+  const trailing =
+    firstNonSystem < 0
+      ? []
+      : lateSystemMessagesAsUser(normalized.slice(firstNonSystem));
+  const instructions = leading
+    .map((m) => responsesContentToText(m.content).trim())
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+  return {
+    inputMessages: trailing,
+    ...(instructions.length > 0 ? { instructions } : {}),
+  };
+}
+
+function finalizeResponsesBody(
+  body: Record<string, unknown>,
+  requestShape: ProviderSourceRequestShape | undefined,
+): Record<string, unknown> {
+  if (!requestShape) return body;
+  const next: Record<string, unknown> = { ...body };
+  for (const key of requestShape.omit ?? []) {
+    delete next[key];
+  }
+  if (requestShape.force) {
+    Object.assign(next, requestShape.force);
+  }
+  if (typeof requestShape.transform === "function") {
+    const transformed: unknown = requestShape.transform(structuredClone(next));
+    if (
+      !transformed ||
+      typeof transformed !== "object" ||
+      Array.isArray(transformed)
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        message:
+          "Provider source requestShape.transform must return a plain JSON object.",
+        provider: "openai-responses",
+        retriable: false,
+      });
+    }
+    return transformed as Record<string, unknown>;
+  }
+  return next;
+}
+
 /**
  * The fields every Responses request shares. `store` is `false` unless the
  * slot sets it: the provider then keeps neither the prompt nor the reply, and
@@ -338,7 +408,12 @@ function responsesRequestBody(
       { tools: (params.tools?.length ?? 0) > 0 },
     ),
   };
-  const stateless = body.store !== true;
+  const forcedStore =
+    config.requestShape?.force &&
+    Object.hasOwn(config.requestShape.force, "store")
+      ? config.requestShape.force.store
+      : body.store;
+  const stateless = forcedStore !== true;
   const reasoning = body.reasoning as { effort?: unknown } | null | undefined;
   if (
     stateless &&
@@ -355,8 +430,16 @@ function responsesRequestBody(
       ]),
     ];
   }
+  const shaped = prepareResponsesMessagesAndInstructions(
+    messages,
+    params.providerRequestMetadata,
+    config.requestShape,
+  );
+  if (shaped.instructions !== undefined) {
+    body.instructions = shaped.instructions;
+  }
   body.input = serializeResponsesInput(
-    lateSystemOption(messages, params.providerRequestMetadata),
+    shaped.inputMessages,
     params.model,
     config,
     stateless,
@@ -460,301 +543,353 @@ function readResponseToolCalls(payload: Record<string, unknown>) {
   });
 }
 
+async function* streamResponsesEvents(
+  config: ProviderConfig,
+  body: Record<string, unknown>,
+  params: { readonly model: string },
+): AsyncIterable<StreamEvent> {
+  const response = await postResponses(config, body);
+
+  if (!response.ok) {
+    const payload = await parseJson(response);
+    readResponseDiagnostics(payload, "responses", "openai-responses");
+    assertSuccess(response, payload, "openai-responses");
+  }
+
+  let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
+  let streamFinishReason = "stop";
+  let completed = false;
+  const reasoning = new ResponsesReasoningAccumulator();
+  const thinkSplitter = createThinkTagSplitter();
+  let thinkReasoning = "";
+  const replyParts = function* (parts: ReturnType<typeof thinkSplitter.push>) {
+    for (const part of parts) {
+      if (part.type === "reasoning") {
+        thinkReasoning += part.text;
+        yield {
+          type: "reasoning-delta" as const,
+          reasoningDelta: part.text,
+        };
+      } else {
+        yield { type: "text-delta" as const, textDelta: part.text };
+      }
+    }
+  };
+  const diagnostics = new ResponseDiagnostics("responses");
+  const outputItems = new Map<number, unknown>();
+  let completedOutput: unknown;
+  // Accumulate streaming function-call items keyed by the Responses item
+  // id. Insertion order (first `output_item.added`) drives emission order.
+  const toolCallAcc = new Map<
+    string,
+    { callId: string | null; name: string | null; arguments: string }
+  >();
+  function updateToolCallArgs(
+    itemId: string,
+    update: (entry: {
+      callId: string | null;
+      name: string | null;
+      arguments: string;
+    }) => boolean,
+    deltaOrFull: { argumentsDelta: string } | { arguments: string },
+  ): StreamEvent | undefined {
+    const existing = toolCallAcc.get(itemId) ?? {
+      callId: null,
+      name: null,
+      arguments: "",
+    };
+    const changed = update(existing);
+    toolCallAcc.set(itemId, existing);
+    if (!changed) return undefined;
+    return {
+      type: "tool-argument-delta",
+      index: [...toolCallAcc.keys()].indexOf(itemId),
+      ...(existing.callId ? { id: existing.callId } : {}),
+      ...(existing.name ? { name: existing.name } : {}),
+      ...deltaOrFull,
+    };
+  }
+
+  try {
+    for await (const payload of iterateSsePayloads(response)) {
+      diagnostics.push(payload);
+      // A failed response reports what it used as a completed one does.
+      const reported = payload.response as Record<string, unknown> | undefined;
+      if (reported?.usage) usage = readOpenAiResponsesUsage(reported);
+      if (payload.error || payload.type === "response.failed")
+        diagnostics.assertNotRefused("openai-responses", usage);
+      assertGenerationPayload(payload, "openai-responses", usage);
+      if (payload.type === "response.output_item.done")
+        outputItems.set(Number(payload.output_index ?? 0), payload.item);
+      const reasoningDelta = reasoning.push(payload);
+      if (reasoningDelta) yield { type: "reasoning-delta", reasoningDelta };
+      if (
+        payload.type === "response.output_text.delta" &&
+        typeof payload.delta === "string"
+      ) {
+        yield* replyParts(thinkSplitter.push(payload.delta as string));
+      }
+
+      const added = readResponsesStreamFunctionCallAdded(payload);
+      if (added) {
+        const existing = toolCallAcc.get(added.id);
+        toolCallAcc.set(added.id, {
+          callId: added.callId ?? existing?.callId ?? null,
+          name: added.name ?? existing?.name ?? null,
+          arguments: added.arguments || existing?.arguments || "",
+        });
+      }
+
+      const argsDelta = readResponsesStreamFunctionCallArgsDelta(payload);
+      if (argsDelta) {
+        const event = updateToolCallArgs(
+          argsDelta.itemId,
+          (entry) => {
+            entry.arguments += argsDelta.delta;
+            return Boolean(argsDelta.delta);
+          },
+          { argumentsDelta: argsDelta.delta },
+        );
+        if (event) yield event;
+      }
+
+      const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
+      if (argsDone) {
+        const event = updateToolCallArgs(
+          argsDone.itemId,
+          (entry) => {
+            const replaced = entry.arguments !== argsDone.arguments;
+            entry.arguments = argsDone.arguments;
+            if (argsDone.name) entry.name = argsDone.name;
+            return replaced;
+          },
+          { arguments: argsDone.arguments },
+        );
+        if (event) yield event;
+      }
+
+      const terminalStatus = terminalResponseStatus(payload.type);
+      if (terminalStatus) {
+        const responseObj = payload.response as
+          Record<string, unknown> | undefined;
+        usage = readOpenAiResponsesUsage(responseObj);
+        // Some endpoints end the stream with an empty `output` and send
+        // the items only as `output_item.done` events.
+        if (Array.isArray(responseObj?.output) && responseObj.output.length)
+          completedOutput = responseObj.output;
+        streamFinishReason = mapResponseStatus(
+          responseObj?.status ?? terminalStatus,
+        );
+        assertGenerationPayload(
+          { error: streamFinishReason === "error" },
+          "openai-responses",
+        );
+        completed = true;
+      }
+    }
+  } catch (error) {
+    diagnostics.assertNotRefused("openai-responses", usage);
+    throw withFailureUsage(error, usage);
+  }
+  diagnostics.assertNotRefused("openai-responses", usage);
+  assertStreamCompleted(completed, "openai-responses", usage);
+  yield* replyParts(thinkSplitter.flush());
+
+  // Emit accumulated tool calls before done. The Responses API references
+  // tool results by `call_id`, so that is the canonical id we surface;
+  // fall back to the item id if the provider omitted call_id.
+  for (const [itemId, tc] of toolCallAcc) {
+    if (!tc.name) continue;
+    yield {
+      type: "tool-call",
+      id: tc.callId ?? itemId,
+      name: tc.name,
+      arguments: tc.arguments || "{}",
+    };
+  }
+
+  yield {
+    type: "done",
+    ...(diagnostics.diagnostics()
+      ? { diagnostics: diagnostics.diagnostics() }
+      : {}),
+    finishReason: streamFinishReason,
+    usage,
+    reasoningContent: joinReasoning(reasoning.text(), thinkReasoning),
+    providerContinuation: captureContinuation(
+      "openai-responses-v1",
+      params.model,
+      config,
+      completedOutput ??
+        [...outputItems.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([, item]) => item),
+    ),
+  };
+}
+
+async function collectResponsesStream(
+  config: ProviderConfig,
+  body: Record<string, unknown>,
+  params: { readonly model: string },
+): Promise<TextGenerationResult> {
+  const textParts: string[] = [];
+  const toolCalls: NonNullable<TextGenerationResult["toolCalls"]> = [];
+  let done: Extract<StreamEvent, { type: "done" }> | undefined;
+  for await (const event of streamResponsesEvents(config, body, params)) {
+    if (event.type === "text-delta") textParts.push(event.textDelta);
+    else if (event.type === "tool-call") {
+      toolCalls.push({
+        id: event.id,
+        name: event.name,
+        arguments: event.arguments,
+      });
+    } else if (event.type === "done") {
+      done = event;
+    }
+  }
+  if (!done) {
+    throw new AiProviderError({
+      code: "PROVIDER_ERROR",
+      message: "Provider stream ended without a done event",
+      provider: "openai-responses",
+      retriable: true,
+    });
+  }
+  return {
+    ...(done.diagnostics ? { diagnostics: done.diagnostics } : {}),
+    text: textParts.join(""),
+    finishReason: done.finishReason,
+    usage: done.usage,
+    ...(done.reasoningContent !== undefined
+      ? { reasoningContent: done.reasoningContent }
+      : {}),
+    ...(done.providerContinuation !== undefined
+      ? { providerContinuation: done.providerContinuation }
+      : {}),
+    toolCalls,
+  };
+}
+
+function buildResponsesTextBody(
+  config: ProviderConfig,
+  rawParams: Parameters<ModelProviderAdapter["generateText"]>[1],
+  context: ModelRequestContext | undefined,
+  stream: boolean,
+): {
+  readonly params: Parameters<ModelProviderAdapter["generateText"]>[1];
+  readonly finalBody: Record<string, unknown>;
+} {
+  const params = withTextRequestDefaults(
+    rawParams,
+    context,
+    "openai-responses-v1",
+  );
+  const messages = applyCapabilityFallback(params.messages, context);
+  const body = responsesRequestBody(config, params, messages, context);
+  if (stream) body.stream = true;
+  if (params.responseFormat) {
+    body.text = { format: toResponsesJsonSchema(params.responseFormat) };
+  }
+  if (params.tools && params.tools.length > 0) {
+    body.tools = serializeResponsesTools(params.tools);
+    body.tool_choice = defaultToolChoice(
+      params.defaults,
+      body,
+      "responses",
+      reasoningControlsFor(context, "openai-responses-v1", params.model),
+    );
+  }
+  const finalBody = finalizeResponsesBody(body, config.requestShape);
+  if (stream) finalBody.stream = true;
+  return { params, finalBody };
+}
+
+async function executeResponsesRequest(
+  config: ProviderConfig,
+  finalBody: Record<string, unknown>,
+  params: { readonly model: string },
+): Promise<TextGenerationResult> {
+  if (finalBody.stream === true) {
+    return collectResponsesStream(config, finalBody, params);
+  }
+  const response = await postResponses(config, finalBody);
+  const payload = await parseJson(response);
+  // A failed answer may still be billed; the error keeps its usage.
+  const reportedUsage = readOpenAiResponsesUsage(payload);
+  const finishReason = mapResponseStatus(payload.status);
+  const diagnostics = readResponseDiagnostics(
+    payload,
+    "responses",
+    "openai-responses",
+    reportedUsage,
+  );
+  assertCompletedGeneration(
+    response,
+    payload,
+    "openai-responses",
+    finishReason,
+    reportedUsage,
+  );
+  const reply = splitThinkTags(readResponsesOutputText(payload));
+  return {
+    ...(diagnostics ? { diagnostics } : {}),
+    text: reply.text,
+    finishReason,
+    usage: reportedUsage,
+    reasoningContent: joinReasoning(
+      readResponsesReasoning(payload),
+      reply.reasoning,
+    ),
+    providerContinuation: captureContinuation(
+      "openai-responses-v1",
+      params.model,
+      config,
+      payload.output,
+    ),
+    toolCalls: readResponseToolCalls(payload),
+  };
+}
+
 export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
   const chatAdapter = createOpenAiChatAdapter();
 
   return {
     async generateText(config, params, context) {
-      params = withTextRequestDefaults(params, context, "openai-responses-v1");
-      const messages = applyCapabilityFallback(params.messages, context);
-      const body = responsesRequestBody(config, params, messages, context);
-      if (params.responseFormat)
-        body.text = { format: toResponsesJsonSchema(params.responseFormat) };
-      if (params.tools?.length) {
-        body.tools = serializeResponsesTools(params.tools);
-        body.tool_choice = defaultToolChoice(
-          params.defaults,
-          body,
-          "responses",
-          reasoningControlsFor(context, "openai-responses-v1", params.model),
-        );
-      }
-      const response = await postResponses(config, body);
-      const payload = await parseJson(response);
-      // A failed answer may still be billed; the error keeps its usage.
-      const reportedUsage = readOpenAiResponsesUsage(payload);
-      const diagnostics = readResponseDiagnostics(
-        payload,
-        "responses",
-        "openai-responses",
-        reportedUsage,
-      );
-      assertCompletedGeneration(
-        response,
-        payload,
-        "openai-responses",
-        mapResponseStatus(payload.status),
-        reportedUsage,
-      );
-
-      const reply = splitThinkTags(readResponsesOutputText(payload));
-      return {
-        ...(diagnostics ? { diagnostics } : {}),
-        text: reply.text,
-        finishReason: mapResponseStatus(payload.status),
-        usage: readOpenAiResponsesUsage(payload),
-        reasoningContent: joinReasoning(
-          readResponsesReasoning(payload),
-          reply.reasoning,
-        ),
-        providerContinuation: captureContinuation(
-          "openai-responses-v1",
-          params.model,
-          config,
-          payload.output,
-        ),
-        toolCalls: readResponseToolCalls(payload),
-      };
+      const built = buildResponsesTextBody(config, params, context, false);
+      return executeResponsesRequest(config, built.finalBody, built.params);
     },
 
     async generateObject(config, params, context) {
       const messages = applyCapabilityFallback(params.messages, context);
-      const response = await postResponses(config, {
-        ...responsesRequestBody(config, params, messages, context),
-        text: {
-          format: toResponsesJsonSchema(
-            objectResponseFormat(params.schema, "openai-responses"),
-          ),
+      const finalBody = finalizeResponsesBody(
+        {
+          ...responsesRequestBody(config, params, messages, context),
+          text: {
+            format: toResponsesJsonSchema(
+              objectResponseFormat(params.schema, "openai-responses"),
+            ),
+          },
         },
-      });
-      const payload = await parseJson(response);
-      // A failed answer may still be billed; the error keeps its usage.
-      const reportedUsage = readOpenAiResponsesUsage(payload);
-      const diagnostics = readResponseDiagnostics(
-        payload,
-        "responses",
-        "openai-responses",
-        reportedUsage,
+        config.requestShape,
       );
-      assertCompletedGeneration(
-        response,
-        payload,
-        "openai-responses",
-        mapResponseStatus(payload.status),
-        reportedUsage,
-      );
-
-      const reply = splitThinkTags(readResponsesOutputText(payload));
+      const {
+        text,
+        toolCalls: _toolCalls,
+        ...result
+      } = await executeResponsesRequest(config, finalBody, params);
       const object = parseStructuredObject(
-        reply.text,
+        text,
         params.schema,
         "openai-responses",
-        reportedUsage,
+        result.usage,
       );
-
-      return {
-        ...(diagnostics ? { diagnostics } : {}),
-        object,
-        finishReason: mapResponseStatus(payload.status),
-        usage: readOpenAiResponsesUsage(payload),
-        reasoningContent: joinReasoning(
-          readResponsesReasoning(payload),
-          reply.reasoning,
-        ),
-        providerContinuation: captureContinuation(
-          "openai-responses-v1",
-          params.model,
-          config,
-          payload.output,
-        ),
-      };
+      return { ...result, object };
     },
 
     async *streamText(config, params, context) {
-      params = withTextRequestDefaults(params, context, "openai-responses-v1");
-      const messages = applyCapabilityFallback(params.messages, context);
-      const body = responsesRequestBody(config, params, messages, context);
-      body.stream = true;
-      if (params.responseFormat)
-        body.text = { format: toResponsesJsonSchema(params.responseFormat) };
-      if (params.tools && params.tools.length > 0) {
-        body.tools = serializeResponsesTools(params.tools);
-        body.tool_choice = defaultToolChoice(
-          params.defaults,
-          body,
-          "responses",
-          reasoningControlsFor(context, "openai-responses-v1", params.model),
-        );
-      }
-      const response = await postResponses(config, body);
-
-      if (!response.ok) {
-        const payload = await parseJson(response);
-        readResponseDiagnostics(payload, "responses", "openai-responses");
-        assertSuccess(response, payload, "openai-responses");
-      }
-
-      let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
-      let streamFinishReason = "stop";
-      let completed = false;
-      const reasoning = new ResponsesReasoningAccumulator();
-      const thinkSplitter = createThinkTagSplitter();
-      let thinkReasoning = "";
-      const replyParts = function* (
-        parts: ReturnType<typeof thinkSplitter.push>,
-      ) {
-        for (const part of parts) {
-          if (part.type === "reasoning") {
-            thinkReasoning += part.text;
-            yield {
-              type: "reasoning-delta" as const,
-              reasoningDelta: part.text,
-            };
-          } else {
-            yield { type: "text-delta" as const, textDelta: part.text };
-          }
-        }
-      };
-      const diagnostics = new ResponseDiagnostics("responses");
-      const outputItems = new Map<number, unknown>();
-      let completedOutput: unknown;
-      // Accumulate streaming function-call items keyed by the Responses item
-      // id. Insertion order (first `output_item.added`) drives emission order.
-      const toolCallAcc = new Map<
-        string,
-        { callId: string | null; name: string | null; arguments: string }
-      >();
-
-      try {
-        for await (const payload of iterateSsePayloads(response)) {
-          diagnostics.push(payload);
-          // A failed response reports what it used as a completed one does.
-          const reported = payload.response as
-            Record<string, unknown> | undefined;
-          if (reported?.usage) usage = readOpenAiResponsesUsage(reported);
-          if (payload.error || payload.type === "response.failed")
-            diagnostics.assertNotRefused("openai-responses", usage);
-          assertGenerationPayload(payload, "openai-responses", usage);
-          if (payload.type === "response.output_item.done")
-            outputItems.set(Number(payload.output_index ?? 0), payload.item);
-          const reasoningDelta = reasoning.push(payload);
-          if (reasoningDelta) yield { type: "reasoning-delta", reasoningDelta };
-          if (
-            payload.type === "response.output_text.delta" &&
-            typeof payload.delta === "string"
-          ) {
-            yield* replyParts(thinkSplitter.push(payload.delta as string));
-          }
-
-          const added = readResponsesStreamFunctionCallAdded(payload);
-          if (added) {
-            const existing = toolCallAcc.get(added.id);
-            toolCallAcc.set(added.id, {
-              callId: added.callId ?? existing?.callId ?? null,
-              name: added.name ?? existing?.name ?? null,
-              arguments: added.arguments || existing?.arguments || "",
-            });
-          }
-
-          const argsDelta = readResponsesStreamFunctionCallArgsDelta(payload);
-          if (argsDelta) {
-            const existing = toolCallAcc.get(argsDelta.itemId) ?? {
-              callId: null,
-              name: null,
-              arguments: "",
-            };
-            existing.arguments += argsDelta.delta;
-            toolCallAcc.set(argsDelta.itemId, existing);
-            if (argsDelta.delta)
-              yield {
-                type: "tool-argument-delta",
-                index: [...toolCallAcc.keys()].indexOf(argsDelta.itemId),
-                ...(existing.callId ? { id: existing.callId } : {}),
-                ...(existing.name ? { name: existing.name } : {}),
-                argumentsDelta: argsDelta.delta,
-              };
-          }
-
-          const argsDone = readResponsesStreamFunctionCallArgsDone(payload);
-          if (argsDone) {
-            const existing = toolCallAcc.get(argsDone.itemId) ?? {
-              callId: null,
-              name: null,
-              arguments: "",
-            };
-            // The `done` event carries the authoritative full argument string.
-            const replaced = existing.arguments !== argsDone.arguments;
-            existing.arguments = argsDone.arguments;
-            if (argsDone.name) existing.name = argsDone.name;
-            toolCallAcc.set(argsDone.itemId, existing);
-            if (replaced)
-              yield {
-                type: "tool-argument-delta",
-                index: [...toolCallAcc.keys()].indexOf(argsDone.itemId),
-                ...(existing.callId ? { id: existing.callId } : {}),
-                ...(existing.name ? { name: existing.name } : {}),
-                arguments: argsDone.arguments,
-              };
-          }
-
-          const terminalStatus = terminalResponseStatus(payload.type);
-          if (terminalStatus) {
-            const responseObj = payload.response as
-              Record<string, unknown> | undefined;
-            usage = readOpenAiResponsesUsage(responseObj);
-            // Some endpoints end the stream with an empty `output` and send
-            // the items only as `output_item.done` events.
-            if (Array.isArray(responseObj?.output) && responseObj.output.length)
-              completedOutput = responseObj.output;
-            streamFinishReason = mapResponseStatus(
-              responseObj?.status ?? terminalStatus,
-            );
-            assertGenerationPayload(
-              { error: streamFinishReason === "error" },
-              "openai-responses",
-            );
-            completed = true;
-          }
-        }
-      } catch (error) {
-        diagnostics.assertNotRefused("openai-responses", usage);
-        throw withFailureUsage(error, usage);
-      }
-      diagnostics.assertNotRefused("openai-responses", usage);
-      assertStreamCompleted(completed, "openai-responses", usage);
-      yield* replyParts(thinkSplitter.flush());
-
-      // Emit accumulated tool calls before done. The Responses API references
-      // tool results by `call_id`, so that is the canonical id we surface;
-      // fall back to the item id if the provider omitted call_id.
-      for (const [itemId, tc] of toolCallAcc) {
-        if (!tc.name) continue;
-        yield {
-          type: "tool-call",
-          id: tc.callId ?? itemId,
-          name: tc.name,
-          arguments: tc.arguments || "{}",
-        };
-      }
-
-      yield {
-        type: "done",
-        ...(diagnostics.diagnostics()
-          ? { diagnostics: diagnostics.diagnostics() }
-          : {}),
-        finishReason: streamFinishReason,
-        usage,
-        reasoningContent: joinReasoning(reasoning.text(), thinkReasoning),
-        providerContinuation: captureContinuation(
-          "openai-responses-v1",
-          params.model,
-          config,
-          completedOutput ??
-            [...outputItems.entries()]
-              .sort(([a], [b]) => a - b)
-              .map(([, item]) => item),
-        ),
-      };
+      const built = buildResponsesTextBody(config, params, context, true);
+      yield* streamResponsesEvents(config, built.finalBody, built.params);
     },
 
     // Delegate non-text operations to the chat adapter

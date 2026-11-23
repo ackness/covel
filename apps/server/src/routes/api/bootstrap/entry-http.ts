@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
+import {
+  fetchWithAuthProxyRetry,
+  fetchWithRetry,
+  validateBaseUrlForPlugin,
+} from "@covel/ai-provider";
 import { enforceHttpPermissions, type PluginAPI } from "@covel/runtime";
 import type { HttpPermissionDecl } from "@covel/shared";
 
@@ -46,6 +50,7 @@ export function withWireEndpoint<T>(
 export function createEntryHttp(
   pluginId: string,
   httpPermissions: readonly HttpPermissionDecl[],
+  options?: { readonly canUseAuthProxy?: () => boolean },
 ): PluginHttp {
   const raw: PluginHttp = {
     fetchWithRetry,
@@ -55,9 +60,28 @@ export function createEntryHttp(
     httpPermissions,
     runtimeId: pluginId,
   });
+  const proxyChecked = enforceHttpPermissions(
+    {
+      validateBaseUrl: raw.validateBaseUrl,
+      fetchWithRetry: fetchWithAuthProxyRetry,
+    },
+    {
+      httpPermissions,
+      runtimeId: pluginId,
+    },
+  );
   return {
     validateBaseUrl: raw.validateBaseUrl,
     fetchWithRetry(input, init) {
+      if (init?.proxy === "instance-auth") {
+        if (!options?.canUseAuthProxy?.()) {
+          throw new Error(
+            `Capability "net.authProxy" is not allowed for plugin "${pluginId}"`,
+          );
+        }
+        const { proxy: _proxy, ...rest } = init;
+        return proxyChecked.fetchWithRetry(input, rest);
+      }
       const endpoint = wireEndpoints.getStore();
       if (
         endpoint?.pluginId === pluginId &&

@@ -378,6 +378,11 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
       "value": [],
       "source": "default",
       "settable": true
+    },
+    "permissions.policy": {
+      "value": {},
+      "source": "default",
+      "settable": true
     }
   }
 }
@@ -391,7 +396,7 @@ CORS 只能阻止网页读取响应，所以另有一道写入来源检查：
 
 `source` 是 `env` 时，`value` 可能是设置界面不提供给玩家的值。例如 `COVEL_TRACE_RETENTION_DAYS=14` 对应 `"14"`。
 
-`trust.sources` 保存规范化的 GitHub `owner` 或 `owner/repo` 数组，默认 `[]`；`COVEL_TRUSTED_SOURCES` 覆盖它。仅 personal 形态可写，host profile 的 `server.settings` 决定权限；browser-private 和托管形态由运营者通过环境变量设置。语法与自动授权条件见[可信来源](./plugin-installation.md#可信来源)。
+`trust.sources` 保存规范化的 GitHub `owner` 或 `owner/repo` 数组，默认 `[]`；`COVEL_TRUSTED_SOURCES` 覆盖它。`permissions.policy` 保存 L2 实例级能力策略覆盖对象（映射 `CapabilityKey` 到 `"allow"` / `"ask"` / `"deny"`，高风险能力禁止设为 `"allow"`），默认 `{}`，由 `COVEL_PERMISSIONS_POLICY` 覆盖。两者均仅 personal 形态可写，host profile 的 `server.settings` 决定权限；browser-private 和托管形态由运营者通过环境变量设置。语法与规则分别见[可信来源](./plugin-installation.md#可信来源)与[实例策略与持久化授权](../internals/security.md#实例策略与持久化授权)。
 
 **`PUT /api/config/server-settings`**
 
@@ -1092,14 +1097,31 @@ setup runtime 挂起等玩家回答时，这次尝试不占重试次数。挂起
 
 ### 玩家交互
 
-| 方法   | 路径                                  | 描述                                                         |
-| ------ | ------------------------------------- | ------------------------------------------------------------ |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一的插件 RPC 通道（action / runtime / command / event 级） |
-| GET    | `/api/sessions/:id/approvals`         | 列出该会话待批准的 RPC 请求                                  |
-| DELETE | `/api/sessions/:id/approvals`         | 撤销该会话已缓存的授权，返回 `{ ok, cleared }`               |
-| POST   | `/api/approvals/:approvalId/decision` | 提交玩家的审批决定（allow / deny + once / session）          |
+| 方法   | 路径                                  | 描述                                                          |
+| ------ | ------------------------------------- | ------------------------------------------------------------- |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一的插件 RPC 通道（action / runtime / command / event 级）  |
+| GET    | `/api/sessions/:id/approvals`         | 列出该会话待批准的 RPC 请求与活动会话授权 `{ items, grants }` |
+| DELETE | `/api/sessions/:id/approvals`         | 撤销该会话已缓存的授权，返回 `{ ok, cleared }`                |
+| POST   | `/api/approvals/:approvalId/decision` | 提交玩家的审批决定（allow / deny + once / session）           |
 
 `DELETE /api/sessions/:id/approvals` 可以用 `?pluginId=` 只撤销一个插件的授权。撤销后，下次调用会重新弹出审批。
+
+### 权限与策略
+
+<!-- prettier-ignore -->
+| 方法 | 路径 | 描述 |
+| --- | --- | --- |
+| GET | `/api/permissions/snapshot` | 返回当前部署形态、L1 天花板、L2 实例策略与能力目录 |
+| PUT | `/api/permissions/policy` | 更新 L2 实例策略（仅 personal 且未被环境变量固定时可用） |
+| GET | `/api/permissions/plugins` | 列出所有插件的完整性、能力声明与 L3 持久化授权状态 |
+| PUT | `/api/permissions/plugins/:pluginId/grants` | 为社区插件写入或更新 L3 持久化能力决策（`decisions`） |
+| DELETE | `/api/permissions/plugins/:pluginId/grants` | 删除社区插件的 L3 持久化授权并撤销关联会话授权 |
+| POST | `/api/plugins/:pluginId/actions/:action` | 调用实例级插件声明的 `appActions`（`host.config`） |
+| GET | `/api/plugins/:pluginId/instance-data/:namespace` | 读取实例作用域插件的非秘密命名空间条目（禁止 `_` 前缀，`host.config`） |
+| POST | `/api/plugins/:pluginId/flows/:flowId/start` | 启动声明的 Config Flow 向导会话（`host.config`） |
+| GET | `/api/plugins/:pluginId/flows/:flowId/runs/:runId` | 轮询 Config Flow 运行状态快照（用于 OAuth 回调或设备码等） |
+| POST | `/api/plugins/:pluginId/flows/:flowId/runs/:runId/step` | 提交 Config Flow 当前步骤表单或确认动作并推进下一步 |
+| DELETE | `/api/plugins/:pluginId/flows/:flowId/runs/:runId` | 取消并清理进行中的 Config Flow 会话及临时回调监听器 |
 
 ### 会话插件管理
 
@@ -1522,7 +1544,7 @@ fork 和社区插件的授权：
 - `pricingKind=reference` 表示这是通过聚合服务商匹配到的上游模型参考价，实际账单可能不同。
 - `reasoning` 返回按上游模型家族识别出的思考强度档位、默认值和家族名称，供生成参数界面使用。
 
-可选的 `credentials=1` 同时查询自定义连接能否使用服务端现有凭据。`X-Slot-Config.customPresets` 必须恰有一个连接，其 `provider`、`model`、`protocol` 与查询参数一致；不合法时返回 `400 invalid_llm_configuration`。响应增加 `serverCredentialsAvailable: boolean`；没有该参数则省略此字段。判断包含可信来源上的 API key、认证 headers 和无需密钥的回环地址，不调用模型或验证服务商认证，也不返回地址或凭据。
+可选的 `credentials=1` 同时查询自定义连接能否使用服务端现有凭据。`X-Slot-Config.customPresets` 必须恰有一个连接，其 `provider`、`model`、`protocol` 与查询参数一致；不合法时返回 `400 invalid_llm_configuration`。响应增加 `serverCredentialsAvailable: boolean`（绑定有效 `provider.source@1` 时同样据此判定）；没有该参数则省略此字段。判断包含可信来源上的 API key、认证 headers、有效插件 `providerSources` 与无需密钥的回环地址，不调用模型或验证服务商认证，也不返回地址或凭据。
 
 `POST /api/model-db/refresh`：
 
@@ -1580,6 +1602,8 @@ fork 和社区插件的授权：
 | GET | `/api/llm-config` | 返回 slot 配置与能力信息 |
 | POST | `/api/llm-config/reload` | 重读 `llm.toml` 并应用，无需重启 |
 | GET | `/api/provider-keys` | 返回哪些 provider 配置了密钥，不含密钥内容 |
+| GET | `/api/provider-sources` | 列出已加载插件的 `provider.source@1` 摘要状态与关联账号（`host.config`） |
+| GET | `/api/provider-sources/:pluginId/:sourceId/usage` | 查询插件供应商源额度或用量摘要（可选 `?account=`，`host.config`） |
 | GET | `/api/config/info` | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等） |
 | GET | `/api/config/server-settings` | 所有层级：返回服务端设置的生效值、来源和能否设置 |
 | PUT | `/api/config/server-settings` | 仅 `self` 层级：保存服务端设置 |
@@ -1603,7 +1627,7 @@ fork 和社区插件的授权：
   - 独立插件请求与选中包的请求构成 `defaultPluginIds`。提交的 ID 都已安装；`missing-plugin` 诊断带 `pluginId`、`path` 和可选 `packId`。其他诊断码为 `invalid-reference`、`redundant-reference`、`unknown-pack`，可带 `reference`。
   - 初始包使用公开世界名称、简介与标签，`pluginPitch` 逐字段覆盖；派生介绍不保存，见[插件选择](./world-data.md#插件选择pluginpolicy)。
 - `GET /api/ui-specs`：带 `sessionId` 时只返回该会话已激活的插件；不带则返回全部插件。详见[下文](#get-apiui-specs)。
-- `GET /api/llm-config`：`llm.toml` 解析失败时回退到默认配置，并附带 `error` 字段。
+- `GET /api/llm-config`：`llm.toml` 解析失败时回退到默认配置，并附带 `error` 字段。当 `X-Slot-Config.customPresets` 中的条目或预设通过 `source`（`<pluginId>/<sourceId>`）和可选 `account` 绑定插件供应商源时，`GET /api/llm-config` 与 `GET /api/presets` 会附带 `source`、`account` 及就绪标识 `credentialSource`（如适用），不泄露私钥或未公开的插件内部端点。
 - `POST /api/llm-config/reload`：原地应用到运行中的 gateway，返回 `{ ok, slots, error? }`。
 - `GET /api/provider-keys`：
   - 只返回 `{ providers: { [provider]: { configured: true } } }`。
@@ -1798,6 +1822,7 @@ fork 和社区插件的授权：
 | `operatorTokenRequired`                   | 管理请求是否校验运维 token。除 personal 形态外都是 `true`：browser-private 形态和 `demo` / `commercial`。                                                                                                                          |
 | `deployment.form`                         | 宿主配置的形态：`personal` / `browser-private` / `hosted`。规则见[安全边界](../internals/security.md#host-profile)。                                                                                                               |
 | `deployment.modelRelay`                   | 服务端是否经玩家浏览器访问玩家电脑或局域网上的模型（[本地模型中继](#本地模型中继-1)）。personal 形态是 `false`，共享形态是 `true`。                                                                                                |
+| `deployment.capabilities`                 | 宿主启动时解析的 L1 能力天花板映射（键名来自 `@covel/shared/permissions` 中的 `CAPABILITY_KEYS`），值为 `enabled` / `operator-only` / `disabled`。规则见[安全边界](../internals/security.md#能力天花板l1)。                        |
 | `deployment.source`                       | 这个构建来自哪份源代码，只在运营者配置了时出现。`repository` 是 `COVEL_SOURCE_REPOSITORY` 的 `https` 地址；`commit` 是 `COVEL_SOURCE_COMMIT`，没设置时取 Render 的 `RENDER_GIT_COMMIT`，必须是 7–40 位十六进制。不合格的值不返回。 |
 | `storage.data.backend`                    | 服务端当前的数据存储后端：`memory` / `sqlite` / `pg`，默认 `sqlite`。                                                                                                                                                              |
 | `storage.data.frontendMode`               | 前端数据模式。`local`：数据存在浏览器的 BrowserVault 里。`remote`：数据经服务端 API 存在服务端。                                                                                                                                   |
@@ -3704,7 +3729,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 #### `GET /api/sessions/:id/approvals`
 
-列出这个会话当前所有等待批准的请求。前端在页面刷新后用它重建对话框队列。
+列出这个会话当前所有等待批准的请求，以及当前授权代次下已生效的会话级缓存授权。前端在页面刷新后用它重建对话框队列与会话授权视图。
 
 **响应 200:**
 
@@ -3712,6 +3737,9 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 {
   "items": [
     { "approvalId": "9d8c-...", "pluginId": "...", "action": "...", ... }
+  ],
+  "grants": [
+    { "pluginId": "third-party-plugin", "action": "covel:plugin-server-code" }
   ]
 }
 ```
@@ -3809,6 +3837,96 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 > - 持久化的只有会话和插件的撤销代次。它保证旧授权在其他实例上只会失效，不会误授权给删除后同 ID 重建的会话。
 >
 > 负载均衡下想避免重复弹窗，需要另外实现共享的持久化审批存储。
+
+### 权限治理
+
+在 L4 会话审批之前，所有受能力门控保护的请求会先检查 L1 宿主能力天花板、L2 实例策略与 L3 持久化插件授权；任一层拒绝时直接返回 `403`，错误码分别为 `capability_disabled`、`capability_denied_by_policy` 与 `capability_denied_by_grant`。模型说明见 [实例策略与持久化授权](../internals/security.md#实例策略与持久化授权)。
+
+#### `GET /api/permissions/snapshot`
+
+公开读取当前部署形态的 L1 能力天花板、生效中的 L2 实例策略及其来源，以及完整的 `CapabilityKey` 目录定义。
+
+```json
+{
+  "deploymentForm": "personal",
+  "capabilities": {
+    "plugin.communityCode": "enabled"
+  },
+  "policy": {
+    "overrides": { "compute.sandboxWorker": "deny" },
+    "effective": {
+      "plugin.communityCode": {
+        "ceiling": "enabled",
+        "policy": "ask",
+        "effective": "ask"
+      }
+    },
+    "source": "setting",
+    "settable": true
+  },
+  "catalog": {
+    "plugin.communityCode": {
+      "key": "plugin.communityCode",
+      "risk": "high",
+      "defaultPolicy": "ask",
+      "allowAutoPolicy": false
+    }
+  }
+}
+```
+
+#### `PUT /api/permissions/policy`
+
+更新或重置 L2 实例级能力策略覆盖（需要 `server.settings` 权限；仅 personal 形态可写）。请求体为 `{ "policy": Record<CapabilityKey, "allow" | "ask" | "deny"> | null }`，`null` 表示清除已保存的覆盖恢复默认策略；返回更新后的完整 snapshot。
+
+| 状态码 | `code`                          | 触发条件                                                       |
+| ------ | ------------------------------- | -------------------------------------------------------------- |
+| 400    | `invalid_server_setting_value`  | 存在未知能力名，或把禁止自动放行的能力设为 `"allow"`           |
+| 403    | `server_settings_operator_only` | 非 personal 形态（如 browser-private / `demo` / `commercial`） |
+| 409    | `server_setting_fixed`          | 启动时已通过环境变量 `COVEL_PERMISSIONS_POLICY` 固定策略       |
+
+#### `GET /api/permissions/plugins`
+
+列出服务端已加载插件的安全与权限摘要（需要 `server.diagnostics` 权限），返回 `{ "items": [...] }`。社区插件会附带当前计算出的内容摘要、包完整性状态（`verified` / `modified` / `no-receipt` / `unreadable`）、是否命中 `trust.sources`、声明能力结构，以及 `plugin_grants` 记录和授权状态（`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`）。
+
+#### `PUT /api/permissions/plugins/:pluginId/grants`
+
+为社区插件写入或更新持久化能力授权（需要 `host.config`；若授权把 `plugin.communityCode` 设为 `"allow"`，同时需要 `plugin.community` 动作权限）。
+
+```json
+{
+  "decisions": {
+    "plugin.communityCode": "allow",
+    "net.httpDeclared": "deny"
+  },
+  "expectedDigest": "sha256-..."
+}
+```
+
+写入后会把决策与该插件当前的内容摘要及声明能力快照一并存入 `plugin_grants`，返回 `{ "ok": true, "plugin": { ... } }`。若新增 `"deny"` 或移除原有 `"allow"`，服务端会同时清除 `RpcApprovalGate` 中该插件的活动会话缓存授权。
+
+| 状态码 | `code`                      | 触发条件                                                 |
+| ------ | --------------------------- | -------------------------------------------------------- |
+| 400    | `invalid_plugin_id`         | 路径中的插件 ID 格式不合法                               |
+| 403    | `capability_disabled`       | 对 L1 天花板已设为 `disabled` 的能力写入 `"allow"`       |
+| 404    | `plugin_not_found`          | 插件不在当前注册表中                                     |
+| 409    | `builtin_plugin_immutable`  | 不允许为 `builtin` 插件写入持久化授权                    |
+| 409    | `plugin_package_unverified` | 社区包缺少可绑定的摘要或能力声明                         |
+| 409    | `plugin_digest_mismatch`    | 请求携带的 `expectedDigest` 与服务端当前包内容摘要不一致 |
+
+#### `DELETE /api/permissions/plugins/:pluginId/grants`
+
+删除指定插件在 `plugin_grants` 中的持久化授权记录（需要 `host.config`），并撤销 `RpcApprovalGate` 中该插件的活动会话授权缓存，返回 `{ "ok": true, "pluginId": "...", "revokedSessionGrants": 1 }`（插件 ID 格式非法时返回 `400 invalid_plugin_id`）。
+
+### 实例插件动作、配置流与供应商源
+
+仅实例作用域（`scope: instance` 或 `scope: both`）且通过 L1–L3 权限门控的插件可以使用下列宿主端点（统一要求 `host.config` 权限）：
+
+- `POST /api/plugins/:pluginId/actions/:action`：调用清单 `contributes.appActions` 声明且入口注册的实例动作，返回 `{ ok: true, result }`；成功后会自动刷新该插件挂载的 `providerSources` 状态。
+- `GET /api/plugins/:pluginId/instance-data/:namespace`：读取插件经 `covel.instanceData` 保存的非秘密 KV 条目（禁止 `_` 开头命名空间，返回 `400 invalid_namespace`），响应头含 `Cache-Control: no-store`，主体 `{ ok: true, entries: [{ key, value, updatedAt }] }`。
+- `POST /api/plugins/:pluginId/flows/:flowId/start` / `GET …/runs/:runId` / `POST …/runs/:runId/step` / `DELETE …/runs/:runId`：启动、轮询、推进或取消 `contributes.flows` 声明的 Config Flow 多步骤向导，向导完结时自动刷新对应 `providerSources` 状态并可驱动浏览器设置面板重取摘要。
+- `GET /api/provider-sources`：返回 `{ sources }`，每项为各 `provider.source@1` 的状态、允许协议/模式、关联认证流、只读端点与账号摘要（不含秘密令牌）；`browser-private` / 托管形态禁用 `plugin.providerSource`。
+- `GET /api/provider-sources/:pluginId/:sourceId/usage?account=...`：按插件源和可选 `account` 查询用量或额度，返回 `{ usage }`；L1 天花板禁用时返回 `403 capability_denied`。
 
 ### 插件管理
 
@@ -4053,7 +4171,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 列出这个会话能看到的插件，以及会话当前可执行的命令。
 
-- `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `serverCodeApprovedBy: "session" | "trusted-source"`、`approvalRequired`、`autoAdded`、`rejection`。`serverCodeApprovedBy` 区分显式会话批准与当前来源策略的隐式批准。
+- `items[]`：每项在 `PluginSummary` 的基础上增加 `active`、`locked`、`sessionState`、`serverCodeApproved`，以及可选的 `serverCodeApprovedBy: "session" | "trusted-source" | "persistent-grant"`、`approvalRequired`、`autoAdded`、`rejection`。`serverCodeApprovedBy` 区分显式会话批准、可信来源隐式授权与当前有效的 L3 持久化插件授权。
 - `items[].paused?: { reason }`：只在本会话因故障暂停时出现；`active` 仍表示已选择的插件。重新启用见下方端点。
 - `items[].runtimes` 与 `GET /api/plugins` 的形状完全相同。
 - `commands[]`：唯一的可执行命令目录。它按当前启用的插件过滤，再加上框架命令。命令只在顶层列一次，不按插件重复返回。
@@ -5520,8 +5638,10 @@ interface SseEnvelope {
 | `provider` | string | 是   | 服务商 ID                                      |
 | `baseUrl`  | string | 否   | 端点地址。省略时用内置服务商或已注册服务商的值 |
 | `protocol` | string | 否   | 协议。省略时同上                               |
+| `source`   | string | 否   | 可选插件供应商源 ID（`<pluginId>/<sourceId>`） |
+| `account`  | string | 否   | 可选账号 ID，与 `source` 配合选择特定账号凭据  |
 
-- 密钥取自 `X-Provider-Keys` 请求头。
+- 密钥取自 `X-Provider-Keys` 请求头；提供 `source` 时从对应 `provider.source@1` 插件在服务端解析短期凭据与授权端点，客户端不提交私钥（同样支持绑定了 `source` 的 `X-Slot-Config.customPresets` 在 `POST /api/ai/ping` 中测试连通性）。
 - 目标按这一次请求处理。服务端环境里的密钥只发往该服务商的可信同源地址。
 - 未知字段、未知协议返回 `400`。
 

@@ -218,6 +218,7 @@ async function deleteWorld(
       } else {
         await removeRecord();
       }
+      void c.get("appEvents")?.emit("WorldRemoved", { worldId: id });
       return c.json(okBody());
     });
     completed = result.ok;

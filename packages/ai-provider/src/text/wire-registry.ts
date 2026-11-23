@@ -87,6 +87,9 @@ export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),
+        ...(result.providerContinuation
+          ? { providerContinuation: result.providerContinuation }
+          : {}),
         finishReason: result.finishReason,
         usage: result.usage,
       };

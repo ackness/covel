@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { DATA_OP_KINDS } from "@covel/plugin-handlers-utils";
+import {
+  APP_EVENT_NAMES,
+  loopbackCallbackPermissionSchema,
+} from "../platform/index.js";
 
 export const trustedSourceEntrySchema = z
   .string()
@@ -50,6 +54,16 @@ function uniqueRecords<T>(values: T[]): T[] {
 }
 export const pluginCapabilitiesSchema = z.strictObject({
   serverCode: z.boolean(),
+  instanceScope: z.boolean().optional(),
+  secrets: z.boolean().optional(),
+  authProxy: z.boolean().optional(),
+  scheduler: z.boolean().optional(),
+  sandboxWorker: z.boolean().optional(),
+  loopbackCallback: loopbackCallbackPermissionSchema.optional(),
+  appEvents: z.array(z.enum(APP_EVENT_NAMES)).transform(sorted).optional(),
+  appActions: names.optional(),
+  flows: names.optional(),
+  providerSources: names.optional(),
   http: z
     .array(
       z.strictObject({
@@ -100,12 +114,36 @@ export type PluginSourceTrust = z.infer<typeof pluginSourceTrustSchema>;
 export type PackageIntegrity = PluginSourceTrust["integrity"];
 const subset = (current: readonly string[], snapshot: readonly string[]) =>
   current.every((item) => snapshot.includes(item));
+function loopbackWithin(
+  current: PluginCapabilities["loopbackCallback"],
+  snapshot: PluginCapabilities["loopbackCallback"],
+): boolean {
+  if (!current) return true;
+  if (!snapshot || current.path !== snapshot.path) return false;
+  const currentPorts = current.ports ?? "ephemeral";
+  const snapshotPorts = snapshot.ports ?? "ephemeral";
+  if (currentPorts === "ephemeral") return snapshotPorts === "ephemeral";
+  return (
+    Array.isArray(snapshotPorts) &&
+    currentPorts.every((port) => snapshotPorts.includes(port))
+  );
+}
 export function capabilitiesWithin(
   current: PluginCapabilities,
   snapshot: PluginCapabilities,
 ): boolean {
   return (
     (!current.serverCode || snapshot.serverCode) &&
+    (!current.instanceScope || Boolean(snapshot.instanceScope)) &&
+    (!current.secrets || Boolean(snapshot.secrets)) &&
+    (!current.authProxy || Boolean(snapshot.authProxy)) &&
+    (!current.scheduler || Boolean(snapshot.scheduler)) &&
+    (!current.sandboxWorker || Boolean(snapshot.sandboxWorker)) &&
+    loopbackWithin(current.loopbackCallback, snapshot.loopbackCallback) &&
+    subset(current.appEvents ?? [], snapshot.appEvents ?? []) &&
+    subset(current.appActions ?? [], snapshot.appActions ?? []) &&
+    subset(current.flows ?? [], snapshot.flows ?? []) &&
+    subset(current.providerSources ?? [], snapshot.providerSources ?? []) &&
     (
       ["tools", "actions", "services", "wires", "extensions", "forms"] as const
     ).every((key) => subset(current[key], snapshot[key])) &&

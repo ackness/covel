@@ -9,6 +9,10 @@ import {
 } from "@covel/shared";
 import { AiProviderError, ModelConfigurationError } from "./errors.js";
 import { projectCapabilityForBuiltinAdapter } from "./capability/adapter-support.js";
+import {
+  hasSameOrigin,
+  type ProviderSourceResolver,
+} from "./provider-source.js";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderRelay } from "./adapters/http/model-relay.js";
 import type { ProviderResolution } from "./provider-registry.js";
@@ -72,6 +76,17 @@ export interface GatewaySlotResolutionDependencies {
     removePreset?(id: string): void;
   };
   slotRegistry?: SlotRegistry;
+  providerSources?: ProviderSourceResolver;
+  getProviderSources?: () => ProviderSourceResolver | undefined;
+}
+
+export function activeProviderSources(
+  deps: Pick<
+    GatewaySlotResolutionDependencies,
+    "providerSources" | "getProviderSources"
+  >,
+): ProviderSourceResolver | undefined {
+  return deps.getProviderSources?.() ?? deps.providerSources;
 }
 
 /** Resolve explicit embedding selections after applying request capability facts. */
@@ -546,7 +561,14 @@ export function createGatewaySlotResolution(
             tag === "image" ? "image" : tag === "embedding" ? "embed" : "text",
         },
       );
-      if (options?.apiKeys || options?.envApiKeys) {
+      const sourceRef = target.preset?.source;
+      const sourceStatus = sourceRef
+        ? activeProviderSources(deps)?.inspectSync(
+            sourceRef,
+            target.preset?.account,
+          )
+        : undefined;
+      if (!sourceRef && (options?.apiKeys || options?.envApiKeys)) {
         resolved = deps.providerRegistry.withApiKeys(
           resolved,
           options.apiKeys ?? {},
@@ -557,10 +579,42 @@ export function createGatewaySlotResolution(
 
       const provider = targetProvider(target);
       const model = targetModel(target);
-      const protocol = target.preset?.protocol ?? resolved.protocol;
-      const baseUrl = resolved.config.baseUrl ?? target.preset?.baseUrl;
+      const protocol =
+        sourceStatus?.protocol ?? target.preset?.protocol ?? resolved.protocol;
+      const baseUrl =
+        sourceStatus?.baseUrl ??
+        resolved.config.baseUrl ??
+        target.preset?.baseUrl;
       const presetTag = target.preset?.tag ?? "text";
       const presetMeta = target.preset?.providerRequestMetadata ?? {};
+      const originMismatch =
+        sourceRef !== undefined &&
+        target.preset?.baseUrl !== undefined &&
+        sourceStatus?.baseUrl !== undefined &&
+        !hasSameOrigin(target.preset.baseUrl, sourceStatus.baseUrl);
+      const credentialSource = sourceRef
+        ? sourceStatus
+          ? {
+              sourceId: sourceStatus.sourceId,
+              ...(sourceStatus.accountId
+                ? { accountId: sourceStatus.accountId }
+                : {}),
+              ready: originMismatch ? false : sourceStatus.ready,
+              ...(originMismatch
+                ? { reason: "origin_mismatch" }
+                : sourceStatus.reason
+                  ? { reason: sourceStatus.reason }
+                  : {}),
+            }
+          : {
+              sourceId: sourceRef,
+              ...(target.preset?.account
+                ? { accountId: target.preset.account }
+                : {}),
+              ready: false,
+              reason: "provider_source_unavailable",
+            }
+        : undefined;
       // Budget resolution must see persisted preset defaults too, before the
       // runtime supplies its output ceiling on generate/stream.
       const parameterOverrides = withParameterOverrides(
@@ -584,12 +638,15 @@ export function createGatewaySlotResolution(
         provider,
         protocol: protocol as string,
         ...(baseUrl ? { baseUrl } : {}),
-        ...(resolved.config.apiKey ? { apiKey: resolved.config.apiKey } : {}),
-        ...(resolved.config.headers
+        ...(!sourceRef && resolved.config.apiKey
+          ? { apiKey: resolved.config.apiKey }
+          : {}),
+        ...(!sourceRef && resolved.config.headers
           ? { headers: { ...resolved.config.headers } }
           : {}),
         model,
         tag: presetTag,
+        ...(credentialSource ? { credentialSource } : {}),
         ...(target.preset?.capability
           ? {
               capability: resolved.usesBuiltinAdapter

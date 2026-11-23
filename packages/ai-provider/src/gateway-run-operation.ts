@@ -48,17 +48,25 @@ import {
   targetModel,
 } from "./gateway-lifecycle.js";
 import {
-  handleTargetFailure,
-  prepareTarget,
   createFailedAccountTracker,
+  handleTargetFailure,
+  prepareTargetAsync,
+  tryRefreshSourceTarget,
 } from "./gateway-fallback-chain.js";
 import type { ProviderRegistryLike } from "./gateway-fallback-chain.js";
+import type {
+  ProviderSourceAttemptContext,
+  ProviderSourceResolver,
+} from "./provider-source.js";
 import {
   applyRequestCapabilityOverlay,
   applySlotOverlay,
 } from "./slot-overlay.js";
 import type { OverlayDeps } from "./slot-overlay.js";
-import type { GatewayOptions } from "./gateway-slot-resolution.js";
+import {
+  activeProviderSources,
+  type GatewayOptions,
+} from "./gateway-slot-resolution.js";
 import type { OperationMode, ResolvedTarget, UsageSummary } from "./types.js";
 
 /**
@@ -68,6 +76,8 @@ import type { OperationMode, ResolvedTarget, UsageSummary } from "./types.js";
  */
 export interface RunOperationDeps extends OverlayDeps {
   readonly providerRegistry: ProviderRegistryLike;
+  readonly providerSources?: ProviderSourceResolver;
+  readonly getProviderSources?: () => ProviderSourceResolver | undefined;
 }
 
 /** Slot-resolution helper signature (see `createGatewaySlotResolution`). */
@@ -106,14 +116,14 @@ export interface OperationSpec<TResult> {
   resolveUsage?(result: TResult): UsageSummary | null;
   /**
    * Override how a target is resolved into a provider resolution and which
-   * provider name receives the request keys. Defaults to `prepareTarget`
-   * (routing target = `preset ?? profile`, key provider = preset/profile
-   * provider). `embed` overrides this to route via the bare provider name.
+   * provider name receives the request keys. Defaults to `prepareTargetAsync`.
    */
   prepare?(
     target: ResolvedTarget,
     options: GatewayOptions | undefined,
-  ): { provider: string; resolved: ProviderResolution };
+  ):
+    | import("./gateway-fallback-chain.js").PreparedTarget
+    | Promise<import("./gateway-fallback-chain.js").PreparedTarget>;
 }
 
 export interface GatewayRunOperation {
@@ -121,6 +131,134 @@ export interface GatewayRunOperation {
     spec: OperationSpec<TResult>,
     options: GatewayOptions | undefined,
   ): Promise<TResult>;
+}
+
+interface TargetExecutionState {
+  resolved: ProviderResolution;
+  resolvedForFailure: ProviderResolution;
+  sourceAttempt: ProviderSourceAttemptContext | undefined;
+}
+
+function applyScopeConfig(
+  resolved: ProviderResolution,
+  scope: ReturnType<typeof createLlmRequestScope> | undefined,
+): ProviderResolution {
+  if (!scope) return resolved;
+  return {
+    ...resolved,
+    config: {
+      ...resolved.config,
+      requestBudget: scope.budget,
+      signal: resolved.config.signal
+        ? AbortSignal.any([resolved.config.signal, scope.signal])
+        : scope.signal,
+    },
+  };
+}
+
+async function executeTargetWithRefresh<TResult>(args: {
+  readonly spec: OperationSpec<TResult>;
+  readonly target: ResolvedTarget;
+  readonly primary: ResolvedTarget;
+  readonly provider: string;
+  readonly state: TargetExecutionState;
+  readonly scope: ReturnType<typeof createLlmRequestScope> | undefined;
+  readonly providerRegistry: ProviderRegistryLike;
+  readonly providerSources: ProviderSourceResolver | undefined;
+  readonly resolveUsage: (result: TResult) => UsageSummary | null;
+  readonly startTime: number;
+  readonly options: GatewayOptions | undefined;
+}): Promise<TResult> {
+  const {
+    spec,
+    target,
+    primary,
+    provider,
+    state,
+    scope,
+    providerRegistry,
+    providerSources,
+    resolveUsage,
+    startTime,
+    options,
+  } = args;
+
+  notifyTargetAttempt(options?.onTargetAttempt, target);
+  assertProviderCredentials(provider, state.resolvedForFailure);
+  let refreshedOnce = false;
+  let started = false;
+
+  // At most one token refresh+retry on HTTP 401 for source-backed calls.
+  while (true) {
+    const attemptResolved = applyScopeConfig(state.resolved, scope);
+    state.resolvedForFailure = attemptResolved;
+    let slot: LLMSlot | undefined;
+    try {
+      if (["text", "object", "evaluate"].includes(spec.mode)) {
+        slot = await acquireLLMSlot(
+          scope?.signal ?? options?.signal,
+          options?.onQueueStart,
+        );
+      }
+      if (scope) {
+        assertLlmRequestBudget(scope.budget, {
+          signal: scope.signal,
+          requireAttempt: true,
+        });
+      }
+      if (!started) {
+        started = true;
+        await notifyStart(
+          attemptResolved.hooks,
+          provider,
+          attemptResolved.protocol,
+          spec.mode,
+          targetModel(target),
+          options?.traceId,
+          options,
+        );
+      }
+      const result = await awaitLlmRequest(
+        spec.execute(target, attemptResolved, primary),
+        scope?.signal ?? options?.signal,
+      );
+      await notifySuccess(
+        attemptResolved.hooks,
+        provider,
+        attemptResolved.protocol,
+        spec.mode,
+        targetModel(target),
+        resolveUsage(result),
+        Date.now() - startTime,
+        options?.traceId,
+        options,
+      );
+      return result;
+    } catch (error) {
+      slot?.release();
+      slot = undefined;
+      if (!refreshedOnce && state.sourceAttempt) {
+        const refreshed = await tryRefreshSourceTarget({
+          providerRegistry,
+          providerSources,
+          provider,
+          mode: spec.mode,
+          sourceAttempt: state.sourceAttempt,
+          error,
+          signal: scope?.signal ?? options?.signal,
+        });
+        if (refreshed) {
+          refreshedOnce = true;
+          state.resolved = refreshed.resolved;
+          state.sourceAttempt = refreshed.sourceAttempt;
+          continue;
+        }
+      }
+      throw error;
+    } finally {
+      slot?.release();
+    }
+  }
 }
 
 /**
@@ -174,75 +312,47 @@ export function createRunOperation(
           ),
         );
       const resolveUsage = spec.resolveUsage ?? (() => null);
+      const providerSources = activeProviderSources(deps);
       let lastError: AiProviderError | null = null;
       const failedAccounts = createFailedAccountTracker();
 
       for (const [index, target] of targets.entries()) {
-        const { provider, resolved: prepared } = spec.prepare
-          ? spec.prepare(target, options)
-          : prepareTarget(deps.providerRegistry, target, spec.mode, options);
-        if (failedAccounts.has(provider, prepared)) continue;
-        const resolved = {
-          ...prepared,
-          config: {
-            ...prepared.config,
-            ...(scope
-              ? {
-                  requestBudget: scope.budget,
-                  signal: prepared.config.signal
-                    ? AbortSignal.any([prepared.config.signal, scope.signal])
-                    : scope.signal,
-                }
-              : {}),
-          },
+        const preparedTarget = spec.prepare
+          ? await spec.prepare(target, options)
+          : await prepareTargetAsync(
+              deps.providerRegistry,
+              providerSources,
+              target,
+              spec.mode,
+              options,
+            );
+        const provider = preparedTarget.provider;
+        const state: TargetExecutionState = {
+          resolved: preparedTarget.resolved,
+          resolvedForFailure: applyScopeConfig(preparedTarget.resolved, scope),
+          sourceAttempt: preparedTarget.sourceAttempt,
         };
+        if (failedAccounts.has(provider, state.resolved)) continue;
 
         const startTime = Date.now();
-
-        let slot: LLMSlot | undefined;
         try {
-          notifyTargetAttempt(options?.onTargetAttempt, target);
-          assertProviderCredentials(provider, resolved);
-          if (["text", "object", "evaluate"].includes(spec.mode))
-            slot = await acquireLLMSlot(
-              scope?.signal ?? options?.signal,
-              options?.onQueueStart,
-            );
-          if (scope)
-            assertLlmRequestBudget(scope.budget, {
-              signal: scope.signal,
-              requireAttempt: true,
-            });
-          await notifyStart(
-            resolved.hooks,
+          return await executeTargetWithRefresh({
+            spec,
+            target,
+            primary: targets[0]!,
             provider,
-            resolved.protocol,
-            spec.mode,
-            targetModel(target),
-            options?.traceId,
+            state,
+            scope,
+            providerRegistry: deps.providerRegistry,
+            providerSources,
+            resolveUsage,
+            startTime,
             options,
-          );
-          const result = await awaitLlmRequest(
-            spec.execute(target, resolved, targets[0]!),
-            scope?.signal ?? options?.signal,
-          );
-          await notifySuccess(
-            resolved.hooks,
-            provider,
-            resolved.protocol,
-            spec.mode,
-            targetModel(target),
-            resolveUsage(result),
-            Date.now() - startTime,
-            options?.traceId,
-            options,
-          );
-          return result;
+          });
         } catch (error) {
-          failedAccounts.record(provider, resolved, error);
           lastError = await handleTargetFailure({
             error,
-            resolved,
+            resolved: state.resolvedForFailure,
             provider,
             mode: spec.mode,
             target,
@@ -250,9 +360,9 @@ export function createRunOperation(
             options,
             canFallback: index < targets.length - 1,
             previous: lastError,
+            sourceAttempt: state.sourceAttempt,
+            failedAccounts,
           });
-        } finally {
-          slot?.release();
         }
       }
 

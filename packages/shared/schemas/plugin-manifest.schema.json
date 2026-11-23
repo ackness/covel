@@ -27,6 +27,31 @@
       "description": "Host version range this package supports. A host outside it does not install or load the package.",
       "examples": [">=0.0.45"]
     },
+    "apiVersion": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 100,
+      "description": "Integer plugin platform contract generation required by this package."
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["session", "instance", "both"],
+      "description": "Plugin activation scope: `session` (default), `instance`, or `both`."
+    },
+    "activationEvents": {
+      "maxItems": 64,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?:onStartup|onSettingsView|onAppAction:[a-z0-9][a-z0-9-_]{0,63}|onAppEvent:(?:AppStarted|BeforeShutdown|SessionCreated|SessionTurnCommitted|SessionDeleted|WorldInstalled|WorldRemoved)|onExtension:[a-z][a-z0-9.-]*@[1-9][0-9]*|onFlow:[a-z0-9][a-z0-9-_]{0,63}|onSchedule:[a-z0-9][a-z0-9-_]{0,63})$"
+      },
+      "description": "Events that trigger lazy activation for `instance` or `both` scoped plugins."
+    },
+    "globalSessionDefault": {
+      "type": "string",
+      "enum": ["off", "optional"],
+      "description": "Whether a session-capable helper plugin opts in to global default enablement (`off` or `optional`)."
+    },
     "displayName": {
       "anyOf": [
         {
@@ -266,6 +291,71 @@
             "additionalProperties": false
           },
           "description": "Upper bound of the HTTP origins and methods the runtime may use."
+        },
+        "secrets": {
+          "type": "boolean",
+          "description": "Whether the plugin may read and write host-managed secrets."
+        },
+        "authProxy": {
+          "type": "boolean",
+          "description": "Whether bounded instance authentication requests may use the configured proxy."
+        },
+        "scheduler": {
+          "type": "boolean",
+          "description": "Whether the plugin may register bounded instance background schedules."
+        },
+        "sandboxWorker": {
+          "type": "boolean",
+          "description": "Whether the plugin uses bounded Tier 1 sandboxed workers."
+        },
+        "loopbackCallback": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^\\/[a-zA-Z0-9._/-]*$",
+              "description": "Loopback HTTP path mounted on localhost during authorization."
+            },
+            "ports": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "const": "ephemeral"
+                },
+                {
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1024,
+                    "maximum": 65535
+                  }
+                }
+              ],
+              "description": "Port strategy (`\"ephemeral\"` default) or ordered fallback port list."
+            }
+          },
+          "required": ["path"],
+          "additionalProperties": false,
+          "description": "Temporary localhost callback listener permissions for OAuth flows."
+        },
+        "appEvents": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "AppStarted",
+              "BeforeShutdown",
+              "SessionCreated",
+              "SessionTurnCommitted",
+              "SessionDeleted",
+              "WorldInstalled",
+              "WorldRemoved"
+            ]
+          },
+          "description": "Read-only application lifecycle events this plugin subscribes to."
         }
       },
       "additionalProperties": false,
@@ -291,6 +381,179 @@
             "description": "RPC action name. The covel:, runtime: and event: prefixes are reserved for framework approvals."
           },
           "description": "Names of RPC actions the entry registers with `registerRpc`."
+        },
+        "appActions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!(?:covel|runtime|event):)[\\s\\S]+$",
+            "description": "RPC action name. The covel:, runtime: and event: prefixes are reserved for framework approvals."
+          },
+          "description": "Instance-scoped app action names registered with `registerAppAction`."
+        },
+        "flows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "description": "Declarative Config Flow IDs registered with `registerConfigFlow`."
+        },
+        "appEvents": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "AppStarted",
+              "BeforeShutdown",
+              "SessionCreated",
+              "SessionTurnCommitted",
+              "SessionDeleted",
+              "WorldInstalled",
+              "WorldRemoved"
+            ]
+          },
+          "description": "Read-only application lifecycle events handled via `onAppEvent`."
+        },
+        "schedules": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "description": "Unique task identifier registered with `registerScheduledTask`."
+              },
+              "intervalMs": {
+                "type": "integer",
+                "minimum": 10000,
+                "maximum": 86400000,
+                "description": "Minimum interval between runs in ms (10000..86400000)."
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "minimum": 1000,
+                "maximum": 300000,
+                "description": "Per-run AbortSignal deadline in milliseconds (default 30000)."
+              },
+              "runOnStart": {
+                "type": "boolean",
+                "description": "When true, schedule an initial run immediately after activation."
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Human-readable description of the periodic background task."
+              }
+            },
+            "required": ["id", "intervalMs"],
+            "additionalProperties": false
+          },
+          "description": "Bounded periodic background tasks registered with `registerScheduledTask`."
+        },
+        "providerSources": {
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "description": "Identifier of this provider source within the package (qualified as `<pluginId>/<id>` in slot configuration)."
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                ],
+                "description": "Human-readable display name shown in provider configuration UI (string or locale map)."
+              },
+              "protocol": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Wire protocol spoken by this provider source. Defaults to `openai-responses-v1` when resolved if omitted."
+              },
+              "modes": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "text",
+                    "object",
+                    "stream",
+                    "embed",
+                    "image",
+                    "speech",
+                    "transcription",
+                    "music",
+                    "evaluate"
+                  ]
+                },
+                "description": "Supported gateway modes for this source (`\"text\"` implies `\"object\"` and `\"stream\"`). Defaults to `[\"text\"]`."
+              },
+              "baseUrl": {
+                "type": "string",
+                "format": "uri",
+                "description": "Canonical base URL declared by the package; runtime requests are origin-locked to this URL."
+              },
+              "auth": {
+                "type": "object",
+                "properties": {
+                  "flows": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+                    },
+                    "description": "Declarative Config Flow IDs in this package that authenticate or manage this source."
+                  }
+                },
+                "required": ["flows"],
+                "additionalProperties": false,
+                "description": "Authentication Config Flows associated with this provider source."
+              },
+              "accounts": {
+                "type": "string",
+                "enum": ["one", "many"],
+                "description": "Whether this source manages a single account (`\"one\"`, default) or multiple switchable accounts (`\"many\"`)."
+              }
+            },
+            "required": ["id", "label", "baseUrl"],
+            "additionalProperties": false
+          },
+          "description": "Provider credential and connection sources registered with `registerProviderSources`."
         },
         "commands": {
           "maxItems": 32,
@@ -392,12 +655,48 @@
                 },
                 "description": "Positional arguments, in order. Names must be unique."
               },
+              "scope": {
+                "type": "string",
+                "enum": ["session", "instance"],
+                "description": "Where this command appears: `session` (default, slash commands) or `instance` (application command palette)."
+              },
+              "palette": {
+                "type": "boolean",
+                "description": "When true, surface in the global command palette (⌘K)."
+              },
+              "shortcutHint": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 24,
+                "description": "Optional keyboard shortcut hint shown in the command palette."
+              },
               "action": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 32,
                 "pattern": "^[a-z][a-z0-9-]*$",
-                "description": "RPC action the command invokes. It must be listed in `contributes.actions`."
+                "description": "Session RPC action the command invokes. Must be listed in `contributes.actions`."
+              },
+              "appAction": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!(?:covel|runtime|event):)[\\s\\S]+$",
+                "description": "Instance app action the command invokes. Must be listed in `contributes.appActions`."
+              },
+              "openFlow": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "description": "Declarative Config Flow ID the command launches. Must be listed in `contributes.flows`."
+              },
+              "openPage": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                "description": "Application page ID (`contributes.ui.appPage`) to open."
+              },
+              "openWindow": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,63}$",
+                "description": "Floating window ID (`contributes.ui.window`) to open."
               },
               "context": {
                 "maxItems": 3,
@@ -409,7 +708,7 @@
                 "description": "Host context scopes passed to the action."
               }
             },
-            "required": ["name", "description", "action"],
+            "required": ["name", "description"],
             "additionalProperties": false
           },
           "description": "Player slash commands. Each `action` must be listed in `actions`."
@@ -1153,6 +1452,62 @@
                 "minLength": 1
               },
               "description": "Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker."
+            },
+            "settingsSection": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of declarative settings section specs rendered inside SettingsDialog."
+            },
+            "appPage": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of instance-scoped application workbench page specs (`ui.app.page`)."
+            },
+            "topbarStatus": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of read-only topbar status indicator specs (`ui.topbar.status`)."
+            },
+            "composerAction": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of session composer icon button specs (`ui.composer.action`)."
+            },
+            "messageAction": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of per-message inline action button specs (`ui.message.action`)."
+            },
+            "messageBelow": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of display-only message footer card specs (`ui.message.below`)."
+            },
+            "window": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Paths of floating tool window specs (`ui.window`)."
             }
           },
           "additionalProperties": false,
@@ -1258,6 +1613,281 @@
                 "type": "string",
                 "enum": ["system", "user", "assistant"],
                 "description": "Message role of the segment. Defaults to `system`."
+              },
+              "budget": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 32000,
+                "description": "Hard per-segment token budget cap."
+              },
+              "facts": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "maxLength": 128,
+                  "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ]
+                },
+                "description": "Named cross-plugin prompt facts published when this segment is active."
+              },
+              "when": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "fact": {
+                        "type": "string",
+                        "maxLength": 128,
+                        "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$",
+                        "description": "Dot-separated fact key in the cross-plugin Facts Registry."
+                      },
+                      "equals": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 128
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "description": "Match when the fact value equals this scalar."
+                      },
+                      "notEquals": {
+                        "anyOf": [
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "string",
+                            "maxLength": 128
+                          },
+                          {
+                            "type": "number"
+                          }
+                        ],
+                        "description": "Match when the fact value is not equal to this scalar."
+                      },
+                      "in": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "type": "boolean"
+                            },
+                            {
+                              "type": "string",
+                              "maxLength": 128
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "description": "Match when the fact value is contained in this list."
+                      },
+                      "exists": {
+                        "type": "boolean",
+                        "description": "Match whether the fact key is present (true) or absent (false)."
+                      }
+                    },
+                    "required": ["fact"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "all": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "fact": {
+                              "type": "string",
+                              "maxLength": 128,
+                              "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$",
+                              "description": "Dot-separated fact key in the cross-plugin Facts Registry."
+                            },
+                            "equals": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "maxLength": 128
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "description": "Match when the fact value equals this scalar."
+                            },
+                            "notEquals": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "maxLength": 128
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "description": "Match when the fact value is not equal to this scalar."
+                            },
+                            "in": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "maxLength": 128
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              },
+                              "description": "Match when the fact value is contained in this list."
+                            },
+                            "exists": {
+                              "type": "boolean",
+                              "description": "Match whether the fact key is present (true) or absent (false)."
+                            }
+                          },
+                          "required": ["fact"],
+                          "additionalProperties": false
+                        },
+                        "description": "Match when every predicate clause evaluates to true."
+                      }
+                    },
+                    "required": ["all"],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "any": {
+                        "minItems": 1,
+                        "maxItems": 32,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "fact": {
+                              "type": "string",
+                              "maxLength": 128,
+                              "pattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)+$",
+                              "description": "Dot-separated fact key in the cross-plugin Facts Registry."
+                            },
+                            "equals": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "maxLength": 128
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "description": "Match when the fact value equals this scalar."
+                            },
+                            "notEquals": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "string",
+                                  "maxLength": 128
+                                },
+                                {
+                                  "type": "number"
+                                }
+                              ],
+                              "description": "Match when the fact value is not equal to this scalar."
+                            },
+                            "in": {
+                              "minItems": 1,
+                              "maxItems": 32,
+                              "type": "array",
+                              "items": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string",
+                                    "maxLength": 128
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              },
+                              "description": "Match when the fact value is contained in this list."
+                            },
+                            "exists": {
+                              "type": "boolean",
+                              "description": "Match whether the fact key is present (true) or absent (false)."
+                            }
+                          },
+                          "required": ["fact"],
+                          "additionalProperties": false
+                        },
+                        "description": "Match when at least one predicate clause evaluates to true."
+                      }
+                    },
+                    "required": ["any"],
+                    "additionalProperties": false
+                  }
+                ],
+                "description": "Fact predicate deciding whether this segment is included."
+              },
+              "suppresses": {
+                "maxItems": 16,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "description": "IDs of non-protected prompt blocks or segments to suppress when active."
+              },
+              "protected": {
+                "type": "boolean",
+                "description": "When true, this segment cannot be suppressed by another plugin."
               }
             },
             "required": ["id", "content", "position"],
@@ -2196,6 +2826,71 @@
                 "additionalProperties": false
               },
               "description": "Upper bound of the HTTP origins and methods the runtime may use."
+            },
+            "secrets": {
+              "type": "boolean",
+              "description": "Whether the plugin may read and write host-managed secrets."
+            },
+            "authProxy": {
+              "type": "boolean",
+              "description": "Whether bounded instance authentication requests may use the configured proxy."
+            },
+            "scheduler": {
+              "type": "boolean",
+              "description": "Whether the plugin may register bounded instance background schedules."
+            },
+            "sandboxWorker": {
+              "type": "boolean",
+              "description": "Whether the plugin uses bounded Tier 1 sandboxed workers."
+            },
+            "loopbackCallback": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "pattern": "^\\/[a-zA-Z0-9._/-]*$",
+                  "description": "Loopback HTTP path mounted on localhost during authorization."
+                },
+                "ports": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "const": "ephemeral"
+                    },
+                    {
+                      "minItems": 1,
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1024,
+                        "maximum": 65535
+                      }
+                    }
+                  ],
+                  "description": "Port strategy (`\"ephemeral\"` default) or ordered fallback port list."
+                }
+              },
+              "required": ["path"],
+              "additionalProperties": false,
+              "description": "Temporary localhost callback listener permissions for OAuth flows."
+            },
+            "appEvents": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "AppStarted",
+                  "BeforeShutdown",
+                  "SessionCreated",
+                  "SessionTurnCommitted",
+                  "SessionDeleted",
+                  "WorldInstalled",
+                  "WorldRemoved"
+                ]
+              },
+              "description": "Read-only application lifecycle events this plugin subscribes to."
             }
           },
           "additionalProperties": false,

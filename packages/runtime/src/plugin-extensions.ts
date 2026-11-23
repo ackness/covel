@@ -16,6 +16,7 @@ import {
   pluginDataEntry,
   pluginMessagesFor,
 } from "@covel/shared";
+import { channelBridgeV1 } from "@covel/shared/platform";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
 import { deepFreeze } from "./hooks/hook-settings.js";
@@ -66,6 +67,22 @@ export interface PluginExtensionExecutionScope {
   ) => Promise<readonly ExtensionPluginDataRecord[]>;
 }
 
+export interface InstanceExtensionExecutionScope {
+  readonly locale: string;
+  readonly signal: AbortSignal;
+  readonly settings?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  readonly onProviderError?: (failure: {
+    readonly pluginId: string;
+    readonly providerId: string;
+    readonly point: string;
+    readonly error: unknown;
+  }) => void;
+  readonly gateway?: PluginServiceContext["gateway"];
+  readonly utils?: PluginServiceContext["utils"];
+}
+
 export interface PluginExtensionExecution {
   run<I, O, M extends ExtensionMode>(
     point: ExtensionPoint<I, O, M>,
@@ -78,6 +95,7 @@ export const kernelExtensionPoints: readonly ExtensionPoint<
   unknown,
   unknown
 >[] = [
+  channelBridgeV1,
   promptHistoryTransformV1,
   promptSegmentV1,
   sessionWorldContextV1,
@@ -209,6 +227,50 @@ export class PluginExtensionHost {
     return this.services.listExtensions();
   }
 
+  createInstanceExecution(
+    scope: InstanceExtensionExecutionScope,
+  ): PluginExtensionExecution {
+    const emptyWorld = {
+      characterSchema: null,
+      characters: [],
+      dimensions: {},
+      seats: [],
+    } as const;
+    const client = this.services.createInstanceKernelClient({
+      emitter: undefined,
+      locale: scope.locale,
+      signal: scope.signal,
+      gateway: scope.gateway,
+      utils: scope.utils,
+      settings: deepFreeze(structuredClone(scope.settings ?? {})),
+      extensionContext: (pluginId, signal) => ({
+        world: structuredClone(emptyWorld),
+        sessionId: "__instance__",
+        scope: "instance" as const,
+        locale: scope.locale,
+        messages: pluginMessagesFor(this.messagesOf?.(pluginId), scope.locale),
+        pluginData: {
+          get: async () => {
+            signal.throwIfAborted();
+            return null;
+          },
+          list: async () => {
+            signal.throwIfAborted();
+            return [];
+          },
+        },
+      }),
+    });
+    return this.buildExecution({
+      expectedScope: "instance",
+      sessionLabel: "__instance__",
+      signal: scope.signal,
+      onProviderError: scope.onProviderError,
+      discover: (pointId) => this.services.discoverInstanceExtensions(pointId),
+      client,
+    });
+  }
+
   createExecution(
     scope: PluginExtensionExecutionScope,
   ): PluginExtensionExecution {
@@ -252,7 +314,6 @@ export class PluginExtensionHost {
       }
       return rows;
     };
-    const cache = new Map<string, Promise<unknown>>();
     const client = this.services.createKernelClient({
       ...scope,
       // Providers and the services they call read their own bucket of this
@@ -289,26 +350,52 @@ export class PluginExtensionHost {
         };
       },
     });
+    return this.buildExecution({
+      expectedScope: "session",
+      sessionLabel: scope.sessionId,
+      signal: scope.signal,
+      onProviderError: scope.onProviderError,
+      runtimeIdentities: scope.runtimeIdentities,
+      discover: (pointId) =>
+        this.services.discoverExtensions(scope.sessionId, pointId),
+      client,
+    });
+  }
+
+  private buildExecution(args: {
+    readonly expectedScope: "session" | "instance";
+    readonly sessionLabel: string;
+    readonly signal: AbortSignal;
+    readonly onProviderError?: InstanceExtensionExecutionScope["onProviderError"];
+    readonly runtimeIdentities?: PluginExtensionExecutionScope["runtimeIdentities"];
+    readonly discover: (
+      pointId: string,
+    ) => Promise<
+      readonly import("@covel/shared").ExtensionProviderDescriptor[]
+    >;
+    readonly client: import("@covel/shared/plugin-runtime").PluginServiceClient;
+  }): PluginExtensionExecution {
+    const cache = new Map<string, Promise<unknown>>();
     return {
       run: async <I, O, M extends ExtensionMode>(
         point: ExtensionPoint<I, O, M>,
         input: I,
       ): Promise<ExtensionResult<O, M>> => {
-        scope.signal.throwIfAborted();
+        args.signal.throwIfAborted();
         if (this.points.get(point.id) !== point)
           throw new Error(`Unregistered kernel extension point: ${point.id}`);
+        const pointScope = point.scope ?? "session";
+        if (pointScope !== args.expectedScope)
+          throw new Error(
+            `Extension point ${point.id} requires ${pointScope} scope, cannot run in ${args.expectedScope} execution`,
+          );
         const parsed = point.input.parse(structuredClone(input));
         const key = point.mode === "single" ? undefined : cacheKey(parsed);
         const fullKey = key === undefined ? undefined : `${point.id}\n${key}`;
         let result = fullKey === undefined ? undefined : cache.get(fullKey);
         if (!result) {
           result = (async () => {
-            const providers = [
-              ...(await this.services.discoverExtensions(
-                scope.sessionId,
-                point.id,
-              )),
-            ]
+            const providers = [...(await args.discover(point.id))]
               .filter(
                 (provider) => point.matchesProvider?.(parsed, provider) ?? true,
               )
@@ -322,7 +409,7 @@ export class PluginExtensionHost {
                       : 0) ||
                   (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
               );
-            scope.signal.throwIfAborted();
+            args.signal.throwIfAborted();
             if (point.mode === "single" && providers.length > 1)
               throw new Error(
                 `Conflicting providers for single extension point: ${point.id}`,
@@ -331,10 +418,10 @@ export class PluginExtensionHost {
             let current = parsed;
             let output: O | undefined;
             for (const provider of providers) {
-              scope.signal.throwIfAborted();
+              args.signal.throwIfAborted();
               let value: O;
               try {
-                value = (await client.call(
+                value = (await args.client.call(
                   {
                     pluginId: provider.pluginId,
                     name: provider.name,
@@ -344,17 +431,17 @@ export class PluginExtensionHost {
                   { timeoutMs: point.timeoutMs },
                 )) as O;
               } catch (error) {
-                scope.signal.throwIfAborted();
+                args.signal.throwIfAborted();
                 if (point.onError === "fail-turn") throw error;
                 // The service diagnostic is sanitized and carries no reason, so
                 // the server log is where an author finds why a provider's
                 // contribution is missing.
                 console.warn(
-                  `[plugin-extensions] skipped provider ${provider.pluginId}/${provider.id} of ${point.id} for session ${scope.sessionId}: ` +
+                  `[plugin-extensions] skipped provider ${provider.pluginId}/${provider.id} of ${point.id} for session ${args.sessionLabel}: ` +
                     (error instanceof Error ? error.message : String(error)),
                 );
                 try {
-                  scope.onProviderError?.({
+                  args.onProviderError?.({
                     pluginId: provider.pluginId,
                     providerId: provider.id,
                     point: point.id,
@@ -393,7 +480,7 @@ export class PluginExtensionHost {
                     supplied.dimensionRecovery,
                   )) {
                     if (
-                      !scope.runtimeIdentities?.some(
+                      !args.runtimeIdentities?.some(
                         (runtime) =>
                           runtime.name === name &&
                           runtime.pluginId === providers[0]!.pluginId,
@@ -420,8 +507,8 @@ export class PluginExtensionHost {
           })();
           if (fullKey !== undefined) cache.set(fullKey, result);
         }
-        const value = await waitForExecution(result, scope.signal);
-        scope.signal.throwIfAborted();
+        const value = await waitForExecution(result, args.signal);
+        args.signal.throwIfAborted();
         return structuredClone(value) as ExtensionResult<O, M>;
       },
     };

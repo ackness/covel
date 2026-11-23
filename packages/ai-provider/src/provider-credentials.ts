@@ -7,6 +7,7 @@ export function assertProviderCredentials(
   provider: string,
   resolved: ProviderResolution,
 ): void {
+  if (resolved.config.credentialSource) return;
   const builtin = getBuiltinProviderConnection(provider);
   if (!builtin || builtin.local || resolved.usesBuiltinAdapter === false)
     return;

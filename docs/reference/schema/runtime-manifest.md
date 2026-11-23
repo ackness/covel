@@ -289,9 +289,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `permissions`
 
-| Field  | Type           | Required | Description                                                      |
-| ------ | -------------- | -------- | ---------------------------------------------------------------- |
-| `http` | list of object | no       | Upper bound of the HTTP origins and methods the runtime may use. |
+| Field              | Type                                                                                                                                                           | Required | Description                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `http`             | list of object                                                                                                                                                 | no       | Upper bound of the HTTP origins and methods the runtime may use.               |
+| `secrets`          | boolean                                                                                                                                                        | no       | Whether the plugin may read and write host-managed secrets.                    |
+| `authProxy`        | boolean                                                                                                                                                        | no       | Whether bounded instance authentication requests may use the configured proxy. |
+| `scheduler`        | boolean                                                                                                                                                        | no       | Whether the plugin may register bounded instance background schedules.         |
+| `sandboxWorker`    | boolean                                                                                                                                                        | no       | Whether the plugin uses bounded Tier 1 sandboxed workers.                      |
+| `loopbackCallback` | object                                                                                                                                                         | no       | Temporary localhost callback listener permissions for OAuth flows.             |
+| `appEvents`        | list of `"AppStarted"` or `"BeforeShutdown"` or `"SessionCreated"` or `"SessionTurnCommitted"` or `"SessionDeleted"` or `"WorldInstalled"` or `"WorldRemoved"` | no       | Read-only application lifecycle events this plugin subscribes to.              |
 
 ## `permissions.http[]`
 
@@ -299,3 +305,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | --------- | ----------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
 | `origin`  | string                                                                        | yes      | HTTPS origin the runtime may call, without path, query or credentials. Example: `"https://api.example.com"`. |
 | `methods` | list of `"GET"` or `"POST"` or `"PUT"` or `"PATCH"` or `"DELETE"` or `"HEAD"` | no       | HTTP methods allowed for the origin. Entries must be unique.                                                 |
+
+## `permissions.loopbackCallback`
+
+| Field   | Type                             | Required | Description                                                          |
+| ------- | -------------------------------- | -------- | -------------------------------------------------------------------- |
+| `path`  | string                           | yes      | Loopback HTTP path mounted on localhost during authorization.        |
+| `ports` | `"ephemeral"` or list of integer | no       | Port strategy (`"ephemeral"` default) or ordered fallback port list. |

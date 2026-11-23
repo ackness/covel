@@ -378,6 +378,11 @@ Every tier can call it. It needs no token, and it contains no secrets. For each 
       "value": [],
       "source": "default",
       "settable": true
+    },
+    "permissions.policy": {
+      "value": {},
+      "source": "default",
+      "settable": true
     }
   }
 }
@@ -391,7 +396,7 @@ Every tier can call it. It needs no token, and it contains no secrets. For each 
 
 When `source` is `env`, `value` may be a value that the settings screen does not offer to the player. For example, `COVEL_TRACE_RETENTION_DAYS=14` gives `"14"`.
 
-`trust.sources` stores a normalized array of GitHub `owner` or `owner/repo` entries, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`. Only the personal form may write it under the host profile’s `server.settings` rule; browser-private and hosted forms use operator environment configuration. See [trusted sources](./plugin-installation.md#trusted-sources) for syntax and automatic approval conditions.
+`trust.sources` stores a normalized array of GitHub `owner` or `owner/repo` entries, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`. `permissions.policy` stores L2 instance-level capability overrides (`CapabilityKey` to `"allow"`, `"ask"`, or `"deny"`, forbidding `"allow"` on capabilities marked against auto-allow), default `{}`, overridden by `COVEL_PERMISSIONS_POLICY`. Only the personal form may write either key under the host profile’s `server.settings` rule; browser-private and hosted forms use operator environment configuration. See [trusted sources](./plugin-installation.md#trusted-sources) and [instance policy and persistent grants](../internals/security.md#instance-policy-and-persistent-grants).
 
 **`PUT /api/config/server-settings`**
 
@@ -1092,14 +1097,31 @@ Authentication is the same as for the other session endpoints (owner token). Res
 
 ### Player interaction
 
-| Method | Path                                  | Description                                                              |
-| ------ | ------------------------------------- | ------------------------------------------------------------------------ |
-| POST   | `/api/sessions/:id/plugin-rpc`        | The single plugin RPC channel (action / runtime / command / event level) |
-| GET    | `/api/sessions/:id/approvals`         | List the RPC requests of this session that are waiting for approval      |
-| DELETE | `/api/sessions/:id/approvals`         | Revoke the cached grants of this session. Returns `{ ok, cleared }`      |
-| POST   | `/api/approvals/:approvalId/decision` | Submit the player's approval decision (allow / deny + once / session)    |
+| Method | Path                                  | Description                                                                              |
+| ------ | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| POST   | `/api/sessions/:id/plugin-rpc`        | The single plugin RPC channel (action / runtime / command / event level)                 |
+| GET    | `/api/sessions/:id/approvals`         | List pending RPC requests and active session grants for this session `{ items, grants }` |
+| DELETE | `/api/sessions/:id/approvals`         | Revoke the cached grants of this session. Returns `{ ok, cleared }`                      |
+| POST   | `/api/approvals/:approvalId/decision` | Submit the player's approval decision (allow / deny + once / session)                    |
 
 `DELETE /api/sessions/:id/approvals` can take `?pluginId=` to revoke the grant of just one plugin. After a revoke, the next call prompts for approval again.
+
+### Permissions & policies
+
+<!-- prettier-ignore -->
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/api/permissions/snapshot` | Return deployment form, L1 ceilings, L2 instance policy, and capability catalog |
+| PUT | `/api/permissions/policy` | Update L2 instance policy (writable only in personal form when not fixed by env) |
+| GET | `/api/permissions/plugins` | List all plugins with integrity, declared capabilities, and L3 persistent grant state |
+| PUT | `/api/permissions/plugins/:pluginId/grants` | Write or update L3 persistent capability decisions (`decisions`) for a community plugin |
+| DELETE | `/api/permissions/plugins/:pluginId/grants` | Delete a community plugin's L3 grant and revoke associated cached session grants |
+| POST | `/api/plugins/:pluginId/actions/:action` | Execute a declared `appActions` handler on an instance-capable plugin (`host.config`) |
+| GET | `/api/plugins/:pluginId/instance-data/:namespace` | Read non-secret instance KV entries for an instance-scoped plugin (`_` prefix forbidden, `host.config`) |
+| POST | `/api/plugins/:pluginId/flows/:flowId/start` | Start a declared multi-step Config Flow run (`host.config`) |
+| GET | `/api/plugins/:pluginId/flows/:flowId/runs/:runId` | Poll a running Config Flow snapshot (e.g., OAuth callback or device-code wait) |
+| POST | `/api/plugins/:pluginId/flows/:flowId/runs/:runId/step` | Submit step fields or confirmation to advance a Config Flow run |
+| DELETE | `/api/plugins/:pluginId/flows/:flowId/runs/:runId` | Cancel and clean up an in-progress Config Flow run and temporary listeners |
 
 ### Session plugin management
 
@@ -1522,7 +1544,7 @@ In the table below, "hosted deployment" means `DEPLOYMENT_TIER` is `demo` or `co
 - `pricingKind=reference` means the price is a reference price for an upstream model, matched through an aggregating provider. The actual bill may differ.
 - `reasoning` returns the reasoning effort levels, the default value, and the family name, recognized from the upstream model family. The generation-parameter screen uses them.
 
-Optional `credentials=1` also checks whether a custom connection can use existing server credentials. `X-Slot-Config.customPresets` must contain exactly one connection whose `provider`, `model` and `protocol` match the query parameters; invalid input returns `400 invalid_llm_configuration`. The response adds `serverCredentialsAvailable: boolean`, omitted without this option. The check covers origin-trusted API keys, authentication headers and loopback endpoints that need no key. It does not call the model, validate provider authentication or return endpoints or credentials.
+Optional `credentials=1` also checks whether a custom connection can use existing server credentials. `X-Slot-Config.customPresets` must contain exactly one connection whose `provider`, `model` and `protocol` match the query parameters; invalid input returns `400 invalid_llm_configuration`. The response adds `serverCredentialsAvailable: boolean`, omitted without this option. The check covers origin-trusted API keys, authentication headers, active plugin `providerSources`, and loopback endpoints that need no key. It does not call the model, validate provider authentication or return endpoints or credentials.
 
 `POST /api/model-db/refresh`:
 
@@ -1580,6 +1602,8 @@ The debugger's header reads its turn count from `session.completedPlayerTurns` i
 | GET | `/api/llm-config` | Return slot configuration and capability information |
 | POST | `/api/llm-config/reload` | Read `llm.toml` again and apply it, with no restart needed |
 | GET | `/api/provider-keys` | Return which providers have a key configured, without the key contents |
+| GET | `/api/provider-sources` | List registered plugin `provider.source@1` summaries and account status (`host.config`) |
+| GET | `/api/provider-sources/:pluginId/:sourceId/usage` | Query account quota or usage summary for a provider source (optional `?account=`, `host.config`) |
 | GET | `/api/config/info` | Return the current deployment information (`isDesktop`, `covelHome`, `dataRoot`, and so on) |
 | GET | `/api/config/server-settings` | All tiers: return the effective value, source, and whether each server setting can be set |
 | PUT | `/api/config/server-settings` | `self` tier only: save server settings |
@@ -1603,7 +1627,7 @@ Notes on each endpoint:
   - Independent plugin requests and the selected pack's requests form `defaultPluginIds`. Every submitted ID is installed; `diagnostics` reports `missing-plugin` with `pluginId`, `path` and optional `packId`. Other codes are `invalid-reference`, `redundant-reference` and `unknown-pack`, with optional `reference`.
   - The initial pack uses the world's public name, summary and tags, with independent `pluginPitch` overrides. Derived presentation is never persisted; see [plugin selection](./world-data.md#plugin-selection-pluginpolicy).
 - `GET /api/ui-specs`: with `sessionId`, it returns only the plugins active in that session. Without it, it returns all plugins. See [below](#get-apiui-specs) for details.
-- `GET /api/llm-config`: if parsing `llm.toml` fails, it falls back to the default config and adds an `error` field.
+- `GET /api/llm-config`: if parsing `llm.toml` fails, it falls back to the default config and adds an `error` field. When `X-Slot-Config.customPresets` or presets bind a plugin provider source via `source` (`<pluginId>/<sourceId>`) and optional `account`, `GET /api/llm-config` and `GET /api/presets` carry `source`, `account`, and derived `credentialSource` readiness without exposing private tokens or internal endpoints.
 - `POST /api/llm-config/reload`: applies the change in place to the running gateway, and returns `{ ok, slots, error? }`.
 - `GET /api/provider-keys`:
   - Returns only `{ providers: { [provider]: { configured: true } } }`.
@@ -1798,6 +1822,7 @@ Checks whether the server is running, and reports the storage it uses.
 | `operatorTokenRequired`                   | Whether admin requests check the operator token. It is `true` everywhere except the personal form: in the browser-private form and on `demo` / `commercial`.                                                                                                                                                                            |
 | `deployment.form`                         | The form of the host profile: `personal` / `browser-private` / `hosted`. For the rules, see [Security boundaries](../internals/security.md#host-profile).                                                                                                                                                                               |
 | `deployment.modelRelay`                   | Whether the server reaches models on the player's computer or local network through the player's browser ([Local model relay](#local-model-relay-1)). `false` in the personal form, `true` on the shared forms.                                                                                                                         |
+| `deployment.capabilities`                 | Deployment-wide L1 capability ceiling map resolved at startup (keyed by `CAPABILITY_KEYS` in `@covel/shared/permissions`), with values `enabled` / `operator-only` / `disabled`. See [Security boundaries](../internals/security.md#capability-ceilings-l1).                                                                            |
 | `deployment.source`                       | Which source code this build comes from; present only when the operator configured it. `repository` is the `https` address in `COVEL_SOURCE_REPOSITORY`; `commit` is `COVEL_SOURCE_COMMIT`, or Render's `RENDER_GIT_COMMIT` when that is not set, and must be 7–40 hexadecimal characters. Values that do not qualify are not returned. |
 | `storage.data.backend`                    | The data storage backend the server is using now: `memory` / `sqlite` / `pg`. The default is `sqlite`.                                                                                                                                                                                                                                  |
 | `storage.data.frontendMode`               | The front-end data mode. `local`: data is kept in the browser's BrowserVault. `remote`: data is kept on the server through the server API.                                                                                                                                                                                              |
@@ -3704,7 +3729,7 @@ Other 4xx and 5xx responses use the generic `{ error, code?, details? }` envelop
 
 #### `GET /api/sessions/:id/approvals`
 
-Lists all the requests in this session that are waiting for approval. After a page refresh, the frontend uses it to rebuild the dialog queue.
+Lists all requests in this session that are currently waiting for approval, along with active session-level grants valid under the current session approval scope. After a page refresh, the frontend uses it to rebuild the dialog queue and session grant view.
 
 **Response 200:**
 
@@ -3712,6 +3737,9 @@ Lists all the requests in this session that are waiting for approval. After a pa
 {
   "items": [
     { "approvalId": "9d8c-...", "pluginId": "...", "action": "...", ... }
+  ],
+  "grants": [
+    { "pluginId": "third-party-plugin", "action": "covel:plugin-server-code" }
   ]
 }
 ```
@@ -3809,6 +3837,96 @@ Other rules:
 > - Only the revocation generations of sessions and plugins are saved persistently. This makes sure an old grant can only become invalid on other instances. It never grants access by mistake to a session that was deleted and rebuilt with the same ID.
 >
 > Under load balancing, to avoid repeated dialogs, you would need to build a separate shared, persistent approval store.
+
+### Permissions governance
+
+Before queuing L4 session approvals, capability-gated operations evaluate the L1 host capability ceiling, L2 instance policy, and L3 persistent plugin grants. Denials short-circuit immediately with HTTP `403` and `code` set to `capability_disabled`, `capability_denied_by_policy`, or `capability_denied_by_grant`. See [Instance policy and persistent grants](../internals/security.md#instance-policy-and-persistent-grants).
+
+#### `GET /api/permissions/snapshot`
+
+Publicly returns the current deployment form's L1 capability ceilings, the active L2 instance policy and its source, and the full `CapabilityKey` catalog.
+
+```json
+{
+  "deploymentForm": "personal",
+  "capabilities": {
+    "plugin.communityCode": "enabled"
+  },
+  "policy": {
+    "overrides": { "compute.sandboxWorker": "deny" },
+    "effective": {
+      "plugin.communityCode": {
+        "ceiling": "enabled",
+        "policy": "ask",
+        "effective": "ask"
+      }
+    },
+    "source": "setting",
+    "settable": true
+  },
+  "catalog": {
+    "plugin.communityCode": {
+      "key": "plugin.communityCode",
+      "risk": "high",
+      "defaultPolicy": "ask",
+      "allowAutoPolicy": false
+    }
+  }
+}
+```
+
+#### `PUT /api/permissions/policy`
+
+Updates or clears L2 instance capability policy overrides (requires `server.settings`; writable only on `personal`). The body is `{ "policy": Record<CapabilityKey, "allow" | "ask" | "deny"> | null }`, where `null` removes saved overrides and restores defaults; returns the updated snapshot.
+
+| Status | `code`                          | When                                                                     |
+| ------ | ------------------------------- | ------------------------------------------------------------------------ |
+| 400    | `invalid_server_setting_value`  | Unknown capability key or setting `"allow"` when auto-allow is forbidden |
+| 403    | `server_settings_operator_only` | Non-personal form (`browser-private`, `demo`, or `commercial`)           |
+| 409    | `server_setting_fixed`          | `COVEL_PERMISSIONS_POLICY` already fixes the policy at startup           |
+
+#### `GET /api/permissions/plugins`
+
+Lists permission and integrity summaries across loaded plugins (requires `server.diagnostics`), returning `{ "items": [...] }`. Community plugins include their current content digest, integrity status (`verified` / `modified` / `no-receipt` / `unreadable`), `trust.sources` match flag, declared capability structure, stored `plugin_grants` record, and grant validity (`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`).
+
+#### `PUT /api/permissions/plugins/:pluginId/grants`
+
+Creates or updates persistent capability grants for a community plugin (requires `host.config`, plus `plugin.community` whenever `"plugin.communityCode"` is set to `"allow"`).
+
+```json
+{
+  "decisions": {
+    "plugin.communityCode": "allow",
+    "net.httpDeclared": "deny"
+  },
+  "expectedDigest": "sha256-..."
+}
+```
+
+Saves decisions bound to the live package's content digest and declared capabilities snapshot into `plugin_grants`, returning `{ "ok": true, "plugin": { ... } }`. Adding `"deny"` or removing a previous `"allow"` also revokes active cached L4 session grants for that plugin in `RpcApprovalGate`.
+
+| Status | `code`                      | When                                                                    |
+| ------ | --------------------------- | ----------------------------------------------------------------------- |
+| 400    | `invalid_plugin_id`         | Malformed plugin ID in path                                             |
+| 403    | `capability_disabled`       | Setting `"allow"` for a capability whose L1 ceiling is `disabled`       |
+| 404    | `plugin_not_found`          | Plugin is not in the live registry                                      |
+| 409    | `builtin_plugin_immutable`  | Persistent grants cannot be assigned to `builtin` plugins               |
+| 409    | `plugin_package_unverified` | Community package has no readable digest or capability snapshot to bind |
+| 409    | `plugin_digest_mismatch`    | Request `expectedDigest` no longer matches the live package digest      |
+
+#### `DELETE /api/permissions/plugins/:pluginId/grants`
+
+Deletes the `plugin_grants` record for a plugin (requires `host.config`) and revokes its cached L4 session grants in `RpcApprovalGate`, returning `{ "ok": true, "pluginId": "...", "revokedSessionGrants": 1 }` (returns `400 invalid_plugin_id` on an invalid plugin ID).
+
+### Instance app actions, Config Flows & provider sources
+
+Instance-capable packages (`scope: instance` or `scope: both`) permitted by L1–L3 policy expose the following host routes (all require `host.config`):
+
+- `POST /api/plugins/:pluginId/actions/:action`: runs a manifest-declared (`contributes.appActions`) registered action handler and returns `{ ok: true, result }`, refreshing any mounted `providerSources` statuses afterwards.
+- `GET /api/plugins/:pluginId/instance-data/:namespace`: lists non-secret instance KV records written through `covel.instanceData` (`_` namespaces rejected with `400 invalid_namespace`), sets `Cache-Control: no-store`, and returns `{ ok: true, entries: [{ key, value, updatedAt }] }`.
+- `POST /api/plugins/:pluginId/flows/:flowId/start`, `GET …/runs/:runId`, `POST …/runs/:runId/step`, `DELETE …/runs/:runId`: start, poll, submit steps for, and cancel declared `contributes.flows` wizards; completion refreshes mounted `providerSources` summaries and notifies browser settings listeners.
+- `GET /api/provider-sources`: returns `{ sources }` summarizing registered `provider.source@1` definitions, supported protocols/modes, auth flows, read-only endpoints, and account summaries (no plaintext secrets; disabled via L1 ceiling on `browser-private` / `hosted`).
+- `GET /api/provider-sources/:pluginId/:sourceId/usage?account=...`: queries usage/quota summaries for a source and optional account, returning `{ usage }` (or `403 capability_denied` when `plugin.providerSource` is disabled).
 
 ### Plugin management
 
@@ -4053,7 +4171,7 @@ Notes:
 
 Lists the plugins this session can see, and the commands the session can run right now.
 
-- `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can include `serverCodeApprovedBy: "session" | "trusted-source"`, `approvalRequired`, `autoAdded`, and `rejection`. `serverCodeApprovedBy` distinguishes an explicit session grant from a current implicit source-policy grant.
+- `items[]`: each item adds `active`, `locked`, `sessionState`, and `serverCodeApproved` to `PluginSummary`, and can include `serverCodeApprovedBy: "session" | "trusted-source" | "persistent-grant"`, `approvalRequired`, `autoAdded`, and `rejection`. `serverCodeApprovedBy` distinguishes an explicit session grant, an implicit source-policy grant, and a valid L3 persistent grant.
 - `items[].paused?: { reason }`: present only while paused by faults in this session; `active` still describes selection. Use the endpoint below to resume.
 - `items[].runtimes` has exactly the same shape as in `GET /api/plugins`.
 - `commands[]`: the only executable command catalog. It is filtered by the plugins that are currently enabled, plus the framework commands. Each command is listed once at the top level, and it is not repeated per plugin.
@@ -5522,8 +5640,10 @@ Reads the list of model IDs from a provider endpoint. The settings page uses it 
 | `provider` | string | Yes      | Provider ID                                                                            |
 | `baseUrl`  | string | No       | Endpoint address. If omitted, the value of the built-in or registered provider is used |
 | `protocol` | string | No       | Protocol. If omitted, the same rule applies                                            |
+| `source`   | string | No       | Optional qualified plugin provider source ID (`<pluginId>/<sourceId>`)                 |
+| `account`  | string | No       | Optional account ID paired with `source`                                               |
 
-- The key comes from the `X-Provider-Keys` request header.
+- The key comes from the `X-Provider-Keys` request header, or is resolved server-side from the named `provider.source@1` plugin when `source` is given (never sending plugin secrets from the client; `X-Slot-Config.customPresets` entries with `source`/`account` also work with `POST /api/ai/ping`).
 - The target is handled for this one request only. A key from the server's environment is sent only to that provider's trusted same-origin address.
 - Unknown fields and unknown protocols return `400`.
 

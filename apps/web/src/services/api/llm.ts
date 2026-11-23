@@ -52,6 +52,9 @@ export interface LlmSlotInfo {
   serverKeyConfigured?: boolean;
   baseUrl?: string;
   provider: string;
+  source?: string;
+  account?: string;
+  credentialSource?: import("@covel/shared/platform").ProviderSourceCredentialStatus;
   model: string;
   protocol: string;
   fallback?: string;
@@ -190,14 +193,26 @@ export async function lookupModelCapabilityDetails(
   provider?: string,
   protocol?: string,
   role?: string,
-  connection?: { baseUrl?: string; revision?: string },
+  connection?: {
+    baseUrl?: string;
+    source?: string;
+    account?: string;
+    revision?: string;
+  },
 ): Promise<ModelCapabilityLookupResult> {
   const cacheKey = JSON.stringify([
     provider ?? null,
     protocol ?? null,
     role ?? null,
     model,
-    connection ? [connection.baseUrl ?? "", connection.revision ?? null] : null,
+    connection
+      ? [
+          connection.baseUrl ?? "",
+          connection.source ?? "",
+          connection.account ?? "",
+          connection.revision ?? null,
+        ]
+      : null,
   ]);
   const cached = capabilityCache.get(cacheKey);
   if (cached) return cached;
@@ -214,6 +229,8 @@ export async function lookupModelCapabilityDetails(
             {
               id: "lookup",
               provider,
+              ...(connection.source ? { source: connection.source } : {}),
+              ...(connection.account ? { account: connection.account } : {}),
               model,
               protocol,
               baseUrl: connection.baseUrl,
@@ -406,17 +423,28 @@ export interface ProviderModelList {
 /** Ask a provider endpoint for the model IDs it offers. */
 export async function listProviderModels(target: {
   provider: string;
+  source?: string;
+  account?: string;
   baseUrl?: string;
   protocol?: string;
 }): Promise<ProviderModelList> {
   try {
     const res = await requestResponse("/api/ai/models", {
       method: "POST",
-      headers: buildProviderKeysHeader({ providers: [target.provider] }),
+      headers: target.source
+        ? undefined
+        : buildProviderKeysHeader({ providers: [target.provider] }),
       body: JSON.stringify({
-        provider: target.provider,
-        ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
-        ...(target.protocol ? { protocol: target.protocol } : {}),
+        ...(target.source
+          ? {
+              source: target.source,
+              ...(target.account ? { account: target.account } : {}),
+            }
+          : {
+              provider: target.provider,
+              ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
+              ...(target.protocol ? { protocol: target.protocol } : {}),
+            }),
       }),
       operatorAuth: true,
       silentErrors: true,

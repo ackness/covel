@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
   fetchProviderProtocols,
   listProviderModels,
+  type ProviderSourceSummary,
   type ReasoningEffort,
 } from "@/services/api.js";
 import {
@@ -36,6 +38,7 @@ export function ProviderDialog({
   busy,
   error,
   draft,
+  providerSources = [],
   onOpenChange,
   onDraftChange,
   onSubmit,
@@ -44,15 +47,20 @@ export function ProviderDialog({
   busy: boolean;
   error: string | null;
   draft: ProviderDraft;
+  providerSources?: readonly ProviderSourceSummary[];
   onOpenChange: (open: boolean) => void;
   onDraftChange: (draft: ProviderDraft) => void;
   onSubmit: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const typedProviderId = draft.providerId.trim().toLowerCase();
   const knownProviderId = getBuiltinProviderConnection(typedProviderId)
     ? typedProviderId
     : "";
+  const selectedSource = draft.source
+    ? providerSources.find((src) => src.id === draft.source)
+    : undefined;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="ui-scroll max-h-[90dvh] max-w-3xl overflow-y-auto p-4 sm:p-6">
@@ -66,47 +74,106 @@ export function ProviderDialog({
           </DialogDescription>
         </DialogHeader>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
-          <label className="block space-y-1 text-xs">
-            <span>{t("settings.providerPreset")}</span>
-            <select
-              value={knownProviderId}
-              onChange={(event) => {
-                const connection = getBuiltinProviderConnection(
-                  event.target.value,
-                );
-                onDraftChange({
-                  ...draft,
-                  providerId: event.target.value,
-                  baseUrl: connection?.baseUrl ?? "",
-                  protocol: "",
-                });
-              }}
-              className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="">{t("settings.providerPresetCustom")}</option>
-              {(["cloud", "local"] as const).map((kind) => (
-                <optgroup
-                  key={kind}
-                  label={t(
-                    kind === "local"
-                      ? "settings.providerPresetLocal"
-                      : "settings.providerPresetCloud",
-                  )}
-                >
-                  {listBuiltinProviderConnections()
-                    .filter(
-                      (connection) =>
-                        (connection.local === true) === (kind === "local"),
+          {providerSources.length > 0 && (
+            <label className="block space-y-1 text-xs">
+              <span>{t("settings.providerSource")}</span>
+              <select
+                value={draft.source ?? ""}
+                onChange={(event) => {
+                  const nextSourceId = event.target.value;
+                  if (!nextSourceId) {
+                    const {
+                      source: _removedSource,
+                      account: _removedAccount,
+                      ...rest
+                    } = draft;
+                    onDraftChange(rest);
+                    return;
+                  }
+                  const src = providerSources.find(
+                    (item) => item.id === nextSourceId,
+                  );
+                  if (!src) return;
+                  const defaultAccount =
+                    src.accounts.find((acc) => acc.isDefault)?.id ??
+                    src.accounts[0]?.id;
+                  onDraftChange({
+                    ...draft,
+                    source: src.id,
+                    ...(defaultAccount ? { account: defaultAccount } : {}),
+                    providerId:
+                      draft.providerId.trim() ||
+                      normalizeProviderId(src.sourceId) ||
+                      src.sourceId,
+                    baseUrl: src.baseUrl,
+                    protocol: src.protocol,
+                  });
+                }}
+                className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">{t("settings.providerSourceManual")}</option>
+                {providerSources.map((src) => (
+                  <option key={src.id} value={src.id}>
+                    {resolveDisplayText(src.label, locale)} (
+                    {src.ready
+                      ? t("settings.providerSourceReady")
+                      : t("settings.providerSourceNotReady")}
                     )
-                    .map((connection) => (
-                      <option key={connection.id} value={connection.id}>
-                        {connection.label}
-                      </option>
-                    ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {selectedSource && selectedSource.accounts.length > 0 && (
+            <ProviderSourceAccountSelect
+              accounts={selectedSource.accounts}
+              value={draft.account ?? ""}
+              onChange={(account) => onDraftChange({ ...draft, account })}
+            />
+          )}
+          {!draft.source && (
+            <label className="block space-y-1 text-xs">
+              <span>{t("settings.providerPreset")}</span>
+              <select
+                value={knownProviderId}
+                onChange={(event) => {
+                  const connection = getBuiltinProviderConnection(
+                    event.target.value,
+                  );
+                  onDraftChange({
+                    ...draft,
+                    providerId: event.target.value,
+                    baseUrl: connection?.baseUrl ?? "",
+                    protocol: "",
+                  });
+                }}
+                className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">{t("settings.providerPresetCustom")}</option>
+                {(["cloud", "local"] as const).map((kind) => (
+                  <optgroup
+                    key={kind}
+                    label={t(
+                      kind === "local"
+                        ? "settings.providerPresetLocal"
+                        : "settings.providerPresetCloud",
+                    )}
+                  >
+                    {listBuiltinProviderConnections()
+                      .filter(
+                        (connection) =>
+                          (connection.local === true) === (kind === "local"),
+                      )
+                      .map((connection) => (
+                        <option key={connection.id} value={connection.id}>
+                          {connection.label}
+                        </option>
+                      ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="block space-y-1 text-xs">
             <span>{t("settings.providerIdLabel")}</span>
             <input
@@ -122,11 +189,12 @@ export function ProviderDialog({
             <span>{t("settings.baseUrl")}</span>
             <input
               value={draft.baseUrl}
+              readOnly={Boolean(draft.source)}
               onChange={(event) =>
                 onDraftChange({ ...draft, baseUrl: event.target.value })
               }
               placeholder={t("settings.baseUrlPlaceholder")}
-              className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none focus:ring-1 focus:ring-primary"
+              className="w-full border border-border bg-background px-3 py-2 font-mono text-sm outline-none read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
             />
           </label>
           <ProtocolSelect
@@ -135,14 +203,22 @@ export function ProviderDialog({
             value={draft.protocol}
             onChange={(protocol) => onDraftChange({ ...draft, protocol })}
           />
-          <LocalModelEndpointNote
-            baseUrl={
-              draft.baseUrl.trim() ||
-              getBuiltinProviderConnection(typedProviderId)?.baseUrl ||
-              ""
-            }
-            provider={typedProviderId}
-          />
+          {draft.source ? (
+            <p className="text-[11px] text-muted-foreground">
+              {t("settings.providerSourceManagedCredentials", {
+                source: draft.source,
+              })}
+            </p>
+          ) : (
+            <LocalModelEndpointNote
+              baseUrl={
+                draft.baseUrl.trim() ||
+                getBuiltinProviderConnection(typedProviderId)?.baseUrl ||
+                ""
+              }
+              provider={typedProviderId}
+            />
+          )}
           <ModelIdsTextarea
             value={draft.modelIds}
             onChange={(modelIds) => onDraftChange({ ...draft, modelIds })}
@@ -150,6 +226,8 @@ export function ProviderDialog({
               draft.providerId,
               draft.baseUrl,
               draft.protocol,
+              draft.source,
+              draft.account,
             )}
           />
           <ImportedModelReasoning
@@ -188,6 +266,8 @@ export function ModelDialog({
   error,
   providerId,
   provider,
+  source,
+  account,
   baseUrl,
   protocol,
   modelProtocol,
@@ -204,6 +284,8 @@ export function ModelDialog({
   error: string | null;
   providerId: string;
   provider?: string;
+  source?: string;
+  account?: string;
   baseUrl?: string;
   protocol?: string;
   modelProtocol: string;
@@ -240,6 +322,8 @@ export function ModelDialog({
               providerId,
               baseUrl,
               modelProtocol || protocol,
+              source,
+              account,
             )}
           />
           <ProtocolSelect
@@ -282,7 +366,13 @@ function ModelIdsTextarea({
   value: string;
   onChange: (value: string) => void;
   /** The endpoint to read a model list from; absent when it cannot list. */
-  listTarget?: { provider: string; baseUrl?: string; protocol?: string };
+  listTarget?: {
+    provider: string;
+    source?: string;
+    account?: string;
+    baseUrl?: string;
+    protocol?: string;
+  };
 }) {
   const { t } = useTranslation();
   const targetKey = JSON.stringify(listTarget);
@@ -346,7 +436,13 @@ function ModelListPicker({
   value,
   onChange,
 }: {
-  target: { provider: string; baseUrl?: string; protocol?: string };
+  target: {
+    provider: string;
+    source?: string;
+    account?: string;
+    baseUrl?: string;
+    protocol?: string;
+  };
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -389,7 +485,7 @@ function ModelListPicker({
         type="button"
         size="sm"
         variant="outline"
-        disabled={loading || !target.provider.trim()}
+        disabled={loading || (!target.provider.trim() && !target.source)}
         onClick={() => void load()}
         className="text-[11px]"
       >
@@ -439,12 +535,27 @@ function modelListTarget(
   providerId: string,
   baseUrl: string | undefined,
   protocol: string | undefined,
-): { provider: string; baseUrl?: string; protocol?: string } | undefined {
+  source?: string,
+  account?: string,
+):
+  | {
+      provider: string;
+      source?: string;
+      account?: string;
+      baseUrl?: string;
+      protocol?: string;
+    }
+  | undefined {
   const provider = normalizeProviderId(providerId);
-  if (!provider || protocolOutputModalities(protocol).includes("evaluation"))
+  if (
+    (!provider && !source) ||
+    protocolOutputModalities(protocol).includes("evaluation")
+  )
     return undefined;
   return {
-    provider,
+    provider: provider || source || "",
+    ...(source ? { source } : {}),
+    ...(account ? { account } : {}),
     ...(baseUrl?.trim() ? { baseUrl: baseUrl.trim() } : {}),
     ...(protocol ? { protocol } : {}),
   };
@@ -478,6 +589,44 @@ function protocolOptions(
         {descriptor.label}
       </option>
     ));
+}
+
+export function ProviderSourceAccountSelect({
+  accounts,
+  value,
+  disabled = false,
+  onChange,
+  labelTextClassName,
+  selectClassName = "w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary",
+}: {
+  readonly accounts: ProviderSourceSummary["accounts"];
+  readonly value: string;
+  readonly disabled?: boolean;
+  readonly onChange: (account: string | undefined) => void;
+  readonly labelTextClassName?: string;
+  readonly selectClassName?: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <label className="block space-y-1 text-xs">
+      <span className={labelTextClassName}>
+        {t("settings.providerSourceAccount")}
+      </span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value || undefined)}
+        className={selectClassName}
+      >
+        <option value="">{t("settings.providerSourceDefaultAccount")}</option>
+        {accounts.map((acc) => (
+          <option key={acc.id} value={acc.id}>
+            {acc.label ?? acc.id}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 export function ProtocolSelect({

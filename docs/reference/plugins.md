@@ -111,6 +111,11 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | 根字段 | 含义 |
 | --- | --- |
 | `id` | 插件 ID；不写时是包目录名，写了必须和目录名相同 |
+| `apiVersion` | 可选的平台契约代次整数（如 `2`，完整字段与默认值见 [PLUGIN Schema](./schema/plugin-manifest.md)） |
+| `scope` | 激活作用域：`session`（默认，每局会话）、`instance`（宿主实例级）或 `both` |
+| `activationEvents` | 延迟激活事件列表，仅用于 `instance` / `both` 包（如 `onStartup`、`onFlow:*`、`onAppAction:*` 等） |
+| `globalSessionDefault` | 新建会话时的默认启用倾向；`scope: instance` 不能设为 `optional` |
+| `permissions` | 包级与入口代码权限声明（`secrets`、`http`、`loopbackCallback`、`authProxy`、`scheduler`、`sandboxWorker`、`appEvents`） |
 | `kind` | `core`（默认加入每一局）或 `plugin`（不写时的值，选了才启用） |
 | `version`, `displayName`, `description`, `tags` | 元数据；标签用于准备页的分组和筛选，不决定运行时调度。`ui:*` 和 `cost:*` 标签由 Covel 推出，作者只写其余的标签，如 `mode:*`，见[推出的标签](#推出的标签) |
 | `author`, `license` | 作者信息，只用于展示；见[作者信息](#作者信息) |
@@ -143,6 +148,11 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | --- | --- |
 | `tools` | `registerTool` 的工具名 |
 | `actions` | `registerRpc` 的非空 action 名；`covel:`、`runtime:`、`event:` 前缀保留给框架审批，声明、注册和 action 请求均拒绝这些前缀。 |
+| `appActions` | `registerAppAction` 注册的实例级动作名；要求 `scope` 为 `instance` 或 `both` |
+| `flows` | `registerConfigFlow` 注册的多步骤配置/登录向导 ID；要求 `scope` 为 `instance` 或 `both` |
+| `appEvents` | `onAppEvent` 订阅的只读应用生命周期事件名；要求 `scope` 为 `instance` 或 `both` |
+| `schedules` | `registerScheduledTask` 注册的受限周期后台任务；要求 `scope` 为 `instance` 或 `both` 且 `permissions.scheduler: true` |
+| `providerSources` | `registerProviderSources` 注册的模型供应商凭据与连接源；要求 `scope` 为 `instance` 或 `both`，见[模型用途](./slots.md) |
 | `commands` | 玩家命令元数据；`action` 必须列入 `actions` |
 | `services` | `registerService` 的契约 ID。给模型用的服务写成 `{contract, modelFacing: true}`，见[给模型用的服务](./plugin-extensions.md#给模型用的服务)；改提供者自己数据的服务写成 `{contract, access: write}`（默认 `read`），见[写服务](./plugin-extensions.md#写服务) |
 | `extensions` | `provideExtension` 提供的扩展，写成 `<point>/<id>`，例如 `prompt.segment@1/notes`。要写 `order`、`slot` 这些选项时写成 `{point, id, …}` |
@@ -153,7 +163,7 @@ Extract facts supported by runtime-inputs.narrative.value, then call save-facts.
 | `data` | 本插件数据 namespace 的 schema、version、accepts、search |
 | `datasets` | 本插件拥有的带类型数据集：名字即 namespace，写 schema、key、ops，以及可选的 `tools`、`description`，见[数据集](#数据集contributesdatasets) |
 | `actionKinds` | 玩家能提交的行动类型：名字、可用身份、文字规则、`fields` 的 schema、显示名称，见[行动类型](#行动类型contributesactionkinds) |
-| `ui` | 包根相对的 `right/message/view/segment` UI spec 路径 |
+| `ui` | 包根相对的 UI spec 路径：`right/message/view/segment`，以及实例级（`settingsSection/appPage/topbarStatus`）和会话微槽（`composerAction/messageAction/messageBelow/window`），见[界面扩展](./ui-panels.md) |
 | `ui.view` | 包根相对的完整故事栏视图 spec 路径；声明与授权见[插件视图](./ui-panels.md#插件视图) |
 | `ui.segment` | 包根相对的段落模板 spec 路径：按段落类型或说话人匹配，只用于显示已提交的故事段落，见[段落模板](./ui-panels.md#段落模板) |
 | `worldProjections` | 世界数据投影声明 |
@@ -1268,8 +1278,8 @@ namespace 声明 `search` 之后，它的记录进入框架的记忆检索（[`m
 
 ## 提示词与记忆扩展
 
-- **静态段**放在 `contributes.prompt`。每项包含 `id/content/position`，可选 `role`。位置是 `system`、`pre-history`、`post-history` 或 `{depth: number}`。宿主自动注册静态段，不需要再声明扩展。`static-prompt` 是保留的注册 ID。
-- **动态内容**用扩展点：动态提示词用 `prompt.segment@1`，世界上下文用 `session.world-context@1`，历史变换用 `prompt.history-transform@1`，长篇故事记忆用 `history.compact@2`。详见[插件扩展点](./plugin-extensions.md)。这些扩展使用同一次执行的快照，不在每次调用时重读清单。
+- **静态段**放在 `contributes.prompt`。每项包含 `id/content/position`，可选 `role`、`when` 条件谓词、`priority` 和 token 预算；宿主的四阶段提示词治理引擎按声明预算与受保护块边界编译装配，宿主自动注册静态段，不需要再声明扩展。`static-prompt` 是保留的注册 ID。
+- **动态内容**用扩展点：动态提示词用 `prompt.segment@1`（支持 `when` 条件谓词，受保护的框架提示词块不可被插件抑制），世界上下文用 `session.world-context@1`，历史变换用 `prompt.history-transform@1`，长篇故事记忆用 `history.compact@2`。详见[插件扩展点](./plugin-extensions.md)与[核心扩展点](./extension-points.md)。这些扩展使用同一次执行的快照，不在每次调用时重读清单。
 - **记忆块**属于 memory 插件。插件先保留四个默认块，再依次读取活跃的 `memory.block-definitions@1` 服务和经 `memory.blocks@1` 数据契约导入的世界定义，按 `label` 去重追加。相同 `label` 保留先出现的整项，不覆盖其字段；世界定义不能替换默认块。框架不聚合 `memoryBlocks` 或 `summaryFocus` 字段，也没有单独的 working_memory 表。
 
 ## 会话插件选择
@@ -1681,3 +1691,12 @@ runtime:
 ## 页面中的输入框
 
 插件页面使用 `contributes.ui.view` 的 spec 路径。宿主输入框默认显示在页面下方；页面用可选的 `composer: false` 或嵌入 `SessionComposer` 来隐藏它。不增加 placement、runtime 触发类型或提案种类。所属手动 runtime 的调用仍经审批、提案和提交。声明、授权、组合与失效规则见[页面中的输入框](./ui-panels.md#页面中的输入框)。
+
+## 实例级作用域与生态扩展
+
+设 `apiVersion: 2` 且 `scope: instance` 或 `scope: both` 的插件，可以在不开启具体会话的情况下响应实例级事件、暴露全局配置向导或为模型层提供凭据源。这类包可用 `activationEvents` 按需延迟激活，并在入口函数里使用受宿主 [权限治理](./plugin-installation.md#权限与四层策略) 约束的原语：
+
+- **秘密与实例状态**：`covel.secrets` 读取或写入经宿主加密托管的包私有凭据；`covel.instanceData` 持久化非敏感的实例级 JSON 状态；`covel.sandbox` 执行受限的工作线程任务。
+- **动作、配置流与生命周期**：`registerAppAction` 注册全局设置动作；`registerConfigFlow` 定义表单、OAuth 回调、设备码、粘贴导入或确认步骤组成的多步骤向导；`onAppEvent` 与 `registerScheduledTask` 处理只读应用事件及有界的周期后台任务；`registerProviderSources` 注册模型连接与凭据解析源（`provider.source@1`）。
+
+外部生态扩展——例如 MCP 工具桥接、备份与导入导出工具、聊天渠道桥接（`channel.bridge@1`）以及 OAuth/订阅式模型来源——都直接组合上述通用契约接入宿主，而无需修改框架内核代码或引入插件特例。

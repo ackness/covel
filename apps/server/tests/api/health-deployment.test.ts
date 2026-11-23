@@ -42,8 +42,31 @@ async function healthFor(
 describe("GET /api/health deployment", () => {
   it("reports a personal host without source details by default", async () => {
     const body = await healthFor({}, "sqlite");
-    expect(body.deployment).toEqual({ form: "personal", modelRelay: false });
+    expect(body.deployment).toMatchObject({
+      form: "personal",
+      modelRelay: false,
+    });
+    const deployment = body.deployment as {
+      capabilities: Record<string, string>;
+      source?: unknown;
+    };
+    expect(deployment.source).toBeUndefined();
+    expect(deployment.capabilities["plugin.providerSource"]).toBe("enabled");
+    expect(deployment.capabilities["plugin.communityCode"]).toBe("enabled");
     expect(body.operatorTokenRequired).toBe(false);
+  });
+
+  it("reports tightened capability ceilings via COVEL_DISABLED_CAPABILITIES", async () => {
+    const body = await healthFor(
+      { COVEL_DISABLED_CAPABILITIES: "plugin.providerSource,exec.localBridge" },
+      "sqlite",
+    );
+    const deployment = body.deployment as {
+      capabilities: Record<string, string>;
+    };
+    expect(deployment.capabilities["plugin.providerSource"]).toBe("disabled");
+    expect(deployment.capabilities["exec.localBridge"]).toBe("disabled");
+    expect(deployment.capabilities["plugin.declarative"]).toBe("enabled");
   });
 
   it("reports the browser-private form, its operator token and the build's source", async () => {
@@ -51,7 +74,7 @@ describe("GET /api/health deployment", () => {
       repository: "https://github.com/ackness/covel/",
       commit: "C1E2867D9",
     });
-    expect(body.deployment).toEqual({
+    expect(body.deployment).toMatchObject({
       form: "browser-private",
       modelRelay: true,
       source: {
@@ -59,6 +82,14 @@ describe("GET /api/health deployment", () => {
         commit: "c1e2867d9",
       },
     });
+    const deployment = body.deployment as {
+      capabilities: Record<string, string>;
+    };
+    expect(deployment.capabilities["plugin.providerSource"]).toBe("disabled");
+    expect(deployment.capabilities["secrets.own"]).toBe("disabled");
+    expect(deployment.capabilities["plugin.communityCode"]).toBe(
+      "operator-only",
+    );
     expect(body.operatorTokenRequired).toBe(true);
     expect(
       (body.storage as { data: { frontendMode: string } }).data.frontendMode,
@@ -74,7 +105,16 @@ describe("GET /api/health deployment", () => {
       },
       "sqlite",
     );
-    expect(body.deployment).toEqual({ form: "hosted", modelRelay: true });
+    expect(body.deployment).toMatchObject({
+      form: "hosted",
+      modelRelay: true,
+    });
+    const deployment = body.deployment as {
+      capabilities: Record<string, string>;
+    };
+    expect(deployment.capabilities["plugin.providerSource"]).toBe("disabled");
+    expect(deployment.capabilities["channel.bridge"]).toBe("disabled");
+    expect(deployment.capabilities["plugin.declarative"]).toBe("enabled");
     expect(body.operatorTokenRequired).toBe(true);
   });
 });

@@ -92,6 +92,9 @@ export async function extractDeclarations(
   );
   const tools: string[] = [];
   const actions: string[] = [];
+  const appActions: string[] = [];
+  const flows: string[] = [];
+  const appEvents: string[] = [];
   const services: ServiceContribution[] = [];
   const forms: string[] = [];
   const wires: string[] = [];
@@ -138,6 +141,18 @@ export async function extractDeclarations(
     registerRpc(name) {
       record(actions, name);
     },
+    registerAppAction(name) {
+      record(appActions, name);
+    },
+    registerConfigFlow(flowId) {
+      record(flows, flowId);
+    },
+    onAppEvent(event) {
+      record(appEvents, event);
+    },
+    registerScheduledTask() {
+      // Scheduled task metadata (intervalMs/timeoutMs) stays authored under contributes.schedules.
+    },
     registerService(definition) {
       const contract = z.string().min(1).parse(definition.contract);
       const modelFacing = definition.modelFacing === true;
@@ -174,6 +189,11 @@ export async function extractDeclarations(
         module.music,
       ])
         for (const wire of group ?? []) record(wires, wire.id);
+    },
+    registerProviderSources(sources) {
+      for (const source of sources) {
+        z.string().min(1).parse(source.id);
+      }
     },
     on(event, _handler, options) {
       const phase = options?.enforce ?? "normal";
@@ -284,6 +304,9 @@ export async function extractDeclarations(
   for (const [key, values] of Object.entries({
     tools,
     actions,
+    ...(appActions.length ? { appActions } : {}),
+    ...(flows.length ? { flows } : {}),
+    ...(appEvents.length ? { appEvents } : {}),
     services,
     forms,
     wires,
@@ -294,6 +317,9 @@ export async function extractDeclarations(
   return {
     tools,
     actions,
+    ...(appActions.length ? { appActions } : {}),
+    ...(flows.length ? { flows } : {}),
+    ...(appEvents.length ? { appEvents } : {}),
     services,
     forms,
     wires,

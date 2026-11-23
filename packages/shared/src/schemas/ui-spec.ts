@@ -14,6 +14,12 @@ import {
 } from "../types/plugin-ui.js";
 import { STORY_LIMITS, storySegmentKinds } from "./story-output.js";
 import {
+  UI_SETTINGS_GROUPS,
+  composerActionSpecSchema,
+  messageActionSpecSchema,
+  topbarStatusSpecSchema,
+} from "../platform/ui-mounts.js";
+import {
   sessionMessagesPropsSchema,
   sessionComposerPropsSchema,
   exitTransitionSchema,
@@ -345,7 +351,18 @@ export const segmentTemplateMatchSchema = z
 export type SegmentTemplateMatch = z.infer<typeof segmentTemplateMatchSchema>;
 
 /** Where a UI spec is declared: a key of `contributes.ui`. */
-export type PluginUiSpecSlot = "right" | "message" | "view" | "segment";
+export type PluginUiSpecSlot =
+  | "right"
+  | "message"
+  | "view"
+  | "segment"
+  | "settingsSection"
+  | "appPage"
+  | "topbarStatus"
+  | "composerAction"
+  | "messageAction"
+  | "messageBelow"
+  | "window";
 
 /** Spec fields a segment template cannot use: it only draws one paragraph. */
 const SEGMENT_TEMPLATE_EXCLUDED_FIELDS = [
@@ -375,6 +392,245 @@ export interface PluginUiSpecIssue {
   readonly message: string;
 }
 
+const COMPACT_SLOT_SCHEMAS = {
+  topbarStatus: topbarStatusSpecSchema,
+  composerAction: composerActionSpecSchema,
+  messageAction: messageActionSpecSchema,
+} as const;
+
+const WEBVIEW_ROOT_SLOTS = new Set<PluginUiSpecSlot | undefined>([
+  "view",
+  "appPage",
+  "window",
+]);
+
+function checkOwnerBindings(
+  spec: unknown,
+  ownerPluginId: string,
+  issues: PluginUiSpecIssue[],
+): void {
+  walkSpec(spec, [], (at, key, value) => {
+    if (
+      (key === "pluginId" ||
+        key === "sourcePlugin" ||
+        key === "sourcePluginId") &&
+      value !== ownerPluginId
+    )
+      issues.push({
+        path: formatPath(at),
+        message: `a UI binding must reference its owning plugin ${ownerPluginId}`,
+      });
+  });
+}
+
+function requireValidViewIdAndLabel(
+  record: Readonly<Record<string, unknown>>,
+  slotLabel: string,
+  issues: PluginUiSpecIssue[],
+): void {
+  for (const field of ["id", "label"])
+    if (record[field] === undefined)
+      issues.push({
+        path: field,
+        message: `${field} is required in ${slotLabel}`,
+      });
+  if (typeof record.id === "string" && !PLUGIN_VIEW_ID_PATTERN.test(record.id))
+    issues.push({
+      path: "id",
+      message: `id in ${slotLabel} must match ^[a-z][a-z0-9-]{0,63}$`,
+    });
+}
+
+function rejectSessionOrSecretSource(
+  record: Readonly<Record<string, unknown>>,
+  message: string,
+  issues: PluginUiSpecIssue[],
+): void {
+  const ds = record.dataSource as { source?: unknown } | undefined;
+  if (
+    typeof ds?.source === "string" &&
+    (ds.source.startsWith("secrets") || ds.source.startsWith("session."))
+  )
+    issues.push({ path: "dataSource.source", message });
+}
+
+function settingsSectionIssues(
+  record: Readonly<Record<string, unknown>>,
+): PluginUiSpecIssue[] {
+  const issues: PluginUiSpecIssue[] = [];
+  requireValidViewIdAndLabel(record, "contributes.ui.settingsSection", issues);
+  if (
+    typeof record.sectionGroup !== "string" ||
+    !(UI_SETTINGS_GROUPS as readonly string[]).includes(record.sectionGroup)
+  )
+    issues.push({
+      path: "sectionGroup",
+      message: `sectionGroup is required (${UI_SETTINGS_GROUPS.join(", ")})`,
+    });
+  if (record.webview !== undefined)
+    issues.push({
+      path: "webview",
+      message: "webview is not valid in contributes.ui.settingsSection",
+    });
+  rejectSessionOrSecretSource(
+    record,
+    "settingsSection cannot bind secrets or session-scoped sources",
+    issues,
+  );
+  return issues;
+}
+
+function appPageIssues(
+  record: Readonly<Record<string, unknown>>,
+): PluginUiSpecIssue[] {
+  const issues: PluginUiSpecIssue[] = [];
+  requireValidViewIdAndLabel(record, "contributes.ui.appPage", issues);
+  rejectSessionOrSecretSource(
+    record,
+    "appPage cannot bind session-scoped dataSource sources",
+    issues,
+  );
+  return issues;
+}
+
+const MESSAGE_BELOW_ROLES_SCHEMA = z
+  .array(z.enum(["user", "assistant"]))
+  .min(1)
+  .max(2);
+const MESSAGE_BELOW_KINDS_SCHEMA = z.array(z.string().min(1)).min(1).max(16);
+const MESSAGE_BELOW_MAX_HEIGHT_SCHEMA = z.number().int().min(40).max(320);
+const WINDOW_DEFAULT_WIDTH_SCHEMA = z.number().int().min(240).max(960);
+const WINDOW_DEFAULT_HEIGHT_SCHEMA = z.number().int().min(180).max(720);
+
+function checkOptionalField(
+  record: Readonly<Record<string, unknown>>,
+  field: string,
+  schema: z.ZodTypeAny,
+  message: string,
+  issues: PluginUiSpecIssue[],
+): void {
+  if (record[field] === undefined) return;
+  if (!schema.safeParse(record[field]).success) {
+    issues.push({ path: field, message });
+  }
+}
+
+function parseSchemaIssues(
+  schema: z.ZodTypeAny,
+  spec: unknown,
+): PluginUiSpecIssue[] {
+  const result = schema.safeParse(spec);
+  return result.success
+    ? []
+    : result.error.issues.map((issue) => ({
+        path: formatPath(issue.path) || "(root)",
+        message: issue.message,
+      }));
+}
+
+function messageBelowIssues(
+  record: Readonly<Record<string, unknown>>,
+): PluginUiSpecIssue[] {
+  const issues: PluginUiSpecIssue[] = [];
+  if (record.webview !== undefined)
+    issues.push({
+      path: "webview",
+      message: "webview is not valid in contributes.ui.messageBelow",
+    });
+  checkOptionalField(
+    record,
+    "roles",
+    MESSAGE_BELOW_ROLES_SCHEMA,
+    'roles must be a non-empty list of "user" or "assistant"',
+    issues,
+  );
+  checkOptionalField(
+    record,
+    "kinds",
+    MESSAGE_BELOW_KINDS_SCHEMA,
+    "kinds must be non-empty strings",
+    issues,
+  );
+  checkOptionalField(
+    record,
+    "maxHeight",
+    MESSAGE_BELOW_MAX_HEIGHT_SCHEMA,
+    "maxHeight must be an integer between 40 and 320",
+    issues,
+  );
+  const ds = record.dataSource as { source?: unknown } | undefined;
+  if (typeof ds?.source === "string" && ds.source.startsWith("secrets"))
+    issues.push({
+      path: "dataSource.source",
+      message: "messageBelow cannot bind secrets sources",
+    });
+  displayOnlyViewIssues(record.view, "a messageBelow card", issues);
+  return issues;
+}
+
+function floatingWindowIssues(
+  record: Readonly<Record<string, unknown>>,
+): PluginUiSpecIssue[] {
+  const issues: PluginUiSpecIssue[] = [];
+  requireValidViewIdAndLabel(record, "contributes.ui.window", issues);
+  if (
+    record.windowScope !== undefined &&
+    record.windowScope !== "session" &&
+    record.windowScope !== "instance"
+  )
+    issues.push({
+      path: "windowScope",
+      message: 'windowScope must be "session" or "instance"',
+    });
+  checkOptionalField(
+    record,
+    "defaultWidth",
+    WINDOW_DEFAULT_WIDTH_SCHEMA,
+    "defaultWidth must be an integer between 240 and 960",
+    issues,
+  );
+  checkOptionalField(
+    record,
+    "defaultHeight",
+    WINDOW_DEFAULT_HEIGHT_SCHEMA,
+    "defaultHeight must be an integer between 180 and 720",
+    issues,
+  );
+  if (record.windowScope === "instance")
+    rejectSessionOrSecretSource(
+      record,
+      "instance-scoped window cannot bind session-scoped dataSource sources",
+      issues,
+    );
+  return issues;
+}
+
+function displayOnlyViewIssues(
+  view: unknown,
+  surfaceName: string,
+  issues: PluginUiSpecIssue[],
+): void {
+  visitViewNodes(view, ["view"], (node, at) => {
+    const field = node.component !== undefined ? "component" : "type";
+    const name = node[field];
+    if (
+      typeof name === "string" &&
+      KNOWN_COMPONENTS.has(name) &&
+      !SEGMENT_TEMPLATE_COMPONENTS.has(name)
+    )
+      issues.push({
+        path: formatPath([...at, field]),
+        message: `${name} is not available in ${surfaceName}, which only displays; use one of ${SEGMENT_TEMPLATE_COMPONENT_NAMES.join(", ")}`,
+      });
+    for (const actionField of ["on", "watch"])
+      if (node[actionField] !== undefined)
+        issues.push({
+          path: formatPath([...at, actionField]),
+          message: `${surfaceName} is display-only; remove the action`,
+        });
+  });
+}
+
 /**
  * Everything wrong with an authored UI spec. Besides the schema: every
  * plugin binding names its owner (cross-plugin data goes through kernel
@@ -386,18 +642,21 @@ export function pluginUiSpecIssues(
   ownerPluginId: string,
   slot?: PluginUiSpecSlot,
 ): PluginUiSpecIssue[] {
-  const result = pluginUiSpecSchema.safeParse(spec);
-  const issues: PluginUiSpecIssue[] = result.success
-    ? []
-    : result.error.issues.map((issue) => ({
-        path: formatPath(issue.path) || "(root)",
-        message: issue.message,
-      }));
+  if (
+    slot === "topbarStatus" ||
+    slot === "composerAction" ||
+    slot === "messageAction"
+  ) {
+    const issues = parseSchemaIssues(COMPACT_SLOT_SCHEMAS[slot], spec);
+    checkOwnerBindings(spec, ownerPluginId, issues);
+    return issues;
+  }
+  const issues = parseSchemaIssues(pluginUiSpecSchema, spec);
   if (spec && typeof spec === "object" && !Array.isArray(spec)) {
     const record = spec as Record<string, unknown>;
     const webview = record.webview;
     if (
-      slot !== "view" &&
+      !WEBVIEW_ROOT_SLOTS.has(slot) &&
       webview &&
       typeof webview === "object" &&
       "root" in webview
@@ -407,21 +666,7 @@ export function pluginUiSpecIssues(
         message: "webview.root is only valid in contributes.ui.view",
       });
     if (slot === "view") {
-      for (const field of ["id", "label"])
-        if (record[field] === undefined)
-          issues.push({
-            path: field,
-            message: `${field} is required in contributes.ui.view`,
-          });
-      if (
-        typeof record.id === "string" &&
-        !PLUGIN_VIEW_ID_PATTERN.test(record.id)
-      )
-        issues.push({
-          path: "id",
-          message:
-            "id in contributes.ui.view must match ^[a-z][a-z0-9-]{0,63}$",
-        });
+      requireValidViewIdAndLabel(record, "contributes.ui.view", issues);
       for (const field of [
         "surfaces",
         "group",
@@ -449,6 +694,11 @@ export function pluginUiSpecIssues(
         message: "composer is only valid in contributes.ui.view",
       });
     if (slot === "segment") issues.push(...segmentTemplateIssues(record));
+    if (slot === "settingsSection")
+      issues.push(...settingsSectionIssues(record));
+    if (slot === "appPage") issues.push(...appPageIssues(record));
+    if (slot === "messageBelow") issues.push(...messageBelowIssues(record));
+    if (slot === "window") issues.push(...floatingWindowIssues(record));
     const sessionWidgets = new Set<string>();
     visitViewNodes(record.view, ["view"], (node, at, repeated) => {
       const field = node.component !== undefined ? "component" : "type";
@@ -478,18 +728,7 @@ export function pluginUiSpecIssues(
       sessionWidgets.add(key);
     });
   }
-  walkSpec(spec, [], (at, key, value) => {
-    if (
-      (key === "pluginId" ||
-        key === "sourcePlugin" ||
-        key === "sourcePluginId") &&
-      value !== ownerPluginId
-    )
-      issues.push({
-        path: formatPath(at),
-        message: `a UI binding must reference its owning plugin ${ownerPluginId}`,
-      });
-  });
+  checkOwnerBindings(spec, ownerPluginId, issues);
   return issues;
 }
 
@@ -521,26 +760,7 @@ function segmentTemplateIssues(
         path: field,
         message: "not valid in a segment template",
       });
-  visitViewNodes(record.view, ["view"], (node, at) => {
-    const field = node.component !== undefined ? "component" : "type";
-    const name = node[field];
-    // An unknown name is already a schema issue.
-    if (
-      typeof name === "string" &&
-      KNOWN_COMPONENTS.has(name) &&
-      !SEGMENT_TEMPLATE_COMPONENTS.has(name)
-    )
-      issues.push({
-        path: formatPath([...at, field]),
-        message: `${name} is not available in a segment template, which only displays; use one of ${SEGMENT_TEMPLATE_COMPONENT_NAMES.join(", ")}`,
-      });
-    for (const field of ["on", "watch"])
-      if (node[field] !== undefined)
-        issues.push({
-          path: formatPath([...at, field]),
-          message: "a segment template is display-only; remove the action",
-        });
-  });
+  displayOnlyViewIssues(record.view, "a segment template", issues);
   return issues;
 }
 

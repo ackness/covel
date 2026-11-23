@@ -100,6 +100,7 @@ export function createHealthRoutes(
         form,
         // Models on the player's computer or network go through their browser.
         modelRelay: profile.credentials.modelRelay,
+        capabilities: profile.capabilities,
         ...(source ? { source } : {}),
       },
       storage,

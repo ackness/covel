@@ -35,6 +35,9 @@ it("routes current composite settings and plugin groups to their panes", () => {
   // Capability overrides belong to developer mode.
   expect(resolveSettingsNode(tree, "llm.capabilityOverrides")).toBeUndefined();
   expect(resolveSettingsNode(tree, "trust.sources")?.id).toBe("packages");
+  expect(resolveSettingsNode(tree, "permissions.policy")?.id).toBe(
+    "permissions",
+  );
   expect(resolveSettingsNode(tree, "group.general")?.id).toBe("general");
   expect(resolveSettingsNode(tree, "ui.appearance")?.id).toBe("appearance");
   expect(resolveSettingsNode(tree, "plugin")?.id).toBe("packages");
@@ -101,7 +104,7 @@ it("keeps trusted sources only under Plugins and the raw configuration under Adv
   const tree = navigation();
   expect(
     tree.filter((node) => node.parentId === "group.advanced").map((n) => n.id),
-  ).toEqual(["advanced", "raw-config", "operator-access"]);
+  ).toEqual(["advanced", "permissions", "raw-config", "operator-access"]);
   expect(tree.find((node) => node.id === "packages")?.parentId).toBe("plugin");
   expect(
     tree

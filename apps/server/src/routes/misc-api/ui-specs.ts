@@ -1,19 +1,47 @@
 import type {
   ResolvedPluginTheme,
   ResolvedPluginThemeEntry,
+  SlashCommandSpec,
 } from "@covel/shared";
 import {
+  ID_BEARING_UI_SLOTS,
   loadPluginUiSpecs,
   PLUGIN_UI_SPEC_SLOTS,
   pluginDeclarations,
 } from "@covel/plugin-loader";
 import type { PluginAssetRoot, PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore, SessionRecord } from "@covel/store";
+import { isInstancePluginAllowed } from "../api/bootstrap/instance-plugins.js";
+import { mergePluginCommands } from "../api/session/commands.js";
 import { runnablePluginIds } from "../api/session/plugins.js";
+import type { PermissionService } from "../../trust/permission-service.js";
+import type { TrustedSourceService } from "../../trust/trusted-source-service.js";
 import { type UiSlotName } from "./shared.js";
 import type { UiSpecDiagnostic } from "./ui-spec-schema.js";
 
 const UI_SLOTS = PLUGIN_UI_SPEC_SLOTS satisfies readonly UiSlotName[];
+const SESSION_UI_SLOTS = [
+  "right",
+  "message",
+  "view",
+  "segment",
+  "composerAction",
+  "messageAction",
+  "messageBelow",
+] as const;
+const INSTANCE_UI_SLOTS = [
+  "settingsSection",
+  "appPage",
+  "topbarStatus",
+] as const;
+const INSTANCE_SLOT_SET = new Set<string>(INSTANCE_UI_SLOTS);
+
+export interface AppCommandProjection extends SlashCommandSpec {
+  readonly id: string;
+  readonly pluginId: string;
+  readonly source: "plugin";
+  readonly sourceLabel: string | Readonly<Record<string, string>>;
+}
 
 type SlotSpecs = Partial<
   Record<
@@ -31,6 +59,7 @@ interface PluginSlotSpecs {
   readonly themes: readonly ResolvedPluginTheme[];
   readonly pluginId: string;
   readonly runtimes: readonly RuntimeSlotSpecs[];
+  readonly appCommands: readonly AppCommandProjection[];
 }
 
 interface ValidatedSpecs {
@@ -60,9 +89,18 @@ async function projectRegistryUiSpecs(
   for (const entry of registry.getAll().values()) {
     if (entry.status === "error" || !entry.rootPath) continue;
     const runtimes: RuntimeSlotSpecs[] = [];
-    const viewIds = new Set<string>();
+    const seenIdsBySlot = new Map<UiSlotName, Set<string>>();
     const themes: ResolvedPluginTheme[] = [];
     const themeState = { ids: new Set<string>(), count: 0 };
+    const appCommands: AppCommandProjection[] = mergePluginCommands(entry)
+      .filter((cmd) => cmd.scope === "instance")
+      .map((cmd) => ({
+        ...cmd,
+        id: `${entry.id}:${cmd.name}`,
+        pluginId: entry.id,
+        source: "plugin" as const,
+        sourceLabel: entry.summary.displayName ?? entry.summary.name,
+      }));
 
     for (const { manifest } of pluginDeclarations(entry)) {
       if (!manifest.ui) continue;
@@ -104,14 +142,19 @@ async function projectRegistryUiSpecs(
       for (const slot of UI_SLOTS) {
         const specs = loaded.slots[slot];
         if (!specs?.length) continue;
-        if (slot !== "view") {
+        if (!ID_BEARING_UI_SLOTS.has(slot)) {
           slots[slot] = specs;
           continue;
         }
-        slots.view = specs.filter((spec, specIndex) => {
+        slots[slot] = specs.filter((spec, specIndex) => {
           const id = spec.id as string;
-          if (!viewIds.has(id)) {
-            viewIds.add(id);
+          let seen = seenIdsBySlot.get(slot);
+          if (!seen) {
+            seen = new Set<string>();
+            seenIdsBySlot.set(slot, seen);
+          }
+          if (!seen.has(id)) {
+            seen.add(id);
             return true;
           }
           diagnostics.push({
@@ -124,7 +167,7 @@ async function projectRegistryUiSpecs(
               {
                 path: "id",
                 code: "invalid",
-                message: `duplicate view id "${id}"`,
+                message: `duplicate ${slot} id "${id}"`,
               },
             ],
           });
@@ -136,8 +179,8 @@ async function projectRegistryUiSpecs(
       }
     }
 
-    if (runtimes.length > 0 || themes.length > 0) {
-      pluginSpecs.push({ pluginId: entry.id, runtimes, themes });
+    if (runtimes.length > 0 || themes.length > 0 || appCommands.length > 0) {
+      pluginSpecs.push({ pluginId: entry.id, runtimes, themes, appCommands });
     }
   }
 
@@ -163,30 +206,46 @@ function loadValidatedSpecs(registry: PluginRegistry): Promise<ValidatedSpecs> {
   return pending;
 }
 
+export interface UiSpecsSlotGroup {
+  readonly pluginId: string;
+  readonly specs: readonly Record<string, unknown>[];
+}
+
 export async function buildUiSpecsResponse(params: {
   sessionId?: string;
   session?: SessionRecord;
   registry: PluginRegistry;
   store: DataStore;
+  permissionService?: PermissionService;
+  trustedSources?: TrustedSourceService;
 }): Promise<{
-  right: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
-  message: Array<{
-    pluginId: string;
-    specs: readonly Record<string, unknown>[];
-  }>;
-  view: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
+  right: UiSpecsSlotGroup[];
+  message: UiSpecsSlotGroup[];
+  view: UiSpecsSlotGroup[];
   /**
    * Story paragraph templates, in the session's plugin order when a session
    * is given; the client breaks ties in this order.
    */
-  segment: Array<{
-    pluginId: string;
-    specs: readonly Record<string, unknown>[];
-  }>;
+  segment: UiSpecsSlotGroup[];
+  settingsSection: UiSpecsSlotGroup[];
+  appPage: UiSpecsSlotGroup[];
+  topbarStatus: UiSpecsSlotGroup[];
+  composerAction: UiSpecsSlotGroup[];
+  messageAction: UiSpecsSlotGroup[];
+  messageBelow: UiSpecsSlotGroup[];
+  window: UiSpecsSlotGroup[];
+  appCommands: AppCommandProjection[];
   theme: ResolvedPluginThemeEntry[];
   diagnostics: UiSpecDiagnostic[];
 }> {
-  const { sessionId, session: knownSession, registry, store } = params;
+  const {
+    sessionId,
+    session: knownSession,
+    registry,
+    store,
+    permissionService,
+    trustedSources,
+  } = params;
   const session =
     knownSession ?? (sessionId ? await store.getSession(sessionId) : undefined);
   const runnable = session
@@ -195,31 +254,67 @@ export async function buildUiSpecsResponse(params: {
   const activeFilter = runnable ? new Set(runnable) : undefined;
   const loaded = await loadValidatedSpecs(registry);
 
-  type SlotEntry = {
-    pluginId: string;
-    specs: readonly Record<string, unknown>[];
-  };
-  const bySlot: Record<Exclude<UiSlotName, "theme">, SlotEntry[]> = {
+  const instanceAllowed = (pluginId: string): boolean =>
+    isInstancePluginAllowed(
+      { registry, permissionService, trustedSources },
+      pluginId,
+    );
+
+  const bySlot: Record<Exclude<UiSlotName, "theme">, UiSpecsSlotGroup[]> = {
     right: [],
     message: [],
     view: [],
     segment: [],
+    settingsSection: [],
+    appPage: [],
+    topbarStatus: [],
+    composerAction: [],
+    messageAction: [],
+    messageBelow: [],
+    window: [],
   };
 
   const theme: ResolvedPluginThemeEntry[] = [];
+  const appCommands: AppCommandProjection[] = [];
   for (const plugin of loaded.pluginSpecs) {
-    if (activeFilter && !activeFilter.has(plugin.pluginId)) continue;
-    if (plugin.themes.length)
+    const sessionAllowed = !activeFilter || activeFilter.has(plugin.pluginId);
+    const canShowInstance = instanceAllowed(plugin.pluginId);
+    if (sessionAllowed && plugin.themes.length) {
       theme.push({
         pluginId: plugin.pluginId,
         specs: plugin.themes.map((spec) => structuredClone(spec)),
       });
-    for (const slot of UI_SLOTS) {
-      const specs = plugin.runtimes.flatMap(
-        (runtime) => runtime.slots[slot] ?? [],
+    }
+    if (sessionAllowed) {
+      for (const slot of SESSION_UI_SLOTS) {
+        const specs = plugin.runtimes.flatMap(
+          (runtime) => runtime.slots[slot] ?? [],
+        );
+        if (specs.length > 0) {
+          bySlot[slot].push({ pluginId: plugin.pluginId, specs });
+        }
+      }
+    }
+    if (canShowInstance) {
+      for (const slot of INSTANCE_UI_SLOTS) {
+        const specs = plugin.runtimes.flatMap(
+          (runtime) => runtime.slots[slot] ?? [],
+        );
+        if (specs.length > 0) {
+          bySlot[slot].push({ pluginId: plugin.pluginId, specs });
+        }
+      }
+      if (plugin.appCommands.length > 0) {
+        appCommands.push(...plugin.appCommands);
+      }
+    }
+    const windowSpecs = plugin.runtimes
+      .flatMap((runtime) => runtime.slots.window ?? [])
+      .filter((spec) =>
+        spec.windowScope === "instance" ? canShowInstance : sessionAllowed,
       );
-      if (specs.length === 0) continue;
-      bySlot[slot].push({ pluginId: plugin.pluginId, specs });
+    if (windowSpecs.length > 0) {
+      bySlot.window.push({ pluginId: plugin.pluginId, specs: windowSpecs });
     }
   }
 
@@ -233,9 +328,13 @@ export async function buildUiSpecsResponse(params: {
   }
 
   const diagnostics = loaded.diagnostics.filter(
-    (diagnostic) => !activeFilter || activeFilter.has(diagnostic.pluginId),
+    (diagnostic) =>
+      !activeFilter ||
+      activeFilter.has(diagnostic.pluginId) ||
+      (INSTANCE_SLOT_SET.has(diagnostic.slot) &&
+        instanceAllowed(diagnostic.pluginId)),
   );
-  return { ...bySlot, theme, diagnostics };
+  return { ...bySlot, appCommands, theme, diagnostics };
 }
 
 export async function findPluginAssetRoot(

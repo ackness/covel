@@ -324,6 +324,9 @@ export async function executeAgentRuntime({
   // assembly contributes reads to this invocation's earliest external basis.
   for (const read of injectedReads)
     baselinesFor(pluginDataVisibility.recorder).observe(read);
+  if (assembled.promptDiagnostics?.length) {
+    deps.onPromptDiagnostics?.(input.sessionId, assembled.promptDiagnostics);
+  }
 
   // ── PostContextAssembly hook ─────────────────────────────────
   // Turn-level, once per runtime: lets plugins rewrite the assembled system

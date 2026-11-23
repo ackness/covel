@@ -173,6 +173,14 @@ const ROUTES: Record<string, RouteAccess> = {
   "GET /api/plugins/:id": PUBLIC,
   "DELETE /api/plugins/:id": needs("host.files"),
   "POST /api/plugins/:id/reload": needs("host.files"),
+  "POST /api/plugins/:pluginId/actions/:action": needs("host.config"),
+  "GET /api/plugins/:pluginId/instance-data/:namespace": needs("host.config"),
+  "POST /api/plugins/:pluginId/flows/:flowId/start": needs("host.config"),
+  "GET /api/plugins/:pluginId/flows/:flowId/runs/:runId": needs("host.config"),
+  "POST /api/plugins/:pluginId/flows/:flowId/runs/:runId/step":
+    needs("host.config"),
+  "DELETE /api/plugins/:pluginId/flows/:flowId/runs/:runId":
+    needs("host.config"),
   "GET /api/framework/capabilities": PUBLIC,
   "GET /api/framework/authoring": PUBLIC,
   "GET /api/plugin-flows": PUBLIC,
@@ -253,6 +261,14 @@ const ROUTES: Record<string, RouteAccess> = {
   "GET /api/health": PUBLIC,
   "GET /api/config/server-settings": PUBLIC,
   "PUT /api/config/server-settings": needs("server.settings"),
+  "GET /api/permissions/snapshot": PUBLIC,
+  "PUT /api/permissions/policy": needs("server.settings"),
+  "GET /api/permissions/plugins": needs("server.diagnostics"),
+  "PUT /api/permissions/plugins/:pluginId/grants": needs(
+    "host.config",
+    "plugin.community",
+  ),
+  "DELETE /api/permissions/plugins/:pluginId/grants": needs("host.config"),
   "GET /api/model-db": PUBLIC,
   "GET /api/model-db/search": PUBLIC,
   "GET /api/model-db/lookup": PUBLIC,
@@ -267,6 +283,8 @@ const ROUTES: Record<string, RouteAccess> = {
   "GET /api/ai/protocols": PUBLIC,
   "POST /api/ai/models": needs("model.probe"),
   "POST /api/ai/ping": needs("model.probe"),
+  "GET /api/provider-sources": needs("host.config"),
+  "GET /api/provider-sources/:pluginId/:sourceId/usage": needs("host.config"),
   "GET /api/config/info": {
     ...needs("server.diagnostics"),
     refusal: "redacted",
@@ -436,9 +454,9 @@ describe("route access table", () => {
 describe("deployment variables", () => {
   const ROOT = join(import.meta.dirname, "../../../..");
   const DEPLOYMENT_FIELDS =
-    /\.(deploymentTier|desktopRestToken|installApiEnabled|mediaCleanupEnabled)\b/;
+    /\.(deploymentTier|desktopRestToken|disabledCapabilities|installApiEnabled|mediaCleanupEnabled)\b/;
   const DEPLOYMENT_NAMES =
-    /["'`](DEPLOYMENT_TIER|COVEL_DESKTOP_REST_TOKEN|COVEL_INSTALL_API_ENABLED|COVEL_MEDIA_CLEANUP_ENABLED|COVEL_ALLOWED_HOSTS)["'`]/;
+    /["'`](DEPLOYMENT_TIER|COVEL_DESKTOP_REST_TOKEN|COVEL_DISABLED_CAPABILITIES|COVEL_INSTALL_API_ENABLED|COVEL_MEDIA_CLEANUP_ENABLED|COVEL_ALLOWED_HOSTS)["'`]/;
 
   async function sourceFiles(dir: string): Promise<string[]> {
     const out: string[] = [];

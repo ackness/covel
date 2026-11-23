@@ -12,7 +12,12 @@ vi.mock("../request.js", () => ({
     }),
 }));
 
-const { fetchServerHealth, getSharedServerInfo } = await import("../health.js");
+const {
+  fetchServerHealth,
+  getDeploymentCapabilityCeiling,
+  getSharedServerInfo,
+  isDeploymentCapabilityDisabled,
+} = await import("../health.js");
 
 function health(
   form: string,
@@ -70,5 +75,43 @@ describe("getSharedServerInfo", () => {
     });
     await fetchServerHealth();
     expect(getSharedServerInfo()).toEqual({});
+  });
+
+  it("parses valid deployment capability ceilings and drops malformed entries", async () => {
+    transport.body = {
+      status: "ok",
+      deployment: {
+        form: "browser-private",
+        capabilities: {
+          "plugin.providerSource": "disabled",
+          "plugin.communityCode": "operator-only",
+          "plugin.declarative": "enabled",
+          "unknown.key": "enabled",
+          "secrets.own": "super-admin",
+        },
+      },
+    };
+    await fetchServerHealth();
+    expect(getDeploymentCapabilityCeiling("plugin.providerSource")).toBe(
+      "disabled",
+    );
+    expect(isDeploymentCapabilityDisabled("plugin.providerSource")).toBe(true);
+    expect(getDeploymentCapabilityCeiling("plugin.communityCode")).toBe(
+      "operator-only",
+    );
+    expect(isDeploymentCapabilityDisabled("plugin.communityCode")).toBe(false);
+    expect(getDeploymentCapabilityCeiling("plugin.declarative")).toBe(
+      "enabled",
+    );
+    expect(getDeploymentCapabilityCeiling("secrets.own")).toBeUndefined();
+    expect(isDeploymentCapabilityDisabled("secrets.own")).toBe(false);
+
+    // Resets when a subsequent health response omits capabilities.
+    transport.body = health("personal", "remote");
+    await fetchServerHealth();
+    expect(
+      getDeploymentCapabilityCeiling("plugin.providerSource"),
+    ).toBeUndefined();
+    expect(isDeploymentCapabilityDisabled("plugin.providerSource")).toBe(false);
   });
 });

@@ -90,12 +90,14 @@ function overlayPresetKey(cp: CustomPresetInput): string {
     SCOPE_PREFIX +
     JSON.stringify([
       cp.id,
-      cp.provider,
+      cp.provider ?? cp.source ?? null,
       cp.model,
       cp.baseUrl ?? null,
       cp.protocol ?? null,
       cp.name ?? null,
       cp.reasoningEffort ?? null,
+      cp.source ?? null,
+      cp.account ?? null,
     ])
   );
 }
@@ -154,11 +156,18 @@ export function applySlotOverlay(
     // Hot-reload clears the registry while earlier requests can still own
     // references. Restore a missing registration before sharing it again.
     if (!hasPreset.call(deps.presetRegistry, key)) {
-      const capability = resolveCapability(cp.model, cp.provider, cp.protocol);
+      const effectiveProvider = cp.provider || cp.source!;
+      const capability = resolveCapability(
+        cp.model,
+        effectiveProvider,
+        cp.protocol,
+      );
       addPreset.call(deps.presetRegistry, {
         id: key,
         name: cp.name || cp.id,
-        provider: cp.provider,
+        provider: effectiveProvider,
+        ...(cp.source ? { source: cp.source } : {}),
+        ...(cp.account ? { account: cp.account } : {}),
         model: cp.model,
         ...(cp.protocol ? { protocol: cp.protocol } : {}),
         ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
@@ -348,11 +357,12 @@ export function resolveModelBinding(
 }
 
 function isUsableCustomPreset(cp: CustomPresetInput): boolean {
+  const hasProvider = typeof cp.provider === "string" && cp.provider.length > 0;
+  const hasSource = typeof cp.source === "string" && cp.source.length > 0;
   return (
     typeof cp.id === "string" &&
     cp.id.length > 0 &&
-    typeof cp.provider === "string" &&
-    cp.provider.length > 0 &&
+    (hasProvider || hasSource) &&
     typeof cp.model === "string" &&
     cp.model.length > 0
   );

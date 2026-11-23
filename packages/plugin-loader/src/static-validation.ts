@@ -296,6 +296,7 @@ export function validatePluginFiles(
   }
   // The same rules decide whether the game shows the panel (`loadPluginUiSpecs`).
   const viewIds = new Set<string>();
+  const slotIds = new Map<string, Set<string>>();
   const themeIds = new Set<string>();
   const themes = plugin.contributes?.ui?.theme ?? [];
   if (themes.length > MAX_PLUGIN_THEMES)
@@ -340,6 +341,26 @@ export function validatePluginFiles(
         if (viewIds.has(id))
           problems.push({ path: "id", message: `duplicate view id "${id}"` });
         viewIds.add(id);
+      } else if (
+        (slot === "settingsSection" ||
+          slot === "appPage" ||
+          slot === "topbarStatus" ||
+          slot === "composerAction" ||
+          slot === "messageAction" ||
+          slot === "window") &&
+        typeof id === "string"
+      ) {
+        let seen = slotIds.get(slot);
+        if (!seen) {
+          seen = new Set<string>();
+          slotIds.set(slot, seen);
+        }
+        if (seen.has(id))
+          problems.push({
+            path: "id",
+            message: `duplicate ${slot} id "${id}"`,
+          });
+        seen.add(id);
       }
       if (problems.length)
         throw new Error(

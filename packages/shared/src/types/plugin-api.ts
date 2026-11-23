@@ -193,7 +193,8 @@ export interface SessionPlugin extends PluginSummary {
   readonly paused?: {
     readonly reason: import("./execution.js").PluginFaultReason;
   };
-  readonly serverCodeApprovedBy?: "session" | "trusted-source";
+  readonly serverCodeApprovedBy?:
+    "session" | "trusted-source" | "persistent-grant";
   /** Live authorization for this session, independent of host publication. */
   readonly serverCodeApproved: boolean;
   /** Selected by the player but paused until this process receives approval. */

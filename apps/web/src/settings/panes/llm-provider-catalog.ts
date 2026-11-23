@@ -14,12 +14,15 @@ import {
   isReasoningEffort,
   type ReasoningEffort,
 } from "@covel/shared";
+import { parseQualifiedProviderSourceId } from "@covel/shared/platform";
 
 export interface ProviderCatalogEntry {
   /** Stable connection identity shown in the catalogue. */
   id: string;
   /** Provider family used for capability and default lookups. */
   provider: string;
+  source?: string;
+  account?: string;
   baseUrl: string;
   protocol: string;
   serverModels: PresetSummary[];
@@ -29,6 +32,8 @@ export interface ProviderCatalogEntry {
 export interface ProviderDraft {
   reasoningDefaults?: Record<string, ReasoningEffort | undefined>;
   providerId: string;
+  source?: string;
+  account?: string;
   baseUrl: string;
   protocol: string;
   modelIds: string;
@@ -85,6 +90,26 @@ export function normalizeProviderId(value: string): string {
   return providerKeyToId(value) ?? "";
 }
 
+function sanitizeSourceBinding(
+  rawSource: unknown,
+  rawAccount: unknown,
+  maxAccountLength?: number,
+): { source?: string; account?: string } {
+  const source =
+    typeof rawSource === "string" && parseQualifiedProviderSourceId(rawSource)
+      ? rawSource
+      : undefined;
+  if (!source || typeof rawAccount !== "string") {
+    return source ? { source } : {};
+  }
+  const trimmed = rawAccount.trim();
+  if (!trimmed) return { source };
+  return {
+    source,
+    account: maxAccountLength ? trimmed.slice(0, maxAccountLength) : trimmed,
+  };
+}
+
 /**
  * Canonicalize user-entered provider identities before UI operations and
  * merge matching connections without dropping model bindings.
@@ -101,13 +126,21 @@ export function normalizeProviderProfiles(
       : "";
     const existing = byId.get(id);
     if (!existing) {
-      const normalizedProfile = {
+      const { source, account } = sanitizeSourceBinding(
+        profile.source,
+        profile.account,
+      );
+      const normalizedProfile: ProviderModelProfile = {
         ...profile,
         id,
         name: profile.name.trim() || id,
       };
       if (provider) normalizedProfile.provider = provider;
       else delete normalizedProfile.provider;
+      if (source) normalizedProfile.source = source;
+      else delete normalizedProfile.source;
+      if (account) normalizedProfile.account = account;
+      else delete normalizedProfile.account;
       byId.set(id, normalizedProfile);
       continue;
     }
@@ -120,6 +153,12 @@ export function normalizeProviderProfiles(
       ...existing,
       ...(existing.provider || provider
         ? { provider: existing.provider || provider }
+        : {}),
+      ...(existing.source || profile.source
+        ? { source: existing.source || profile.source }
+        : {}),
+      ...(existing.account || profile.account
+        ? { account: existing.account || profile.account }
         : {}),
       baseUrl: existing.baseUrl || profile.baseUrl,
       protocol: existing.protocol ?? profile.protocol,
@@ -140,6 +179,8 @@ export function buildProviderCatalog(
     const entry = byId.get(providerId) ?? {
       id: providerId,
       provider: providerId,
+      ...(preset.source ? { source: preset.source } : {}),
+      ...(preset.account ? { account: preset.account } : {}),
       baseUrl: preset.baseUrl ?? "",
       protocol:
         preset.protocol ??
@@ -148,6 +189,8 @@ export function buildProviderCatalog(
       serverModels: [],
     };
     entry.serverModels.push(preset);
+    if (!entry.source && preset.source) entry.source = preset.source;
+    if (!entry.account && preset.account) entry.account = preset.account;
     if (!entry.baseUrl && preset.baseUrl) entry.baseUrl = preset.baseUrl;
     byId.set(providerId, entry);
   }
@@ -155,6 +198,8 @@ export function buildProviderCatalog(
     const entry = byId.get(profile.id) ?? {
       id: profile.id,
       provider: profile.provider ?? profile.id,
+      ...(profile.source ? { source: profile.source } : {}),
+      ...(profile.account ? { account: profile.account } : {}),
       baseUrl: profile.baseUrl,
       protocol:
         profile.protocol ??
@@ -165,6 +210,8 @@ export function buildProviderCatalog(
     };
     entry.localProfile = profile;
     entry.provider = profile.provider ?? profile.id;
+    if (profile.source) entry.source = profile.source;
+    if (profile.account) entry.account = profile.account;
     if (profile.baseUrl) entry.baseUrl = profile.baseUrl;
     if (profile.protocol) entry.protocol = profile.protocol;
     byId.set(profile.id, entry);
@@ -270,10 +317,17 @@ export function sanitizeImportedProfile(
     isProviderProtocolId(profile.protocol)
       ? profile.protocol
       : undefined;
+  const { source, account } = sanitizeSourceBinding(
+    profile.source,
+    profile.account,
+    MAX_PROVIDER_ID_LENGTH,
+  );
 
   return {
     id,
     ...(provider && provider !== id ? { provider } : {}),
+    ...(source ? { source } : {}),
+    ...(account ? { account } : {}),
     name: name || id,
     baseUrl,
     ...(protocol ? { protocol } : {}),

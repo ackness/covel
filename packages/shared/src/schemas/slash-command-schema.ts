@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { configFlowIdSchema } from "../platform/index.js";
+import { rpcActionNameSchema } from "./rpc-action.js";
+import { PLUGIN_VIEW_ID_PATTERN } from "./view-mode.js";
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
 
@@ -60,9 +63,47 @@ export const slashCommandSpecSchema = z
       .max(16)
       .describe("Positional arguments, in order. Names must be unique.")
       .optional(),
-    action: slashCommandNameSchema.describe(
-      "RPC action the command invokes. It must be listed in `contributes.actions`.",
-    ),
+    scope: z
+      .enum(["session", "instance"])
+      .describe(
+        "Where this command appears: `session` (default, slash commands) or `instance` (application command palette).",
+      )
+      .optional(),
+    palette: z
+      .boolean()
+      .describe("When true, surface in the global command palette (⌘K).")
+      .optional(),
+    shortcutHint: z
+      .string()
+      .min(1)
+      .max(24)
+      .describe("Optional keyboard shortcut hint shown in the command palette.")
+      .optional(),
+    action: slashCommandNameSchema
+      .describe(
+        "Session RPC action the command invokes. Must be listed in `contributes.actions`.",
+      )
+      .optional(),
+    appAction: rpcActionNameSchema
+      .describe(
+        "Instance app action the command invokes. Must be listed in `contributes.appActions`.",
+      )
+      .optional(),
+    openFlow: configFlowIdSchema
+      .describe(
+        "Declarative Config Flow ID the command launches. Must be listed in `contributes.flows`.",
+      )
+      .optional(),
+    openPage: z
+      .string()
+      .regex(PLUGIN_VIEW_ID_PATTERN)
+      .describe("Application page ID (`contributes.ui.appPage`) to open.")
+      .optional(),
+    openWindow: z
+      .string()
+      .regex(PLUGIN_VIEW_ID_PATTERN)
+      .describe("Floating window ID (`contributes.ui.window`) to open.")
+      .optional(),
     context: z
       .array(z.enum(["session", "active-runtimes", "models"]))
       .max(3)
@@ -71,6 +112,46 @@ export const slashCommandSpecSchema = z
   })
   .strict()
   .superRefine((command, ctx) => {
+    const targets = [
+      command.action,
+      command.appAction,
+      command.openFlow,
+      command.openPage,
+      command.openWindow,
+    ].filter((value) => value !== undefined);
+    if (targets.length === 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["action"],
+        message:
+          "command requires one target: action, appAction, openFlow, openPage, or openWindow",
+      });
+    } else if (targets.length > 1) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "command may specify only one target among action, appAction, openFlow, openPage, and openWindow",
+      });
+    }
+    if (command.scope === "instance" && command.action !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["action"],
+        message: 'session `action` cannot be used with scope: "instance"',
+      });
+    }
+    if (
+      command.scope === "session" &&
+      (command.appAction !== undefined ||
+        command.openFlow !== undefined ||
+        command.openPage !== undefined)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          'appAction, openFlow, and openPage cannot be used with scope: "session"',
+      });
+    }
     const names = [command.name, ...(command.aliases ?? [])];
     if (new Set(names).size !== names.length) {
       ctx.addIssue({

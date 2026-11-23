@@ -11,6 +11,10 @@ import {
   storyContextPriorities,
 } from "@covel/plugin-handlers-utils";
 import { z } from "zod";
+import {
+  APP_EVENT_NAMES,
+  loopbackCallbackPermissionSchema,
+} from "../platform/index.js";
 import { compiledPresentationSchema } from "./presentation.js";
 import { DATASET_TOOL_KINDS, datasetToolsIssues } from "./dataset-tools.js";
 
@@ -883,6 +887,46 @@ export const pluginUiPathsSchema = z
         "Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker.",
       )
       .optional(),
+    settingsSection: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of declarative settings section specs rendered inside SettingsDialog.",
+      )
+      .optional(),
+    appPage: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of instance-scoped application workbench page specs (`ui.app.page`).",
+      )
+      .optional(),
+    topbarStatus: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of read-only topbar status indicator specs (`ui.topbar.status`).",
+      )
+      .optional(),
+    composerAction: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of session composer icon button specs (`ui.composer.action`).",
+      )
+      .optional(),
+    messageAction: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of per-message inline action button specs (`ui.message.action`).",
+      )
+      .optional(),
+    messageBelow: z
+      .array(z.string().min(1))
+      .describe(
+        "Paths of display-only message footer card specs (`ui.message.below`).",
+      )
+      .optional(),
+    window: z
+      .array(z.string().min(1))
+      .describe("Paths of floating tool window specs (`ui.window`).")
+      .optional(),
   })
   .strict();
 
@@ -1166,6 +1210,39 @@ export const permissionsDeclSchema = z
       .array(httpPermissionDeclSchema)
       .describe(
         "Upper bound of the HTTP origins and methods the runtime may use.",
+      )
+      .optional(),
+    secrets: z
+      .boolean()
+      .describe("Whether the plugin may read and write host-managed secrets.")
+      .optional(),
+    authProxy: z
+      .boolean()
+      .describe(
+        "Whether bounded instance authentication requests may use the configured proxy.",
+      )
+      .optional(),
+    scheduler: z
+      .boolean()
+      .describe(
+        "Whether the plugin may register bounded instance background schedules.",
+      )
+      .optional(),
+    sandboxWorker: z
+      .boolean()
+      .describe("Whether the plugin uses bounded Tier 1 sandboxed workers.")
+      .optional(),
+    loopbackCallback: loopbackCallbackPermissionSchema
+      .describe(
+        "Temporary localhost callback listener permissions for OAuth flows.",
+      )
+      .optional(),
+    appEvents: z
+      .array(z.enum(APP_EVENT_NAMES))
+      .min(1)
+      .refine(hasUniqueItems, "appEvents must be unique")
+      .describe(
+        "Read-only application lifecycle events this plugin subscribes to.",
       )
       .optional(),
   })

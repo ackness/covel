@@ -16,6 +16,10 @@ export interface ProviderModelProfile {
   id: string;
   /** Provider family used to inherit defaults when `id` is connection-specific. */
   provider?: string;
+  /** Qualified plugin provider source (`<pluginId>/<sourceId>`) managing credentials. */
+  source?: string;
+  /** Account ID selected within a multi-account provider source. */
+  account?: string;
   name: string;
   baseUrl: string;
   protocol?: string;
@@ -27,6 +31,8 @@ export interface CustomPreset {
   id: string;
   name: string;
   provider: string;
+  source?: string;
+  account?: string;
   baseUrl: string;
   model: string;
   protocol?: string;
@@ -50,6 +56,8 @@ export function flattenProviderProfiles(
         id: model.ref,
         name: model.name?.trim() || model.modelId.trim(),
         provider: profile.id,
+        ...(profile.source ? { source: profile.source } : {}),
+        ...(profile.account ? { account: profile.account } : {}),
         baseUrl: profile.baseUrl,
         model: model.modelId.trim(),
         ...((model.protocol ?? profile.protocol)
@@ -64,6 +72,8 @@ export interface UpsertProviderModelInput {
   reasoningEffort?: ReasoningEffort;
   providerId: string;
   providerName?: string;
+  source?: string;
+  account?: string;
   baseUrl: string;
   protocol?: string;
   modelId: string;
@@ -122,6 +132,8 @@ export function upsertProviderModel(
         ...canonicalProfiles,
         {
           id: providerId,
+          ...(input.source ? { source: input.source } : {}),
+          ...(input.account ? { account: input.account } : {}),
           name: input.providerName?.trim() || providerId,
           baseUrl: input.baseUrl.trim(),
           ...(input.protocol ? { protocol: input.protocol } : {}),

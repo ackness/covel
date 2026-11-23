@@ -8,6 +8,7 @@ import {
   type ModelCapabilityInfo,
   type ProviderModelProfile,
   type ProviderModelEntry,
+  type ProviderSourceSummary,
   type ReasoningEffort,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -20,12 +21,17 @@ import {
 } from "@/components/ui/tabs.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
+import { openPluginConfigFlow } from "@/lib/platform-ui-events.js";
 import { SHARED_SERVER_DOCS_PAGE, docsPageUrl } from "@/lib/docs-links.js";
 import { getSharedServerInfo } from "@/services/api/health.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
 import { LocalModelEndpointNote } from "./local-model-endpoint-note.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
-import { ProtocolSelect } from "./llm-provider-dialogs.js";
+import {
+  ProtocolSelect,
+  ProviderSourceAccountSelect,
+} from "./llm-provider-dialogs.js";
 import { useModelCapability } from "./use-model-capability.js";
 import { resolveDisplayCapability } from "./llm-effective-capability.js";
 import { ModelReasoningSettings } from "./model-reasoning-settings.js";
@@ -42,6 +48,7 @@ export function ProviderDetails({
   provider,
   serverConfig,
   builtinDefault = serverConfig?.kind === "builtin",
+  providerSources = [],
   busy = false,
   onAddModel,
   onPatchLocalProfile,
@@ -54,6 +61,7 @@ export function ProviderDetails({
   /** Where the server models come from: an llm.toml file or the built-in default. */
   serverConfig?: ServerConfigSource;
   builtinDefault?: boolean;
+  providerSources?: readonly ProviderSourceSummary[];
   onAddModel: () => void;
   onPatchLocalProfile: (
     patch:
@@ -65,6 +73,7 @@ export function ProviderDetails({
   onDeleteLocalProvider: () => void;
 }) {
   const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const writable = useSettingsWritable();
   const sharedServer = getSharedServerInfo() !== null;
   const [tab, setTab] = useState("connection");
@@ -74,13 +83,18 @@ export function ProviderDetails({
     ? t("settings.builtinDefault")
     : t("settings.fromLlmToml", "From llm.toml");
   const localProfile = provider.localProfile;
+  const activeSourceId = localProfile?.source ?? provider.source;
+  const activeAccount = localProfile?.account ?? provider.account;
+  const matchingSource = activeSourceId
+    ? providerSources.find((src) => src.id === activeSourceId)
+    : undefined;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
   const modelCount =
     provider.serverModels.length + (localProfile?.models.length ?? 0);
 
   const commitBaseUrl = () => {
-    if (localProfile && !baseUrl.conflict) {
+    if (localProfile && !activeSourceId && !baseUrl.conflict) {
       const next = baseUrl.draft.trim();
       baseUrl.setDraft(next);
       if (next !== committedBaseUrl) onPatchLocalProfile({ baseUrl: next });
@@ -97,6 +111,20 @@ export function ProviderDetails({
           {localProfile && (
             <Badge variant="secondary">
               {t("settings.localProvider", "Local")}
+            </Badge>
+          )}
+          {activeSourceId && (
+            <Badge variant="outline">
+              {matchingSource
+                ? resolveDisplayText(matchingSource.label, locale)
+                : activeSourceId}
+            </Badge>
+          )}
+          {matchingSource && (
+            <Badge variant={matchingSource.ready ? "secondary" : "destructive"}>
+              {matchingSource.ready
+                ? t("settings.providerSourceReady")
+                : t("settings.providerSourceNotReady")}
             </Badge>
           )}
         </div>
@@ -186,7 +214,7 @@ export function ProviderDetails({
                     : undefined
                 }
                 aria-invalid={baseUrl.conflict}
-                readOnly={!localProfile}
+                readOnly={!localProfile || Boolean(activeSourceId)}
                 disabled={!writable}
                 onChange={(event) => baseUrl.setDraft(event.target.value)}
                 onBlur={commitBaseUrl}
@@ -206,15 +234,58 @@ export function ProviderDetails({
           {baseUrl.conflict && (
             <SettingsDraftConflict onReload={baseUrl.reset} />
           )}
-          <LlmKeysPane
-            providerId={provider.id}
-            showIntro={false}
-            showPresetTests={false}
-          />
-          <LocalModelEndpointNote
-            baseUrl={baseUrl.draft}
-            provider={provider.provider}
-          />
+          {activeSourceId ? (
+            <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-muted-foreground">
+                  {t("settings.providerSourceManagedCredentials", {
+                    source: activeSourceId,
+                  })}
+                </p>
+                {matchingSource && matchingSource.authFlows.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !writable}
+                    onClick={() =>
+                      openPluginConfigFlow(
+                        matchingSource.pluginId,
+                        matchingSource.authFlows[0]!,
+                      )
+                    }
+                  >
+                    {t("settings.providerSourceSignIn")}
+                  </Button>
+                )}
+              </div>
+              {localProfile &&
+                matchingSource &&
+                (matchingSource.accountsMode === "many" ||
+                  matchingSource.accounts.length > 0) && (
+                  <ProviderSourceAccountSelect
+                    accounts={matchingSource.accounts}
+                    value={activeAccount ?? ""}
+                    disabled={busy || !writable}
+                    onChange={(account) => onPatchLocalProfile({ account })}
+                    labelTextClassName="font-medium"
+                    selectClassName="h-9 w-full rounded-md border border-border bg-background px-2.5 text-sm outline-none focus:ring-1 focus:ring-primary"
+                  />
+                )}
+            </div>
+          ) : (
+            <>
+              <LlmKeysPane
+                providerId={provider.id}
+                showIntro={false}
+                showPresetTests={false}
+              />
+              <LocalModelEndpointNote
+                baseUrl={baseUrl.draft}
+                provider={provider.provider}
+              />
+            </>
+          )}
           {isServerProvider && (
             <ServerProviderNotice
               builtinDefault={builtinDefault}

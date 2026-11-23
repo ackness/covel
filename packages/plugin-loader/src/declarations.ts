@@ -41,9 +41,26 @@ export function resolvePluginDeclarations(records: readonly ParsedPluginMd[]) {
 export function validatePluginDeclarations(root: ParsedPluginMd): void {
   const plugin = root.plugin;
   for (const command of plugin?.contributes?.commands ?? []) {
-    if (!plugin?.contributes?.actions?.includes(command.action))
+    if (
+      command.action !== undefined &&
+      !plugin?.contributes?.actions?.includes(command.action)
+    )
       throw new Error(
         `Command ${command.name} action ${command.action} must be declared in contributes.actions`,
+      );
+    if (
+      command.appAction !== undefined &&
+      !plugin?.contributes?.appActions?.includes(command.appAction)
+    )
+      throw new Error(
+        `Command ${command.name} appAction ${command.appAction} must be declared in contributes.appActions`,
+      );
+    if (
+      command.openFlow !== undefined &&
+      !plugin?.contributes?.flows?.includes(command.openFlow)
+    )
+      throw new Error(
+        `Command ${command.name} openFlow ${command.openFlow} must be declared in contributes.flows`,
       );
   }
   const declarations = resolvePluginDeclarations([root]);

@@ -1,4 +1,5 @@
 import { relative } from "node:path";
+import type { PluginUiSlot } from "@covel/plugin-loader";
 import { DEFAULT_LOCALE, resolveI18nText, type Stage } from "@covel/shared";
 
 // Flow segments are the named stages plus one bucket for stage-less runtimes
@@ -7,7 +8,7 @@ import { DEFAULT_LOCALE, resolveI18nText, type Stage } from "@covel/shared";
 // staged step maps 1:1; the framework never assumes "priority 500 == narrator".
 export type FlowSegmentId = Stage | "event-manual";
 
-export type UiSlotName = "right" | "message" | "view" | "segment" | "theme";
+export type UiSlotName = PluginUiSlot;
 
 export function textValue(
   value: unknown,

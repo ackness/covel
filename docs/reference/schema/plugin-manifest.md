@@ -10,26 +10,30 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## Top-level fields
 
-| Field         | Type                     | Required | Description                                                                                                                                                                                                                                                                                                                                    |
-| ------------- | ------------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`          | string                   | no       | Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved. Example: `"dice-check"`.                                                                                                                                                      |
-| `kind`        | `"core"` or `"plugin"`   | no       | Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`. Default: `"plugin"`.                                                                                                                                                                                                                  |
-| `version`     | string                   | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                                                                                                                                                    |
-| `covel`       | string                   | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                                                                                                                                                       |
-| `displayName` | text                     | no       | Player-facing name. Plain string; translations go in locale files.                                                                                                                                                                                                                                                                             |
-| `description` | text                     | yes      | What the package does. Plain string; translations go in locale files.                                                                                                                                                                                                                                                                          |
-| `tags`        | list of string           | no       | Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts.                                                                                               |
-| `author`      | object                   | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                                                                                                                                                             |
-| `license`     | string                   | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                                                                                                                                                   |
-| `homepage`    | string                   | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                                                                                                                                                                |
-| `provides`    | list of string or object | no       | Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.                                                                                                   |
-| `requires`    | list of string           | no       | Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.                                                                                                                              |
-| `conflicts`   | list of string           | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here.                                                                                                                |
-| `contracts`   | map of object            | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused. |
-| `entry`       | string                   | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions. Defaults to `./server/index.js` when that file exists.                                                                                                                                                                          |
-| `permissions` | object                   | no       | Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.                                                                                                                                                |
-| `contributes` | object                   | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                                                                                                                                                                 |
-| `runtime`     | object                   | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                                                                                                                                                         |
+| Field                  | Type                                    | Required | Description                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------- | --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                   | string                                  | no       | Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved. Example: `"dice-check"`.                                                                                                                                                      |
+| `kind`                 | `"core"` or `"plugin"`                  | no       | Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`. Default: `"plugin"`.                                                                                                                                                                                                                  |
+| `version`              | string                                  | no       | Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.                                                                                                                                                                                                                    |
+| `covel`                | string                                  | no       | Host version range this package supports. A host outside it does not install or load the package. Example: `">=0.0.45"`.                                                                                                                                                                                                                       |
+| `apiVersion`           | integer                                 | no       | Integer plugin platform contract generation required by this package.                                                                                                                                                                                                                                                                          |
+| `scope`                | `"session"` or `"instance"` or `"both"` | no       | Plugin activation scope: `session` (default), `instance`, or `both`.                                                                                                                                                                                                                                                                           |
+| `activationEvents`     | list of string                          | no       | Events that trigger lazy activation for `instance` or `both` scoped plugins.                                                                                                                                                                                                                                                                   |
+| `globalSessionDefault` | `"off"` or `"optional"`                 | no       | Whether a session-capable helper plugin opts in to global default enablement (`off` or `optional`).                                                                                                                                                                                                                                            |
+| `displayName`          | text                                    | no       | Player-facing name. Plain string; translations go in locale files.                                                                                                                                                                                                                                                                             |
+| `description`          | text                                    | yes      | What the package does. Plain string; translations go in locale files.                                                                                                                                                                                                                                                                          |
+| `tags`                 | list of string                          | no       | Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts.                                                                                               |
+| `author`               | object                                  | no       | Who made the package. Shown on the package's cards before play, never during play.                                                                                                                                                                                                                                                             |
+| `license`              | string                                  | no       | License of the package: an SPDX identifier or a short name. Example: `"MIT"`, `"CC-BY-4.0"`.                                                                                                                                                                                                                                                   |
+| `homepage`             | string                                  | no       | Page of the package itself, such as its repository or documentation. `https` only. Example: `"https://example.com/my-package"`.                                                                                                                                                                                                                |
+| `provides`             | list of string or object                | no       | Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.                                                                                                   |
+| `requires`             | list of string                          | no       | Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.                                                                                                                              |
+| `conflicts`            | list of string                          | no       | Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here.                                                                                                                |
+| `contracts`            | map of object                           | no       | Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused. |
+| `entry`                | string                                  | no       | Package-relative path of the server entry module. It registers tools, actions, services, hooks and extensions. Defaults to `./server/index.js` when that file exists.                                                                                                                                                                          |
+| `permissions`          | object                                  | no       | Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.                                                                                                                                                |
+| `contributes`          | object                                  | no       | Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.                                                                                                                                                                                                                 |
+| `runtime`              | object                                  | no       | The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.                                                                                                                                                                                         |
 
 ## `author`
 
@@ -62,9 +66,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `permissions`
 
-| Field  | Type           | Required | Description                                                      |
-| ------ | -------------- | -------- | ---------------------------------------------------------------- |
-| `http` | list of object | no       | Upper bound of the HTTP origins and methods the runtime may use. |
+| Field              | Type                                                                                                                                                           | Required | Description                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `http`             | list of object                                                                                                                                                 | no       | Upper bound of the HTTP origins and methods the runtime may use.               |
+| `secrets`          | boolean                                                                                                                                                        | no       | Whether the plugin may read and write host-managed secrets.                    |
+| `authProxy`        | boolean                                                                                                                                                        | no       | Whether bounded instance authentication requests may use the configured proxy. |
+| `scheduler`        | boolean                                                                                                                                                        | no       | Whether the plugin may register bounded instance background schedules.         |
+| `sandboxWorker`    | boolean                                                                                                                                                        | no       | Whether the plugin uses bounded Tier 1 sandboxed workers.                      |
+| `loopbackCallback` | object                                                                                                                                                         | no       | Temporary localhost callback listener permissions for OAuth flows.             |
+| `appEvents`        | list of `"AppStarted"` or `"BeforeShutdown"` or `"SessionCreated"` or `"SessionTurnCommitted"` or `"SessionDeleted"` or `"WorldInstalled"` or `"WorldRemoved"` | no       | Read-only application lifecycle events this plugin subscribes to.              |
 
 ## `permissions.http[]`
 
@@ -73,12 +83,24 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `origin`  | string                                                                        | yes      | HTTPS origin the runtime may call, without path, query or credentials. Example: `"https://api.example.com"`. |
 | `methods` | list of `"GET"` or `"POST"` or `"PUT"` or `"PATCH"` or `"DELETE"` or `"HEAD"` | no       | HTTP methods allowed for the origin. Entries must be unique.                                                 |
 
+## `permissions.loopbackCallback`
+
+| Field   | Type                             | Required | Description                                                          |
+| ------- | -------------------------------- | -------- | -------------------------------------------------------------------- |
+| `path`  | string                           | yes      | Loopback HTTP path mounted on localhost during authorization.        |
+| `ports` | `"ephemeral"` or list of integer | no       | Port strategy (`"ephemeral"` default) or ordered fallback port list. |
+
 ## `contributes`
 
 | Field              | Type                                                                                                                                                                                                                                                                                                                                                                                   | Required | Description                                                                                                                                                                                                                    |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `tools`            | list of string                                                                                                                                                                                                                                                                                                                                                                         | no       | Names of tools the entry registers with `registerTool`.                                                                                                                                                                        |
 | `actions`          | list of string                                                                                                                                                                                                                                                                                                                                                                         | no       | Names of RPC actions the entry registers with `registerRpc`.                                                                                                                                                                   |
+| `appActions`       | list of string                                                                                                                                                                                                                                                                                                                                                                         | no       | Instance-scoped app action names registered with `registerAppAction`.                                                                                                                                                          |
+| `flows`            | list of string                                                                                                                                                                                                                                                                                                                                                                         | no       | Declarative Config Flow IDs registered with `registerConfigFlow`.                                                                                                                                                              |
+| `appEvents`        | list of `"AppStarted"` or `"BeforeShutdown"` or `"SessionCreated"` or `"SessionTurnCommitted"` or `"SessionDeleted"` or `"WorldInstalled"` or `"WorldRemoved"`                                                                                                                                                                                                                         | no       | Read-only application lifecycle events handled via `onAppEvent`.                                                                                                                                                               |
+| `schedules`        | list of object                                                                                                                                                                                                                                                                                                                                                                         | no       | Bounded periodic background tasks registered with `registerScheduledTask`.                                                                                                                                                     |
+| `providerSources`  | list of object                                                                                                                                                                                                                                                                                                                                                                         | no       | Provider credential and connection sources registered with `registerProviderSources`.                                                                                                                                          |
 | `commands`         | list of object                                                                                                                                                                                                                                                                                                                                                                         | no       | Player slash commands. Each `action` must be listed in `actions`.                                                                                                                                                              |
 | `actionKinds`      | list of object                                                                                                                                                                                                                                                                                                                                                                         | no       | Action kinds players may submit besides the base kinds. Pure declaration: the server checks each action against its roles, text rule and fields schema. The wire kind is `<pluginId>/<name>`.                                  |
 | `services`         | list of string or object                                                                                                                                                                                                                                                                                                                                                               | no       | Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`). |
@@ -94,16 +116,51 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | `worldProjections` | map of object                                                                                                                                                                                                                                                                                                                                                                          | no       | Pure projections from world data into own namespaces, keyed by projection ID.                                                                                                                                                  |
 | `prompt`           | list of object                                                                                                                                                                                                                                                                                                                                                                         | no       | Static prompt segments. The host registers them.                                                                                                                                                                               |
 
+## `contributes.schedules[]`
+
+| Field         | Type    | Required | Description                                                      |
+| ------------- | ------- | -------- | ---------------------------------------------------------------- |
+| `id`          | string  | yes      | Unique task identifier registered with `registerScheduledTask`.  |
+| `intervalMs`  | integer | yes      | Minimum interval between runs in ms (10000..86400000).           |
+| `timeoutMs`   | integer | no       | Per-run AbortSignal deadline in milliseconds (default 30000).    |
+| `runOnStart`  | boolean | no       | When true, schedule an initial run immediately after activation. |
+| `description` | text    | no       | Human-readable description of the periodic background task.      |
+
+## `contributes.providerSources[]`
+
+| Field      | Type                                                                                                                                   | Required | Description                                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `id`       | string                                                                                                                                 | yes      | Identifier of this provider source within the package (qualified as `<pluginId>/<id>` in slot configuration). |
+| `label`    | text                                                                                                                                   | yes      | Human-readable display name shown in provider configuration UI (string or locale map).                        |
+| `protocol` | string                                                                                                                                 | no       | Wire protocol spoken by this provider source. Defaults to `openai-responses-v1` when resolved if omitted.     |
+| `modes`    | list of `"text"` or `"object"` or `"stream"` or `"embed"` or `"image"` or `"speech"` or `"transcription"` or `"music"` or `"evaluate"` | no       | Supported gateway modes for this source (`"text"` implies `"object"` and `"stream"`). Defaults to `["text"]`. |
+| `baseUrl`  | string                                                                                                                                 | yes      | Canonical base URL declared by the package; runtime requests are origin-locked to this URL.                   |
+| `auth`     | object                                                                                                                                 | no       | Authentication Config Flows associated with this provider source.                                             |
+| `accounts` | `"one"` or `"many"`                                                                                                                    | no       | Whether this source manages a single account (`"one"`, default) or multiple switchable accounts (`"many"`).   |
+
+## `contributes.providerSources[].auth`
+
+| Field   | Type           | Required | Description                                                                          |
+| ------- | -------------- | -------- | ------------------------------------------------------------------------------------ |
+| `flows` | list of string | yes      | Declarative Config Flow IDs in this package that authenticate or manage this source. |
+
 ## `contributes.commands[]`
 
-| Field         | Type                                                     | Required | Description                                                                 |
-| ------------- | -------------------------------------------------------- | -------- | --------------------------------------------------------------------------- |
-| `name`        | string                                                   | yes      | Command name in lowercase kebab-case, without the leading slash.            |
-| `aliases`     | list of string                                           | no       | Other names that invoke the same command.                                   |
-| `description` | text                                                     | yes      | What the command does. Shown to the player.                                 |
-| `arguments`   | list of object                                           | no       | Positional arguments, in order. Names must be unique.                       |
-| `action`      | string                                                   | yes      | RPC action the command invokes. It must be listed in `contributes.actions`. |
-| `context`     | list of `"session"` or `"active-runtimes"` or `"models"` | no       | Host context scopes passed to the action.                                   |
+| Field          | Type                                                     | Required | Description                                                                                                  |
+| -------------- | -------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `name`         | string                                                   | yes      | Command name in lowercase kebab-case, without the leading slash.                                             |
+| `aliases`      | list of string                                           | no       | Other names that invoke the same command.                                                                    |
+| `description`  | text                                                     | yes      | What the command does. Shown to the player.                                                                  |
+| `arguments`    | list of object                                           | no       | Positional arguments, in order. Names must be unique.                                                        |
+| `scope`        | `"session"` or `"instance"`                              | no       | Where this command appears: `session` (default, slash commands) or `instance` (application command palette). |
+| `palette`      | boolean                                                  | no       | When true, surface in the global command palette (⌘K).                                                       |
+| `shortcutHint` | string                                                   | no       | Optional keyboard shortcut hint shown in the command palette.                                                |
+| `action`       | string                                                   | no       | Session RPC action the command invokes. Must be listed in `contributes.actions`.                             |
+| `appAction`    | string                                                   | no       | Instance app action the command invokes. Must be listed in `contributes.appActions`.                         |
+| `openFlow`     | string                                                   | no       | Declarative Config Flow ID the command launches. Must be listed in `contributes.flows`.                      |
+| `openPage`     | string                                                   | no       | Application page ID (`contributes.ui.appPage`) to open.                                                      |
+| `openWindow`   | string                                                   | no       | Floating window ID (`contributes.ui.window`) to open.                                                        |
+| `context`      | list of `"session"` or `"active-runtimes"` or `"models"` | no       | Host context scopes passed to the action.                                                                    |
 
 ## `contributes.commands[].arguments[]`
 
@@ -254,13 +311,20 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.ui`
 
-| Field     | Type           | Required | Description                                                                                         |
-| --------- | -------------- | -------- | --------------------------------------------------------------------------------------------------- |
-| `theme`   | list of string | no       | Paths of restricted static plugin theme packs.                                                      |
-| `view`    | list of string | no       | Paths of UI specs for full-column views the player can switch to.                                   |
-| `right`   | list of string | no       | Paths of UI specs for right-panel tabs.                                                             |
-| `message` | list of string | no       | Paths of UI specs rendered inside the message stream.                                               |
-| `segment` | list of string | no       | Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker. |
+| Field             | Type           | Required | Description                                                                                         |
+| ----------------- | -------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `theme`           | list of string | no       | Paths of restricted static plugin theme packs.                                                      |
+| `view`            | list of string | no       | Paths of UI specs for full-column views the player can switch to.                                   |
+| `right`           | list of string | no       | Paths of UI specs for right-panel tabs.                                                             |
+| `message`         | list of string | no       | Paths of UI specs rendered inside the message stream.                                               |
+| `segment`         | list of string | no       | Paths of display-only templates for committed story paragraphs, matched by segment kind or speaker. |
+| `settingsSection` | list of string | no       | Paths of declarative settings section specs rendered inside SettingsDialog.                         |
+| `appPage`         | list of string | no       | Paths of instance-scoped application workbench page specs (`ui.app.page`).                          |
+| `topbarStatus`    | list of string | no       | Paths of read-only topbar status indicator specs (`ui.topbar.status`).                              |
+| `composerAction`  | list of string | no       | Paths of session composer icon button specs (`ui.composer.action`).                                 |
+| `messageAction`   | list of string | no       | Paths of per-message inline action button specs (`ui.message.action`).                              |
+| `messageBelow`    | list of string | no       | Paths of display-only message footer card specs (`ui.message.below`).                               |
+| `window`          | list of string | no       | Paths of floating tool window specs (`ui.window`).                                                  |
 
 ## `contributes.worldProjections.*`
 
@@ -279,18 +343,65 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `contributes.prompt[]`
 
-| Field      | Type                                                        | Required | Description                                                                                                                     |
-| ---------- | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `id`       | string                                                      | yes      | ID of the segment within the package.                                                                                           |
-| `content`  | string                                                      | yes      | Text of the segment.                                                                                                            |
-| `position` | `"system"` or `"pre-history"` or `"post-history"` or object | yes      | Where the segment goes: `system`, `pre-history`, `post-history`, or `{ depth }` for a position relative to the message history. |
-| `role`     | `"system"` or `"user"` or `"assistant"`                     | no       | Message role of the segment. Defaults to `system`.                                                                              |
+| Field        | Type                                                        | Required | Description                                                                                                                     |
+| ------------ | ----------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `id`         | string                                                      | yes      | ID of the segment within the package.                                                                                           |
+| `content`    | string                                                      | yes      | Text of the segment.                                                                                                            |
+| `position`   | `"system"` or `"pre-history"` or `"post-history"` or object | yes      | Where the segment goes: `system`, `pre-history`, `post-history`, or `{ depth }` for a position relative to the message history. |
+| `role`       | `"system"` or `"user"` or `"assistant"`                     | no       | Message role of the segment. Defaults to `system`.                                                                              |
+| `budget`     | integer                                                     | no       | Hard per-segment token budget cap.                                                                                              |
+| `facts`      | map of boolean or string or number                          | no       | Named cross-plugin prompt facts published when this segment is active.                                                          |
+| `when`       | object                                                      | no       | Fact predicate deciding whether this segment is included.                                                                       |
+| `suppresses` | list of string                                              | no       | IDs of non-protected prompt blocks or segments to suppress when active.                                                         |
+| `protected`  | boolean                                                     | no       | When true, this segment cannot be suppressed by another plugin.                                                                 |
 
 ## `contributes.prompt[].position`
 
 | Field   | Type    | Required | Description                                     |
 | ------- | ------- | -------- | ----------------------------------------------- |
 | `depth` | integer | yes      | Message depth at which the segment is inserted. |
+
+## `contributes.prompt[].when` (form 1 of 3)
+
+| Field       | Type                                | Required | Description                                                     |
+| ----------- | ----------------------------------- | -------- | --------------------------------------------------------------- |
+| `fact`      | string                              | yes      | Dot-separated fact key in the cross-plugin Facts Registry.      |
+| `equals`    | boolean or string or number         | no       | Match when the fact value equals this scalar.                   |
+| `notEquals` | boolean or string or number         | no       | Match when the fact value is not equal to this scalar.          |
+| `in`        | list of boolean or string or number | no       | Match when the fact value is contained in this list.            |
+| `exists`    | boolean                             | no       | Match whether the fact key is present (true) or absent (false). |
+
+## `contributes.prompt[].when` (form 2 of 3)
+
+| Field | Type           | Required | Description                                          |
+| ----- | -------------- | -------- | ---------------------------------------------------- |
+| `all` | list of object | yes      | Match when every predicate clause evaluates to true. |
+
+## `contributes.prompt[].when.all[]`
+
+| Field       | Type                                | Required | Description                                                     |
+| ----------- | ----------------------------------- | -------- | --------------------------------------------------------------- |
+| `fact`      | string                              | yes      | Dot-separated fact key in the cross-plugin Facts Registry.      |
+| `equals`    | boolean or string or number         | no       | Match when the fact value equals this scalar.                   |
+| `notEquals` | boolean or string or number         | no       | Match when the fact value is not equal to this scalar.          |
+| `in`        | list of boolean or string or number | no       | Match when the fact value is contained in this list.            |
+| `exists`    | boolean                             | no       | Match whether the fact key is present (true) or absent (false). |
+
+## `contributes.prompt[].when` (form 3 of 3)
+
+| Field | Type           | Required | Description                                                 |
+| ----- | -------------- | -------- | ----------------------------------------------------------- |
+| `any` | list of object | yes      | Match when at least one predicate clause evaluates to true. |
+
+## `contributes.prompt[].when.any[]`
+
+| Field       | Type                                | Required | Description                                                     |
+| ----------- | ----------------------------------- | -------- | --------------------------------------------------------------- |
+| `fact`      | string                              | yes      | Dot-separated fact key in the cross-plugin Facts Registry.      |
+| `equals`    | boolean or string or number         | no       | Match when the fact value equals this scalar.                   |
+| `notEquals` | boolean or string or number         | no       | Match when the fact value is not equal to this scalar.          |
+| `in`        | list of boolean or string or number | no       | Match when the fact value is contained in this list.            |
+| `exists`    | boolean                             | no       | Match whether the fact key is present (true) or absent (false). |
 
 ## `runtime`
 
@@ -573,9 +684,15 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 
 ## `runtime.permissions`
 
-| Field  | Type           | Required | Description                                                      |
-| ------ | -------------- | -------- | ---------------------------------------------------------------- |
-| `http` | list of object | no       | Upper bound of the HTTP origins and methods the runtime may use. |
+| Field              | Type                                                                                                                                                           | Required | Description                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `http`             | list of object                                                                                                                                                 | no       | Upper bound of the HTTP origins and methods the runtime may use.               |
+| `secrets`          | boolean                                                                                                                                                        | no       | Whether the plugin may read and write host-managed secrets.                    |
+| `authProxy`        | boolean                                                                                                                                                        | no       | Whether bounded instance authentication requests may use the configured proxy. |
+| `scheduler`        | boolean                                                                                                                                                        | no       | Whether the plugin may register bounded instance background schedules.         |
+| `sandboxWorker`    | boolean                                                                                                                                                        | no       | Whether the plugin uses bounded Tier 1 sandboxed workers.                      |
+| `loopbackCallback` | object                                                                                                                                                         | no       | Temporary localhost callback listener permissions for OAuth flows.             |
+| `appEvents`        | list of `"AppStarted"` or `"BeforeShutdown"` or `"SessionCreated"` or `"SessionTurnCommitted"` or `"SessionDeleted"` or `"WorldInstalled"` or `"WorldRemoved"` | no       | Read-only application lifecycle events this plugin subscribes to.              |
 
 ## `runtime.permissions.http[]`
 
@@ -583,3 +700,10 @@ In the path headings below, `[]` is a list item and `.*` is a map value.
 | --------- | ----------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
 | `origin`  | string                                                                        | yes      | HTTPS origin the runtime may call, without path, query or credentials. Example: `"https://api.example.com"`. |
 | `methods` | list of `"GET"` or `"POST"` or `"PUT"` or `"PATCH"` or `"DELETE"` or `"HEAD"` | no       | HTTP methods allowed for the origin. Entries must be unique.                                                 |
+
+## `runtime.permissions.loopbackCallback`
+
+| Field   | Type                             | Required | Description                                                          |
+| ------- | -------------------------------- | -------- | -------------------------------------------------------------------- |
+| `path`  | string                           | yes      | Loopback HTTP path mounted on localhost during authorization.        |
+| `ports` | `"ephemeral"` or list of integer | no       | Port strategy (`"ephemeral"` default) or ordered fallback port list. |

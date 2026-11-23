@@ -78,4 +78,6 @@ export interface PluginDiagnosticsSnapshot {
   }[];
   /** A bounded process-local window, cleared on server restart. */
   readonly history: { readonly scope: "process"; readonly limit: number };
+  /** Recent prompt segment governance events (truncation or protected-suppress refusal). */
+  readonly promptDiagnostics?: readonly import("../platform/prompt-governance.js").PromptSegmentGovernanceDiagnostic[];
 }

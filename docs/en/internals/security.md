@@ -91,10 +91,29 @@ The server refuses to start in these cases, and the error names the variable:
 - A hosted tier lacks `COVEL_MEDIA_TOKEN_SECRET` or `COVEL_DESKTOP_REST_TOKEN`; `commercial` lists no `CORS_ORIGIN`.
 - A hosted tier or the browser-private form sets `COVEL_ALLOWED_HOSTS`: the Host check runs only in the personal form, so the value has no effect.
 - `commercial` sets `COVEL_MEDIA_CLEANUP_ENABLED`: the cleanup endpoint is always closed on that tier.
+- `COVEL_DISABLED_CAPABILITIES` contains an unknown capability key.
+
+### Capability ceilings (L1)
+
+Alongside the per-route action table, the host profile resolves a deployment-wide L1 capability ceiling map (`CAPABILITY_KEYS` in `@covel/shared/permissions`) and projects it to clients through `deployment.capabilities` on `/api/health`:
+
+- **personal**: all capabilities default to `enabled` (except `host.installPackages` in production without a token or install opt-in). Operators can tighten any capability downward to `disabled` at startup via `COVEL_DISABLED_CAPABILITIES` (for example disabling `plugin.communityCode`, `network.localModels`, or `plugin.providerSource`).
+- **browser-private / hosted**: high-risk instance-scoped, secret, bridge, scheduler, execution, and local-network capabilities are hard-locked to `disabled` at L1 (`compute.sandboxWorker`, `plugin.instanceScope`, `plugin.providerSource`, `channel.bridge`, `plugin.globalAutoEnable`, `secrets.own`, `net.authProxy`, `net.loopbackCallback`, `network.localModels`, `app.scheduler`, `exec.localBridge`). `plugin.communityCode` and `net.httpDeclared` stay `operator-only` (tightenable to `disabled`, never widenable back to `enabled`).
 
 `apps/server/tests/bootstrap/route-access.test.ts` lists every API route of the server and the actions it needs. A new route fails the test until it is added to that table. The test also requests every route under a host profile that closes every action, which catches a route that decides from environment variables on its own; apart from `host-profile.ts`, no code in the server or the core packages may read these deployment variables.
 
 The `POST /api/install/validate/plugin` and `POST /api/install/validate/world` endpoints reuse `host.files` and never import or execute package code. Directory requests resolve real paths, require containment in the corresponding allowed roots, and reject symlinked package roots. Uploads reuse installation’s ZIP path and size checks; temporary files are removed when the request ends. Reports make package paths relative and hide temporary, user and other host paths. Raw CLI errors never enter HTTP responses. World validation with the live plugin catalogue does not change process-global data conventions.
+
+### Instance policy and persistent grants
+
+Below the L1 host capability ceiling, the server evaluates requests along a unified L1 → L2 → L3 → L4 governance chain:
+
+- **L2 instance policy (`permissions.policy`)**: merges defaults from `@covel/shared/permissions`, stored server settings under `permissions.policy`, and `COVEL_PERMISSIONS_POLICY` using `env > stored > default` precedence. The schema rejects setting `"allow"` on capabilities where `allowAutoPolicy` is `false`, and L2 can only preserve or restrict down to `"deny"` without widening L1 locks; API updates are restricted to the `personal` form.
+- **L3 persistent plugin grants (`plugin_grants`)**: per-plugin `allow` / `deny` decisions stored in the `plugin_grants` table for community packages, bound to the package `version`, `contentDigest`, and declared `grantedCapabilities` snapshot at grant time:
+  - Any content modification (`stale-digest`), capability expansion (`capability-escalated`), or unreadable package state (`unreadable`) invalidates all previously granted `allow` decisions immediately.
+  - Explicit `deny` decisions are **sticky**: they remain active across digest changes and capability escalations—and override implicit `trust.sources` grants—until explicitly updated or cleared.
+  - Saving a grant that introduces `deny` or removes an existing `allow`, or deleting a grant record, also revokes active cached L4 session grants for that plugin in `RpcApprovalGate`.
+- **Gate pre-check (`RpcApprovalGate`)**: permission-checked operations run `evaluateRpcApproval` before queueing L4 prompts. L1 (`ceiling`), L2 (`policy`), and sticky L3 denials (`grant`) fail immediately with `403` (`capability_disabled`, `capability_denied_by_policy`, or `capability_denied_by_grant`); otherwise code-level actions check valid L3 allows (`persistent-grant`) and then `trusted-source` implicit grants before falling back to L4 per-session or one-time prompts (`202 approval-required`). Fresh `declarative` packages skip `plugin.communityCode` checks on non-code RPCs and events while retaining their independent L4 approval prompts.
 
 ## Outbound requests (SSRF guard)
 
@@ -233,7 +252,7 @@ The Web client sends only the keys of the providers its requests need:
 - the provider each model role resolves to (the saved binding; when there is no binding, it is the provider the server configured for that role);
 - a provider named directly in the request, for example when probing the model list.
 
-A key for a provider that no role uses never leaves the browser. This matters when the server belongs to someone else. Until the client has read the server's roles and presets, it sends all the saved keys. (`buildProviderKeysHeader` in `apps/web/src/services/api/model-settings.ts`.)
+A key for a provider that no role uses never leaves the browser. This matters when the server belongs to someone else. Providers backed by a plugin `provider.source@1` are also omitted from `X-Provider-Keys`. Until the client has read the server's roles and presets, it sends all the saved keys. (`buildProviderKeysHeader` in `apps/web/src/services/api/model-settings.ts`.)
 
 This rule guards against this case: a request-level custom preset (an `X-Slot-Config` override) points a provider at another origin, and without protection that provider would receive the operator's key. Now such a preset cannot get environment keys, and it cannot get the trusted default headers either. It must bring its own key.
 
@@ -263,6 +282,15 @@ How keys are stored on disk:
 - Neither place is encrypted. The renderer process needs plaintext to build `X-Provider-Keys`. So even if the file were encrypted on disk, the `covel:keys:load` IPC channel (which accepts only trusted senders) would still return the same plaintext. On unsigned builds, Electron `safeStorage` would only add one more macOS Keychain prompt.
 
 File permissions and the browser's same-origin policy keep out other system users and other websites. They cannot keep out code that runs as this same user, and that includes approved community plugins (see [Community plugin code](#community-plugin-code)).
+
+## SecretVault and instance credentials
+
+Capabilities introduced for instance-scoped integrations and OAuth/multi-account provider sources carry stricter credential boundaries and are hard-locked to `disabled` at the [L1 ceiling](#capability-ceilings-l1) on `browser-private` and hosted profiles (`plugin.instanceScope`, `plugin.providerSource`, `secrets.own`, `net.loopbackCallback`, `net.authProxy`, `app.scheduler`, `channel.bridge`, `compute.sandboxWorker`, `exec.localBridge`):
+
+- **Package-isolated `SecretVault`**: Only packages declaring `permissions.secrets: true` and holding L1–L3 `secrets.own` approval can access host-encrypted package-private credentials via `covel.secrets` (`apps/server/src/trust/secret-vault.ts`). Entries are keyed per `pluginId` and never sent to browser responses, logs, or traces.
+- **Ephemeral loopback callbacks (`net.loopbackCallback`)**: Guarded by `permissions.loopbackCallback` and L1–L3 checks during Config Flow `browser` steps (`apps/server/src/trust/loopback-callback.ts`), listeners bind only to localhost, enforce single-use state validation, and shut down immediately on completion or timeout.
+- **Scoped auth proxy (`net.authProxy`)**: Requires `permissions.authProxy: true` plus L1–L3 approval before instance authentication traffic uses configured outbound proxies.
+- **`provider.source@1` origin lock and zero leak**: Resolved `baseUrl` targets must fall within the plugin's declared `permissions.http` origins; resolved bearer tokens and custom auth headers remain strictly inside the server gateway call and never appear in `X-Provider-Keys`, settings responses, error strings, or traces.
 
 ## Local model relay
 

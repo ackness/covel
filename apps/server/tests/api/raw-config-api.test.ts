@@ -142,4 +142,30 @@ describe("raw configuration files", () => {
     process.env.NODE_ENV = "production";
     expect((await app.request("/api/config/raw/llm.toml")).status).toBe(403);
   });
+
+  it("refuses instance-id and secrets paths as unknown config files", async () => {
+    const { app } = await setup(ALPHA);
+    const forbiddenPaths = [
+      "/api/config/raw/instance-id",
+      "/api/config/raw/secrets",
+      "/api/config/raw/secrets%2Fdemo%2Ftoken.json",
+    ];
+    for (const url of forbiddenPaths) {
+      const getRes = await app.request(url);
+      expect(getRes.status).toBe(404);
+      expect(((await getRes.json()) as { code: string }).code).toBe(
+        "config_file_unknown",
+      );
+
+      const putRes = await app.request(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "tamper", baseDigest: "none" }),
+      });
+      expect(putRes.status).toBe(404);
+      expect(((await putRes.json()) as { code: string }).code).toBe(
+        "config_file_unknown",
+      );
+    }
+  });
 });

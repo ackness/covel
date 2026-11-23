@@ -1,5 +1,10 @@
 import { kernelExtensionPoints } from "./contracts.js";
 import { z } from "zod";
+import {
+  promptFactKeySchema,
+  promptFactValueSchema,
+  promptWhenSchema,
+} from "../platform/prompt-governance.js";
 import { defineExtensionPoint } from "./definition.js";
 
 export const promptSegmentSchema = z.strictObject({
@@ -16,6 +21,11 @@ export const promptSegmentSchema = z.strictObject({
   ]),
   volatility: z.enum(["stable", "session", "turn"]),
   order: z.number().int().optional(),
+  budget: z.number().int().positive().max(32_000).optional(),
+  facts: z.record(promptFactKeySchema, promptFactValueSchema).optional(),
+  when: promptWhenSchema.optional(),
+  suppresses: z.array(z.string().min(1).max(128)).max(16).optional(),
+  protected: z.boolean().optional(),
   providerPluginId: z.string().optional(),
 });
 export type PromptSegment = z.infer<typeof promptSegmentSchema>;

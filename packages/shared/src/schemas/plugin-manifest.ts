@@ -8,6 +8,19 @@ import {
   kernelConflictMessage,
 } from "../extension-points/contracts.js";
 import { z } from "zod";
+import {
+  APP_EVENT_NAMES,
+  GLOBAL_SESSION_DEFAULTS,
+  INSTANCE_UI_SLOTS,
+  PLUGIN_SCOPES,
+  activationEventSchema,
+  configFlowIdSchema,
+  promptFactKeySchema,
+  promptFactValueSchema,
+  promptWhenSchema,
+  providerSourceContributionSchema,
+  scheduledTaskSpecSchema,
+} from "../platform/index.js";
 import { rpcActionNameSchema } from "./rpc-action.js";
 import { actionKindDeclarationSchema } from "./action.js";
 import { FRAMEWORK_PLUGIN_ID } from "../framework-plugin-id.js";
@@ -350,274 +363,492 @@ export function isModelFacingServiceContribution(
   return typeof entry !== "string" && entry.modelFacing === true;
 }
 
-export const pluginManifestSchema = z.strictObject({
-  id: pluginIdSchema
-    .meta({
-      description:
-        "Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved.",
-      examples: ["dice-check"],
-    })
-    .optional(),
-  kind: z
-    .enum(["core", "plugin"])
-    .default("plugin")
-    .describe(
-      "Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`.",
-    ),
-  version: z
-    .string()
-    .describe(
-      "Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.",
-    )
-    .optional(),
-  // Host versions this package was written for; install and load enforce it.
-  covel: hostVersionRangeSchema
-    .meta({
-      description:
-        "Host version range this package supports. A host outside it does not install or load the package.",
-      examples: [">=0.0.45"],
-    })
-    .optional(),
-  displayName: pluginDisplayNameSchema.optional(),
-  description: pluginDescriptionSchema,
-  tags: z
-    .array(
-      z
-        .string()
-        .refine(
-          (tag) => !tag.startsWith("role:"),
-          "role tags are replaced by contracts",
-        ),
-    )
-    .describe(
-      "Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts.",
-    )
-    .optional(),
-  ...packageCreditFields,
-  provides: z
-    .array(
-      z.union([
+export const pluginManifestSchema = z
+  .strictObject({
+    id: pluginIdSchema
+      .meta({
+        description:
+          "Package ID: lowercase letters, digits and hyphens. Defaults to the name of the package directory; when written it must equal that name. `framework` is reserved.",
+        examples: ["dice-check"],
+      })
+      .optional(),
+    kind: z
+      .enum(["core", "plugin"])
+      .default("plugin")
+      .describe(
+        "Package kind. `core` marks a core plugin, which every session requests by default. Defaults to `plugin`.",
+      ),
+    version: z
+      .string()
+      .describe(
+        "Package version. Setup runtimes rerun for existing sessions when it changes. A package without a version counts as `0.0.0`.",
+      )
+      .optional(),
+    // Host versions this package was written for; install and load enforce it.
+    covel: hostVersionRangeSchema
+      .meta({
+        description:
+          "Host version range this package supports. A host outside it does not install or load the package.",
+        examples: [">=0.0.45"],
+      })
+      .optional(),
+    apiVersion: z
+      .number()
+      .int()
+      .positive()
+      .max(100)
+      .describe(
+        "Integer plugin platform contract generation required by this package.",
+      )
+      .optional(),
+    scope: z
+      .enum(PLUGIN_SCOPES)
+      .describe(
+        "Plugin activation scope: `session` (default), `instance`, or `both`.",
+      )
+      .optional(),
+    activationEvents: z
+      .array(activationEventSchema)
+      .max(64)
+      .describe(
+        "Events that trigger lazy activation for `instance` or `both` scoped plugins.",
+      )
+      .optional(),
+    globalSessionDefault: z
+      .enum(GLOBAL_SESSION_DEFAULTS)
+      .describe(
+        "Whether a session-capable helper plugin opts in to global default enablement (`off` or `optional`).",
+      )
+      .optional(),
+    displayName: pluginDisplayNameSchema.optional(),
+    description: pluginDescriptionSchema,
+    tags: z
+      .array(
+        z
+          .string()
+          .refine(
+            (tag) => !tag.startsWith("role:"),
+            "role tags are replaced by contracts",
+          ),
+      )
+      .describe(
+        "Catalogue tags the loader cannot work out, such as `mode:dialogue` or `data:characters`. The loader adds the `ui:*` and `cost:*` tags from the package's panels and runtimes and ignores written ones. `role:` tags are rejected; use contracts.",
+      )
+      .optional(),
+    ...packageCreditFields,
+    provides: z
+      .array(
+        z.union([
+          contractIdSchema,
+          z.strictObject({
+            contract: contractIdSchema.describe(
+              "Contract ID this package provides.",
+            ),
+            default: z
+              .boolean()
+              .describe(
+                "`true` marks the default provider. It steps aside when another provider of the contract is selected.",
+              )
+              .optional(),
+          }),
+        ]),
+      )
+      .describe(
+        "Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.",
+      )
+      .optional(),
+    requires: z
+      .array(contractIdSchema)
+      .describe(
+        "Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.",
+      )
+      .optional(),
+    conflicts: z
+      .array(
+        contractIdSchema.superRefine((contract, ctx) => {
+          if (isKernelExtensionContract(contract))
+            ctx.addIssue({
+              code: "custom",
+              message: kernelConflictMessage(contract),
+              params: { code: INVALID_KERNEL_CONFLICT },
+            });
+        }),
+      )
+      .describe(
+        "Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here.",
+      )
+      .optional(),
+    contracts: z
+      .record(
         contractIdSchema,
         z.strictObject({
-          contract: contractIdSchema.describe(
-            "Contract ID this package provides.",
-          ),
-          default: z
-            .boolean()
-            .describe(
-              "`true` marks the default provider. It steps aside when another provider of the contract is selected.",
-            )
-            .optional(),
-        }),
-      ]),
-    )
-    .describe(
-      "Versioned contracts this package provides that no runtime of it outputs, such as an extension or data contract. The contract of each runtime's `io.output.contract` is added by the loader; write it here only to mark the default provider.",
-    )
-    .optional(),
-  requires: z
-    .array(contractIdSchema)
-    .describe(
-      "Contracts that must have an active provider. The resolver adds one when the package is active. A contract a runtime reads and that is not listed here is optional: the runtime uses it when a provider is active.",
-    )
-    .optional(),
-  conflicts: z
-    .array(
-      contractIdSchema.superRefine((contract, ctx) => {
-        if (isKernelExtensionContract(contract))
-          ctx.addIssue({
-            code: "custom",
-            message: kernelConflictMessage(contract),
-            params: { code: INVALID_KERNEL_CONFLICT },
-          });
-      }),
-    )
-    .describe(
-      "Contracts whose other providers cannot be active together with this package. Plugin contracts only. A framework contract with one provider per session, such as `narrative-engine@2`, is exclusive on its own and ignored here.",
-    )
-    .optional(),
-  contracts: z
-    .record(
-      contractIdSchema,
-      z.strictObject({
-        schema: z
-          .string()
-          .min(1)
-          .describe("Package-relative path of the contract's JSON Schema."),
-      }),
-    )
-    .describe(
-      "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused.",
-    )
-    .optional(),
-  entry: pluginEntryPathSchema.optional(),
-  permissions: permissionsDeclSchema
-    .describe(
-      "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
-    )
-    .optional(),
-  contributes: z
-    .strictObject({
-      tools: z
-        .array(
-          z
+          schema: z
             .string()
             .min(1)
-            .refine(
-              (name) => name !== "submit-output",
-              "submit-output is reserved by the host",
-            ),
-        )
-        .describe("Names of tools the entry registers with `registerTool`.")
-        .optional(),
-      actions: z
-        .array(rpcActionNameSchema)
-        .describe(
-          "Names of RPC actions the entry registers with `registerRpc`.",
-        )
-        .optional(),
-      commands: pluginCommandsSchema.optional(),
-      actionKinds: z
-        .array(actionKindDeclarationSchema)
-        .describe(
-          "Action kinds players may submit besides the base kinds. Pure declaration: the server checks each action against its roles, text rule and fields schema. The wire kind is `<pluginId>/<name>`.",
-        )
-        .optional(),
-      services: z
-        .array(serviceContributionSchema)
-        .describe(
-          "Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`).",
-        )
-        .optional(),
-      extensions: z
-        .array(pluginExtensionContributionSchema)
-        .describe(
-          "Extensions the entry provides with `provideExtension`: `<point>/<id>`, or an object for one that sets more, such as a UI slot provider.",
-        )
-        .optional(),
-      hooks: z
-        .array(pluginHookContributionSchema)
-        .describe(
-          "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a hook that holds story drafts.",
-        )
-        .optional(),
-      wires: z
-        .array(z.string().min(1))
-        .describe("IDs of provider wires the entry registers.")
-        .optional(),
-      forms: z
-        .array(z.string().min(1))
-        .describe("IDs of forms the entry registers.")
-        .optional(),
-      events: pluginEventsSchema.optional(),
-      settings: pluginUserSettingsSchema.optional(),
-      datasets: z
-        .record(pluginDataNamespaceSchema, pluginDatasetDeclSchema)
-        .describe(
-          "Typed plugin-data datasets the package owns; the name is the plugin-data namespace.",
-        )
-        .optional(),
-      data: z
-        .record(
-          z.string(),
-          pluginDataSchemaDeclSchema
-            .omit({
-              namespace: true,
-              schemaVersion: true,
-              acceptsWorldData: true,
-            })
-            .extend({
-              version: z
+            .describe("Package-relative path of the contract's JSON Schema."),
+        }),
+      )
+      .describe(
+        "Public schema of each contract this package publishes or accepts, keyed by contract ID. A contract that a `contributes.data` namespace accepts needs no entry here: its schema is the one of that namespace. Framework contracts such as `narrative-engine@2` and `character-actor@1` need none either; a different schema for one is refused.",
+      )
+      .optional(),
+    entry: pluginEntryPathSchema.optional(),
+    permissions: permissionsDeclSchema
+      .describe(
+        "Upper bounds of the package's own code. `http` lists the origins and methods the entry module of a community package may reach through `covel.http`, in addition to those its runtimes declare.",
+      )
+      .optional(),
+    contributes: z
+      .strictObject({
+        tools: z
+          .array(
+            z
+              .string()
+              .min(1)
+              .refine(
+                (name) => name !== "submit-output",
+                "submit-output is reserved by the host",
+              ),
+          )
+          .describe("Names of tools the entry registers with `registerTool`.")
+          .optional(),
+        actions: z
+          .array(rpcActionNameSchema)
+          .describe(
+            "Names of RPC actions the entry registers with `registerRpc`.",
+          )
+          .optional(),
+        appActions: z
+          .array(rpcActionNameSchema)
+          .describe(
+            "Instance-scoped app action names registered with `registerAppAction`.",
+          )
+          .optional(),
+        flows: z
+          .array(configFlowIdSchema)
+          .describe(
+            "Declarative Config Flow IDs registered with `registerConfigFlow`.",
+          )
+          .optional(),
+        appEvents: z
+          .array(z.enum(APP_EVENT_NAMES))
+          .max(16)
+          .describe(
+            "Read-only application lifecycle events handled via `onAppEvent`.",
+          )
+          .optional(),
+        schedules: z
+          .array(scheduledTaskSpecSchema)
+          .max(16)
+          .describe(
+            "Bounded periodic background tasks registered with `registerScheduledTask`.",
+          )
+          .optional(),
+        providerSources: z
+          .array(providerSourceContributionSchema)
+          .max(16)
+          .describe(
+            "Provider credential and connection sources registered with `registerProviderSources`.",
+          )
+          .optional(),
+        commands: pluginCommandsSchema.optional(),
+        actionKinds: z
+          .array(actionKindDeclarationSchema)
+          .describe(
+            "Action kinds players may submit besides the base kinds. Pure declaration: the server checks each action against its roles, text rule and fields schema. The wire kind is `<pluginId>/<name>`.",
+          )
+          .optional(),
+        services: z
+          .array(serviceContributionSchema)
+          .describe(
+            "Services the entry registers with `registerService`: a contract ID, or `{ contract, access, modelFacing }` for one that changes its plugin's data (`access: write`) or that agents may import as a tool (`modelFacing: true`).",
+          )
+          .optional(),
+        extensions: z
+          .array(pluginExtensionContributionSchema)
+          .describe(
+            "Extensions the entry provides with `provideExtension`: `<point>/<id>`, or an object for one that sets more, such as a UI slot provider.",
+          )
+          .optional(),
+        hooks: z
+          .array(pluginHookContributionSchema)
+          .describe(
+            "Lifecycle hooks the entry registers: an event name, or `{ event, enforce?, holdsDrafts? }` for a phase other than `normal` or a hook that holds story drafts.",
+          )
+          .optional(),
+        wires: z
+          .array(z.string().min(1))
+          .describe("IDs of provider wires the entry registers.")
+          .optional(),
+        forms: z
+          .array(z.string().min(1))
+          .describe("IDs of forms the entry registers.")
+          .optional(),
+        events: pluginEventsSchema.optional(),
+        settings: pluginUserSettingsSchema.optional(),
+        datasets: z
+          .record(pluginDataNamespaceSchema, pluginDatasetDeclSchema)
+          .describe(
+            "Typed plugin-data datasets the package owns; the name is the plugin-data namespace.",
+          )
+          .optional(),
+        data: z
+          .record(
+            z.string(),
+            pluginDataSchemaDeclSchema
+              .omit({
+                namespace: true,
+                schemaVersion: true,
+                acceptsWorldData: true,
+              })
+              .extend({
+                version: z
+                  .number()
+                  .int()
+                  .positive()
+                  .default(1)
+                  .describe(
+                    "Schema version of the namespace. Defaults to 1; raise it when the record shape changes.",
+                  ),
+                accepts: z
+                  .array(contractIdSchema)
+                  .describe(
+                    "Data contracts whose world data this namespace accepts.",
+                  )
+                  .optional(),
+                authoring: dataAuthoringSchema.optional(),
+                search: z
+                  .strictObject({
+                    text: z
+                      .string()
+                      .min(1)
+                      .describe(
+                        "Field of a record's value that holds the text to search. A record without a string there is not searched.",
+                      ),
+                  })
+                  .describe(
+                    "Makes the records of this namespace part of memory search (`memory-search`) while the plugin is active in the session.",
+                  )
+                  .optional(),
+              })
+              .refine(
+                (declaration) =>
+                  !declaration.authoring || declaration.accepts?.length,
+                {
+                  path: ["authoring"],
+                  message:
+                    "authoring describes world data, so the namespace must list the contract in `accepts`",
+                },
+              ),
+          )
+          .describe("Own plugin data namespaces, keyed by namespace.")
+          .optional(),
+        ui: pluginUiPathsSchema
+          .describe(
+            "Package-relative paths of declarative UI specs, by placement.",
+          )
+          .optional(),
+        worldProjections: worldProjectionMapSchema
+          .describe(
+            "Pure projections from world data into own namespaces, keyed by projection ID.",
+          )
+          .optional(),
+        prompt: z
+          .array(
+            z.strictObject({
+              id: z
+                .string()
+                .min(1)
+                .describe("ID of the segment within the package."),
+              content: z.string().describe("Text of the segment."),
+              position: z
+                .union([
+                  z.enum(["system", "pre-history", "post-history"]),
+                  z.strictObject({
+                    depth: z
+                      .number()
+                      .int()
+                      .min(0)
+                      .describe(
+                        "Message depth at which the segment is inserted.",
+                      ),
+                  }),
+                ])
+                .describe(
+                  "Where the segment goes: `system`, `pre-history`, `post-history`, or `{ depth }` for a position relative to the message history.",
+                ),
+              role: z
+                .enum(["system", "user", "assistant"])
+                .describe("Message role of the segment. Defaults to `system`.")
+                .optional(),
+              budget: z
                 .number()
                 .int()
                 .positive()
-                .default(1)
+                .max(32_000)
+                .describe("Hard per-segment token budget cap.")
+                .optional(),
+              facts: z
+                .record(promptFactKeySchema, promptFactValueSchema)
                 .describe(
-                  "Schema version of the namespace. Defaults to 1; raise it when the record shape changes.",
-                ),
-              accepts: z
-                .array(contractIdSchema)
-                .describe(
-                  "Data contracts whose world data this namespace accepts.",
+                  "Named cross-plugin prompt facts published when this segment is active.",
                 )
                 .optional(),
-              authoring: dataAuthoringSchema.optional(),
-              search: z
-                .strictObject({
-                  text: z
-                    .string()
-                    .min(1)
-                    .describe(
-                      "Field of a record's value that holds the text to search. A record without a string there is not searched.",
-                    ),
-                })
+              when: promptWhenSchema
                 .describe(
-                  "Makes the records of this namespace part of memory search (`memory-search`) while the plugin is active in the session.",
+                  "Fact predicate deciding whether this segment is included.",
                 )
                 .optional(),
-            })
-            .refine(
-              (declaration) =>
-                !declaration.authoring || declaration.accepts?.length,
-              {
-                path: ["authoring"],
-                message:
-                  "authoring describes world data, so the namespace must list the contract in `accepts`",
-              },
-            ),
-        )
-        .describe("Own plugin data namespaces, keyed by namespace.")
-        .optional(),
-      ui: pluginUiPathsSchema
-        .describe(
-          "Package-relative paths of declarative UI specs, by placement.",
-        )
-        .optional(),
-      worldProjections: worldProjectionMapSchema
-        .describe(
-          "Pure projections from world data into own namespaces, keyed by projection ID.",
-        )
-        .optional(),
-      prompt: z
-        .array(
-          z.strictObject({
-            id: z
-              .string()
-              .min(1)
-              .describe("ID of the segment within the package."),
-            content: z.string().describe("Text of the segment."),
-            position: z
-              .union([
-                z.enum(["system", "pre-history", "post-history"]),
-                z.strictObject({
-                  depth: z
-                    .number()
-                    .int()
-                    .min(0)
-                    .describe(
-                      "Message depth at which the segment is inserted.",
-                    ),
-                }),
-              ])
-              .describe(
-                "Where the segment goes: `system`, `pre-history`, `post-history`, or `{ depth }` for a position relative to the message history.",
-              ),
-            role: z
-              .enum(["system", "user", "assistant"])
-              .describe("Message role of the segment. Defaults to `system`.")
-              .optional(),
-          }),
-        )
-        .describe("Static prompt segments. The host registers them.")
-        .optional(),
-    })
-    .describe(
-      "Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.",
-    )
-    .optional(),
-  runtime: runtimeAuthoringManifestSchema
-    .describe(
-      "The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.",
-    )
-    .optional(),
-});
+              suppresses: z
+                .array(z.string().min(1).max(128))
+                .max(16)
+                .describe(
+                  "IDs of non-protected prompt blocks or segments to suppress when active.",
+                )
+                .optional(),
+              protected: z
+                .boolean()
+                .describe(
+                  "When true, this segment cannot be suppressed by another plugin.",
+                )
+                .optional(),
+            }),
+          )
+          .describe("Static prompt segments. The host registers them.")
+          .optional(),
+      })
+      .describe(
+        "Package-level contributions. Every entry registration needs a declaration here, and every declaration needs an implementation.",
+      )
+      .optional(),
+    runtime: runtimeAuthoringManifestSchema
+      .describe(
+        "The single inline runtime of this package; its prompt is the body of this file. Packages with several runtimes use `runtimes/<id>/RUNTIME.md` instead.",
+      )
+      .optional(),
+  })
+  .superRefine((manifest, ctx) => {
+    const isInstanceCapable =
+      manifest.scope === "instance" || manifest.scope === "both";
+
+    const requireInstanceScope = (
+      items: readonly unknown[] | undefined,
+      path: string[],
+      label = path.join("."),
+    ): boolean => {
+      if (!items || items.length === 0) return false;
+      if (!isInstanceCapable) {
+        ctx.addIssue({
+          code: "custom",
+          path,
+          message: `${label} requires scope to be "instance" or "both"`,
+        });
+      }
+      return true;
+    };
+
+    const checkUniqueIds = <T extends { readonly id: string }>(
+      items: readonly T[],
+      basePath: string[],
+      label: string,
+    ): void => {
+      const seenIds = new Set<string>();
+      for (const [index, item] of items.entries()) {
+        if (seenIds.has(item.id)) {
+          ctx.addIssue({
+            code: "custom",
+            path: [...basePath, index, "id"],
+            message: `duplicate ${label} id "${item.id}"`,
+          });
+        }
+        seenIds.add(item.id);
+      }
+    };
+
+    requireInstanceScope(manifest.activationEvents, ["activationEvents"]);
+    if (
+      manifest.scope === "instance" &&
+      manifest.globalSessionDefault === "optional"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["globalSessionDefault"],
+        message:
+          'globalSessionDefault cannot be "optional" when scope is "instance"',
+      });
+    }
+    requireInstanceScope(manifest.contributes?.appActions, [
+      "contributes",
+      "appActions",
+    ]);
+    requireInstanceScope(manifest.contributes?.flows, ["contributes", "flows"]);
+    requireInstanceScope(manifest.contributes?.appEvents, [
+      "contributes",
+      "appEvents",
+    ]);
+
+    const schedules = manifest.contributes?.schedules;
+    if (
+      requireInstanceScope(schedules, ["contributes", "schedules"]) &&
+      schedules
+    ) {
+      if (manifest.permissions?.scheduler !== true) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["contributes", "schedules"],
+          message: "contributes.schedules requires permissions.scheduler: true",
+        });
+      }
+      checkUniqueIds(schedules, ["contributes", "schedules"], "scheduled task");
+    }
+
+    const providerSources = manifest.contributes?.providerSources;
+    if (
+      requireInstanceScope(providerSources, [
+        "contributes",
+        "providerSources",
+      ]) &&
+      providerSources
+    ) {
+      checkUniqueIds(
+        providerSources,
+        ["contributes", "providerSources"],
+        "provider source",
+      );
+      const declaredFlows = manifest.contributes?.flows ?? [];
+      for (const [index, source] of providerSources.entries()) {
+        for (const flowId of source.auth?.flows ?? []) {
+          if (!declaredFlows.includes(flowId)) {
+            ctx.addIssue({
+              code: "custom",
+              path: ["contributes", "providerSources", index, "auth", "flows"],
+              message: `providerSource "${source.id}" references undeclared auth flow "${flowId}"`,
+            });
+          }
+        }
+      }
+    }
+
+    const ui = manifest.contributes?.ui;
+    for (const slot of INSTANCE_UI_SLOTS) {
+      requireInstanceScope(ui?.[slot], ["contributes", "ui", slot]);
+    }
+    for (const [index, command] of (
+      manifest.contributes?.commands ?? []
+    ).entries()) {
+      if (
+        (command.scope === "instance" ||
+          command.appAction !== undefined ||
+          command.openFlow !== undefined ||
+          command.openPage !== undefined) &&
+        !isInstanceCapable
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["contributes", "commands", index],
+          message:
+            'instance-scoped command targets require package scope "instance" or "both"',
+        });
+      }
+    }
+  });

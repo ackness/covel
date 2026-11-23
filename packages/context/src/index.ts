@@ -18,7 +18,14 @@ export {
   resolveFrameworkCompletion,
 } from "./context-builder.js";
 
-export { selectPromptSegments } from "./extension-segments.js";
+export {
+  evaluatePromptWhen,
+  governPromptSegments,
+  selectPromptSegments,
+  truncateContentToBudget,
+  type PromptGovernanceOptions,
+  type PromptGovernanceResult,
+} from "./extension-segments.js";
 
 // ── Story context (`story-context@1`) ───────────────────────────
 export {

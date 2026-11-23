@@ -29,6 +29,10 @@ export type ExtensionPointId = keyof ExtensionPointIo;
  * point id. Mirror of `KernelExtensionPointIo` in `@covel/shared`.
  */
 export type ExtensionPointIo = {
+  readonly "channel.bridge@1": {
+    readonly input: ChannelBridgeInput;
+    readonly output: ChannelBridgeOutput;
+  };
   readonly "history.compact@2": {
     readonly input: HistoryCompactInput;
     readonly output: HistoryCompactOutput;
@@ -62,6 +66,55 @@ export type PromptSegmentInput = {
   readonly playerMessage: string;
 };
 
+export type PromptFactValue = boolean | string | number;
+
+export type PromptWhenClause = {
+  readonly fact: string;
+  readonly equals?: PromptFactValue;
+  readonly notEquals?: PromptFactValue;
+  readonly in?: PromptFactValue[];
+  readonly exists?: boolean;
+};
+
+export type PromptWhen =
+  | PromptWhenClause
+  | { readonly all: PromptWhenClause[] }
+  | { readonly any: PromptWhenClause[] };
+
+export type ChannelBridgeInput =
+  | {
+      phase: "inboundMessage";
+      channelId: string;
+      externalUserId: string;
+      sessionId: string;
+      text: string;
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      phase: "beforeRender";
+      channelId: string;
+      sessionId: string;
+      turnId: string;
+      story: string;
+      choices?: { id: string; text: string }[];
+    }
+  | {
+      phase: "outboundEvent";
+      channelId: string;
+      sessionId: string;
+      turnId?: string;
+      topic: string;
+      payload: Record<string, unknown>;
+    };
+
+export type ChannelBridgeOutput = {
+  handled: boolean;
+  formattedText?: string;
+  routedSessionId?: string;
+  rejectedReason?: string;
+  providerPluginId?: string;
+};
+
 export type PromptSegment = {
   readonly id: string;
   readonly content: string;
@@ -71,6 +124,11 @@ export type PromptSegment = {
   readonly audience: "all" | "story" | "self" | { readonly contract: string };
   readonly volatility: "stable" | "session" | "turn";
   readonly order?: number;
+  readonly budget?: number;
+  readonly facts?: Record<string, PromptFactValue>;
+  readonly when?: PromptWhen;
+  readonly suppresses?: string[];
+  readonly protected?: boolean;
   readonly providerPluginId?: string;
 };
 

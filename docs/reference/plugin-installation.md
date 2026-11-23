@@ -15,7 +15,7 @@
 宿主从实际文件与清单推导必填的 `executionMode`：`declarative`、`code` 或 `unknown`。没有作者填写的模式开关。静态校验、归档预览、发现和执行检查共用判定；无法完整读取、链接或扫描中变化得到 `unknown`，不会获得豁免；诊断指出让检查停下的包内文件。源码检出里的内置插件是 pnpm 工作区成员，`node_modules` 中是链接，所以显示 `unknown`；桌面安装包不带这个目录。应用内校验与结构化诊断保留执行分类、包内路径、字段和原因。`pnpm validate:plugin` 只打印静态校验结果，不输出执行分类或检查诊断；校验成功不是声明式准入证明。
 
 - 可以声明 agent、自己的数据集、设置、数据接收、固定提示段、JSON 界面、模板、视图和输入模式，以及可选的读/写服务导入。声明输出契约不等于提供可执行服务。
-- `entry`（包括自动发现的 `server/index.js`）、`function`、guard、非空 HTTP 权限，或 hooks/tools/wires/services/actions/forms/extensions/worldProjections 的可执行注册声明，都属于 `code`。禁用、无效和本地化 runtime 中的原始声明仍参与检查。
+- `entry`（包括自动发现的 `server/index.js`）、`function`、guard、非空 HTTP 权限、`scope: instance` / `scope: both`，以及 `permissions`（`secrets`、`loopbackCallback`、`authProxy`、`scheduler`、`sandboxWorker`、`appEvents`）或 hooks/tools/wires/services/actions/appActions/flows/appEvents/schedules/providerSources/forms/extensions/worldProjections 的可执行注册声明，都属于 `code`。禁用、无效和本地化 runtime 中的原始声明仍参与检查。
 - `.js` 只有在有效 webview 的确切资源清单内才作为浏览器资源处理。目录叫 `ui` 不够；隐藏文件、被忽略文件、测试/构建脚本，以及未列入清单的 JS/TS/JSX、原生模块和 Wasm 仍算代码。服务器引用优先：同一文件被 entry 或 guard 引用就不能豁免。发布时保留干净的分发目录，把测试放在包外。
 - 声明式 runtime 只写自己的数据集和经过校验的角色记录；通过内置 `sync-characters` 写角色仍走提案验证与提交。其他插件的数据只能通过其独立准入的写服务修改。工具白名单、子 agent 的只读限制、恢复/重试限制和提交边界保持不变。
 
@@ -51,6 +51,7 @@ GitHub 插件预览始终包含 `capabilities` 和 `trustedSource`。确认安�
 - `tools`：贡献的工具名与 runtime 的 `tools.builtin`。
 - `actions`、`services`（契约 ID；[写服务](./plugin-extensions.md#写服务)记成 `<契约> (write)`）、`wires`、`extensions`（`<point>/<id>`）、`forms`。
 - `datasets`：`contributes.datasets` 的命名空间与允许的写操作，不是安装用的合集。
+- 实例与平台能力：声明了对应字段时记录 `instanceScope`、`secrets`、`authProxy`、`scheduler`、`sandboxWorker`、`loopbackCallback`、`appEvents`、`appActions`、`flows`、`providerSources`。
 
 所有列表排序去重。当前能力必须是快照的子集：HTTP 方法、数据集写操作也要逐项包含，钩子换阶段算新增能力，服务改成写服务（`access: write`）也算：它能改调用方回合里提供者自己的数据，所以要重新确认。给模型用（`modelFacing`）不进快照。更新可信来源的插件时，原快照原样带到新记录；原记录没有快照就仍然没有。因此更新不能默默扩大批准范围。非可信来源不写入新快照，世界包不写快照。
 
@@ -362,6 +363,15 @@ GitHub 源码归档带的一层外目录会被去掉，再提取指定的插件�
 - 插件的隔离执行。
 - 按目录标签提升权限。
 - 按合集整体更新或卸载。合集只在安装时起作用，装好的成员各自独立更新和卸载。
+
+## 权限与四层策略
+
+所有插件能力都受宿主四层权限模型约束，每一层只能收紧、不能放宽：
+
+- **L1（部署形态上限）**：按[安全边界 · 能力天花板](../internals/security.md#能力天花板l1)执行，可用 `enabled`、`operator-only`、`disabled` 限制（托管与 `browser-private` 形态永久关闭实例作用域、秘钥库、`provider.source@1`、`loopbackCallback`、`authProxy`、`app.scheduler`、`channel.bridge`、`compute.sandboxWorker` 与 `exec.localBridge`）。
+- **L2（实例级默认策略）**：在 **设置 → 权限** 或通过 `PUT /api/permissions/policy` 设置每项能力的默认模式（`allow`、`ask`、`deny`）。高风险能力（如 `plugin.communityCode`、`plugin.instanceScope`、`plugin.providerSource`、`channel.bridge`、`secrets.own`、`net.authProxy`、`net.loopbackCallback`）禁止将实例默认策略设为 `allow`。
+- **L3（按插件持久化授权）**：为单个插件保存的显式授权（`allow`、`deny`、`unset`），管理 `covel.secrets`（宿主的 `SecretVault` 包私有加密存储）、`providerSources`、Config Flow 回调与实例调度等能力；L1/L2 仍高于 L3 生效，完整接口见 [API · 权限治理](./api.md#权限治理)。
+- **L4（会话级与逐操作授权）**：面向单局会话的社区代码授权（`covel:plugin-server-code`、`runtime:*`）以及一次性高危 RPC / 动作审批。
 
 ## 会话选择与执行授权
 

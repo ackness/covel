@@ -38,6 +38,29 @@ export function notifyTargetAttempt(
 }
 
 export function shouldFallback(error: AiProviderError): boolean {
+  const sourceKind = error.details?.providerFailureKind;
+  if (typeof sourceKind === "string") {
+    if (
+      sourceKind === "auth" ||
+      sourceKind === "quota" ||
+      sourceKind === "rate_limited" ||
+      sourceKind === "overloaded" ||
+      sourceKind === "server" ||
+      sourceKind === "timeout" ||
+      sourceKind === "unreachable" ||
+      sourceKind === "missing_key"
+    ) {
+      return true;
+    }
+    if (
+      sourceKind === "config" ||
+      sourceKind === "bad_request" ||
+      sourceKind === "refused" ||
+      sourceKind === "not_found"
+    ) {
+      return false;
+    }
+  }
   if (
     error.code === "CONFIG_ERROR" &&
     error.details?.unsupportedCapability === "function_calling"

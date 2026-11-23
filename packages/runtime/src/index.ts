@@ -6,6 +6,7 @@ export {
   kernelExtensionPoints,
 } from "./plugin-extensions.js";
 export type {
+  InstanceExtensionExecutionScope,
   PluginExtensionExecution,
   PluginExtensionExecutionScope,
 } from "./plugin-extensions.js";
@@ -162,8 +163,41 @@ export type {
   PluginEntryFactory,
   PluginHookOptions,
   PluginRpcOptions,
+  PluginAppActionContext,
+  PluginAppActionHandler,
+  PluginAppActionOptions,
+  PluginAppEventContext,
+  PluginAppEventHandler,
+  PluginAppEventName,
+  PluginAppEventPayloads,
+  PluginSchedulerClient,
+  PluginScheduledTaskContext,
+  PluginScheduledTaskHandler,
+  PluginConfigFlowContext,
+  PluginConfigFlowDefinition,
+  PluginConfigFlowField,
+  PluginConfigFlowFieldOption,
+  PluginConfigFlowStartInput,
+  PluginConfigFlowStep,
+  PluginConfigFlowStepInput,
+  PluginConfigFlowStepKind,
+  PluginConfigFlowText,
+  PluginLoopbackCallbackResult,
+  PluginLoopbackCallbackSession,
+  PluginProviderSource,
+  PluginProviderSourceContext,
+  PluginProviderSourceErrorClassification,
+  PluginProviderSourceRefreshRequest,
+  PluginProviderSourceResolveRequest,
+  PluginProviderSourceResolved,
   PluginToolkit,
 } from "./plugin-api.js";
+export {
+  runSandboxWorker,
+  SandboxWorkerError,
+  type SandboxWorkerErrorCode,
+  type SandboxWorkerOptions,
+} from "./sandbox-worker.js";
 
 // ── Plugin RPC ──────────────────────────────────────────
 export { createPluginRpcRegistry } from "./rpc/rpc-registry.js";

@@ -123,10 +123,11 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
 
   for (const [slotName, _def] of Object.entries(llm.covel)) {
     const def = _def as SlotDefinition;
+    const provider = def.provider ?? def.source!;
     // Register provider (first occurrence wins for baseUrl/protocol)
-    if (!providers[def.provider]) {
-      providers[def.provider] = {
-        baseUrl: def.baseUrl,
+    if (!providers[provider]) {
+      providers[provider] = {
+        ...(def.baseUrl ? { baseUrl: def.baseUrl } : {}),
         protocol: def.protocol,
       };
     }
@@ -154,7 +155,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
     // Resolve capability: manual > known DB > protocol defaults
     const capability = resolveCapability(
       def.model,
-      def.provider,
+      provider,
       def.protocol,
       manual,
     );
@@ -175,11 +176,13 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
 
     presets.push({
       id: presetId,
-      name: formatPresetName(slotName, def),
-      provider: def.provider,
+      name: formatPresetName(slotName, { ...def, provider }),
+      provider,
+      ...(def.source ? { source: def.source } : {}),
+      ...(def.account ? { account: def.account } : {}),
       protocol: def.protocol,
       model: def.model,
-      baseUrl: def.baseUrl,
+      ...(def.baseUrl ? { baseUrl: def.baseUrl } : {}),
       tier: "medium",
       defaultSlot: slotName,
       supportedModes,
@@ -206,7 +209,7 @@ function convertToAiConfig(llm: LlmConfig): AiConfig {
       profiles.push({
         id: "embed-default",
         tier: "embed-default",
-        provider: def.provider,
+        provider,
         model: def.model,
         contextWindow: capability.contextWindow ?? DEFAULT_EMBED_CONTEXT_WINDOW,
         latencyClass: "medium",
@@ -278,7 +281,10 @@ function buildProviderRequestMetadata(
   return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
-function formatPresetName(slotName: string, def: SlotDefinition): string {
+function formatPresetName(
+  slotName: string,
+  def: { readonly provider: string; readonly model: string },
+): string {
   const label = slotName.charAt(0).toUpperCase() + slotName.slice(1);
   const providerLabel =
     def.provider.charAt(0).toUpperCase() + def.provider.slice(1);

@@ -103,6 +103,8 @@ export const CREATE_TABLES_SQL = [
 export const ALL_TABLE_NAMES: readonly string[] = [
   "worlds",
   "server_settings",
+  "plugin_grants",
+  "instance_data",
   SESSIONS_TABLE,
   ...SESSION_SCOPED_TABLE_NAMES,
   "vector_models",

@@ -171,4 +171,29 @@ export const SERVER_ENV_VARS = [
     description:
       "Comma-separated request paths the Hono request logger skips, so health polling does not flood server.log.",
   },
+  {
+    name: "COVEL_DISABLED_CAPABILITIES",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Comma-separated CapabilityKey names forced to disabled on the host capability ceiling (downward-only). Unknown names stop server startup.",
+  },
+  {
+    name: "COVEL_PERMISSIONS_POLICY",
+    group: "server",
+    type: "string",
+    status: "active",
+    description:
+      "Comma-separated CapabilityKey=allow|ask|deny overrides pinning the instance L2 permissions.policy server setting.",
+  },
+  {
+    name: "COVEL_CREDENTIALS_KEY",
+    group: "server",
+    type: "string",
+    status: "active",
+    secret: true,
+    description:
+      "Optional encryption passphrase/key for at-rest authenticated encryption of file-backed plugin secrets under <config>/secrets/.",
+  },
 ] as const satisfies readonly EnvVarDefinition[];

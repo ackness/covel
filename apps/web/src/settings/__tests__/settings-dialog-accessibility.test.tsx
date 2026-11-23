@@ -52,6 +52,9 @@ vi.mock("../panes/LlmSlotsPane.js", () => ({
 vi.mock("../panes/OperatorAccessPane.js", () => ({
   OperatorAccessPane: () => <div>Operator pane</div>,
 }));
+vi.mock("../panes/PermissionsPane.js", () => ({
+  PermissionsPane: () => <div>Permissions pane</div>,
+}));
 vi.mock("../panes/PackagesPane.js", () => ({
   PackagesPane: () => <div>Packages pane</div>,
 }));

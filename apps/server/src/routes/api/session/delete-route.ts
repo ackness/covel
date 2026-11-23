@@ -87,6 +87,7 @@ export async function deleteSessionWithLifecycle(
       );
     }
     await clearProcessLocalState();
+    void c.get("appEvents")?.emit("SessionDeleted", { sessionId: id });
   };
 
   const prepared = await withSettledSessionLock(c, id, async () => {

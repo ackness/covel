@@ -46,16 +46,15 @@ function resolveBound(
     (candidate) => candidate.id === ref,
   );
   if (!preset) throw new Error(`preset not found: ${String(presetId)}`);
+  const provider = preset.provider ?? preset.source ?? "";
   return {
     presetId: preset.id,
-    provider: preset.provider,
+    provider,
     model: preset.model,
     protocol: "openai-chat-v1",
     tag: "text",
     metadata: {},
-    apiKey:
-      options?.apiKeys?.[preset.provider] ??
-      options?.envApiKeys?.[preset.provider],
+    apiKey: options?.apiKeys?.[provider] ?? options?.envApiKeys?.[provider],
   };
 }
 

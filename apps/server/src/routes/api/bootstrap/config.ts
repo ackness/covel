@@ -22,6 +22,10 @@ import type { SessionLock } from "../../../lib/session-lock.js";
 import type { ApplicationWork } from "../../../application-work.js";
 import type { HostProfile } from "../../../host-profile.js";
 import type { TrustedSourceService } from "../../../trust/trusted-source-service.js";
+import type { PermissionService } from "../../../trust/permission-service.js";
+import type { SecretVault } from "../../../trust/secret-vault.js";
+import type { InstancePluginRegistry } from "./instance-plugins.js";
+import type { ProviderSourceHost } from "./provider-sources.js";
 import type { RuntimeJobRecord } from "../plugin-rpc/jobs.js";
 import type { RuntimeJobWorker } from "../plugin-rpc/runtime-job-worker.js";
 
@@ -136,6 +140,11 @@ export interface ApiBootstrapConfig {
 
 export interface ApiBootstrapResult {
   readonly trustedSources: TrustedSourceService;
+  readonly permissionService: PermissionService;
+  readonly hostId: string;
+  readonly secretVault: SecretVault;
+  readonly instancePlugins: InstancePluginRegistry;
+  readonly providerSources: ProviderSourceHost;
   readonly memorySystem?: MemorySystem;
   readonly applicationWork: ApplicationWork;
   readonly app: Hono;

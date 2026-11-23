@@ -256,20 +256,21 @@ function attachTitleSync(win: BrowserWindow): void {
 }
 
 /**
- * Decide whether a `window.open()` / target=_blank link should be handed off
- * to the system browser. HTTPS opens directly, loopback HTTP opens directly,
- * external HTTP requires confirmation, and all other schemes are blocked.
+ * Decide whether a `window.open()` / target=_blank / external-auth link should
+ * be handed off to the system browser. HTTPS opens directly, loopback HTTP
+ * opens directly (excluding untrusted plugin app paths), external HTTP requires
+ * dialog confirmation, and all other schemes are blocked.
  */
-function handleExternalLinkRequest(
-  parent: BrowserWindow,
+export async function openExternalUrl(
+  parent: BrowserWindow | null,
   linkUrl: string,
-): void {
+): Promise<{ readonly ok: boolean; readonly reason?: string }> {
   let parsed: URL;
   try {
     parsed = new URL(linkUrl);
   } catch {
     writeLog("warn", `[external-link] blocked unparseable URL: ${linkUrl}`);
-    return;
+    return { ok: false, reason: "invalid_url" };
   }
 
   const protocol = parsed.protocol;
@@ -277,8 +278,8 @@ function handleExternalLinkRequest(
 
   if (protocol === "https:") {
     writeLog("info", `[external-link] https -> ${host}`);
-    void shell.openExternal(linkUrl);
-    return;
+    await shell.openExternal(linkUrl);
+    return { ok: true };
   }
 
   if (protocol === "http:") {
@@ -287,12 +288,19 @@ function handleExternalLinkRequest(
         "warn",
         `[external-link] blocked untrusted app path: ${linkUrl.slice(0, 120)}`,
       );
-      return;
+      return { ok: false, reason: "untrusted_app_path" };
     }
     if (loopbackHttpOrigin(linkUrl)) {
       writeLog("info", `[external-link] http loopback -> ${host}`);
-      void shell.openExternal(linkUrl);
-      return;
+      await shell.openExternal(linkUrl);
+      return { ok: true };
+    }
+    if (!parent || parent.isDestroyed()) {
+      writeLog(
+        "warn",
+        `[external-link] blocked external http without parent window: ${host}`,
+      );
+      return { ok: false, reason: "missing_parent_window" };
     }
 
     const choice = dialog.showMessageBoxSync(parent, {
@@ -306,17 +314,25 @@ function handleExternalLinkRequest(
     });
     if (choice === 0) {
       writeLog("info", `[external-link] http (user-confirmed) -> ${host}`);
-      void shell.openExternal(linkUrl);
-    } else {
-      writeLog("info", `[external-link] http (user-cancelled) -> ${host}`);
+      await shell.openExternal(linkUrl);
+      return { ok: true };
     }
-    return;
+    writeLog("info", `[external-link] http (user-cancelled) -> ${host}`);
+    return { ok: false, reason: "cancelled" };
   }
 
   writeLog(
     "warn",
     `[external-link] blocked protocol ${protocol} (${host || linkUrl.slice(0, 80)})`,
   );
+  return { ok: false, reason: "blocked_protocol" };
+}
+
+function handleExternalLinkRequest(
+  parent: BrowserWindow,
+  linkUrl: string,
+): void {
+  void openExternalUrl(parent, linkUrl);
 }
 
 function sharedWebPreferences(): WebPreferences {

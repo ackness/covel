@@ -1,4 +1,4 @@
-import { selectPromptSegments } from "./extension-segments.js";
+import { governPromptSegments } from "./extension-segments.js";
 /**
  * Segment-based Prompt Assembler.
  *
@@ -116,6 +116,7 @@ interface PromptSegments {
    */
   readonly postHistoryInstructions: readonly LLMMessage[];
   readonly depthContributions: readonly RenderedDepthContribution[];
+  readonly diagnostics?: readonly import("@covel/shared/platform").PromptSegmentGovernanceDiagnostic[];
 }
 
 /**
@@ -318,15 +319,26 @@ async function buildPromptSegments(
     params.promptTemplate,
     variables,
   );
+  const governed = governPromptSegments(
+    params.promptSegments,
+    params.manifest,
+    {
+      ...(params.defaultSegmentBudget !== undefined
+        ? { defaultBudget: params.defaultSegmentBudget }
+        : {}),
+      ...(params.promptFacts ? { initialFacts: params.promptFacts } : {}),
+      ...(params.estimator ? { estimator: params.estimator } : {}),
+    },
+  );
   const contributions = activeContributions(params);
-  const worldInfoBeforePlugin = renderSystemLoreContributions(
-    contributions,
-    "before_plugin",
-  );
-  const worldInfoAfterPlugin = renderSystemLoreContributions(
-    contributions,
-    "after_plugin",
-  );
+  const worldInfoBeforePlugin = governed.suppressedBlocks.has(
+    "world.info.before",
+  )
+    ? ""
+    : renderSystemLoreContributions(contributions, "before_plugin");
+  const worldInfoAfterPlugin = governed.suppressedBlocks.has("world.info.after")
+    ? ""
+    : renderSystemLoreContributions(contributions, "after_plugin");
   // Inject blocks are NOT re-interpolated. Their content is already
   // XML-escaped upstream (see resolvePluginDataInject),
   // but `escapeXmlContent` does not touch `{}` — so a second
@@ -337,7 +349,9 @@ async function buildPromptSegments(
   const activation = buildRuntimeActivationBlock(params);
   const staged = params.activation?.source === "stage";
   const sessionInjects = [
-    buildAvailableEventsBlock(params),
+    governed.suppressedBlocks.has("session.events")
+      ? ""
+      : buildAvailableEventsBlock(params),
     staged ? activation : "",
   ]
     .filter(Boolean)
@@ -347,7 +361,9 @@ async function buildPromptSegments(
     buildInputsBindingBlock(params),
     await buildStoryContextBlock(params),
     buildExportsBindingBlock(params),
-    await buildOperationNoticeBlock(params),
+    governed.suppressedBlocks.has("operation.notices")
+      ? ""
+      : await buildOperationNoticeBlock(params),
     staged ? "" : activation,
   ]
     .filter(Boolean)
@@ -360,10 +376,7 @@ async function buildPromptSegments(
       resolveFrameworkCompletion(params.manifest, params.agentOutput),
     );
 
-  const extensionSegments = selectPromptSegments(
-    params.promptSegments,
-    params.manifest,
-  );
+  const extensionSegments = governed.segments;
   const systemSegments = extensionSegments.filter(
     (segment) =>
       segment.position === "system" ||
@@ -439,6 +452,9 @@ async function buildPromptSegments(
       ...collectDepthContributions(contributions),
       ...extensionDepth,
     ],
+    ...(governed.diagnostics.length > 0
+      ? { diagnostics: governed.diagnostics }
+      : {}),
   };
 }
 
@@ -547,6 +563,9 @@ export async function buildContext(
       turnContext,
       currentTurnUserMessages,
       prunedMessageCount: result.prunedMessageCount,
+      ...(segments.diagnostics
+        ? { promptDiagnostics: segments.diagnostics }
+        : {}),
     };
   }
 
@@ -556,5 +575,8 @@ export async function buildContext(
     messages,
     turnContext,
     currentTurnUserMessages,
+    ...(segments.diagnostics
+      ? { promptDiagnostics: segments.diagnostics }
+      : {}),
   };
 }

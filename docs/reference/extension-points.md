@@ -61,7 +61,7 @@ export default function (covel) {
 | 模式       | 组合方式                                       | 当前例子                                                             |
 | ---------- | ---------------------------------------------- | -------------------------------------------------------------------- |
 | `single`   | 解析一个有效提供者，缺失时由调用点决定默认行为 | `session.world-context@1`、`history.compact@2`、`media.image-flow@1` |
-| `collect`  | 收集各提供者通过校验的输出                     | `prompt.segment@1`                                                   |
+| `collect`  | 收集各提供者通过校验的输出                     | `prompt.segment@1`、`channel.bridge@1`                               |
 | `pipeline` | 按声明顺序传递上一个有效结果                   | `prompt.history-transform@1`、`ui.slot@1`                            |
 
 每个扩展点在 `packages/shared/src/extension-points/` 里定义自己的输入、输出、模式、超时和失败策略。失败策略 `onError` 有两种：`skip`（跳过这个提供者，继续）和 `fail-turn`（整个回合失败）。
@@ -136,12 +136,17 @@ export default function (covel) {
 
 多个插件用了相同的 `order` 时，顺序由 `providerPluginId`（字典序）决定，再看 `id`。这个顺序是确定的，但它只是实现细节，不是承诺：插件改名会悄悄改变它在同层里的位置。需要明确先后的插件应该设不同的 `order`。
 
+### 四阶段提示词治理与 `when` 条件
+
+静态段（`contributes.prompt`）和动态 `prompt.segment@1` 都支持按跨插件事实库键（`<domain>.<key>`）求值的 `when` 条件、显式优先级与 token 预算上限（默认段预算 2000）。框架核心块（`framework.preamble`、`world.lore`、`plugin.instructions`、`player.message`、`history`）受保护，不能被插件关闭；可抑制块（`world.info.before`、`world.info.after`、`session.events`、`operation.notices`）受治理流程管控，避免提示词失控膨胀。
+
 ## 其他扩展点在哪里讲
 
 - `ui.slot@1`：提供者还要声明 `slot`，可选 `order` / `watch` / `preview`。服务端负责投影、校验和缓存，前端使用通用槽位，不读插件的 namespace。见 [UI 槽位](./ui-panels.md#kernel-ui-slots)。
 - 舞台的三个数据槽位是 `stage.backdrop@1`、`stage.cast@1`、`stage.choices@1`；对白名牌来自故事段落，不是槽位。handler 返回所选槽位的值，或 `null`；不需要改动时返回 `previous`。字段、必填项、枚举和上限见[舞台槽位值](./ui-panels.md#舞台槽位值)。每份输出按所选槽位校验；非法输出只跳过该提供者，保留前一个有效值。 `stage.cast@1` 可通过 `exitTransition` 选择从名单差异推断的退场；省略时关闭，与已送达的显式退场独立。见[舞台名单](./ui-panels.md#stagecast1)，无需新的扩展点或持久缓存。
 - 想让插件的状态出现在玩家的状态条或场景 HUD 上，提供 `session.summary@1`。见[状态摘要](./ui-panels.md#session-summary)。
 - 想让会话有背景音乐，提供 `stage.music@1`。见[背景音乐](./ui-panels.md#stage-music)。
+- `channel.bridge@1`：实例作用域的 `collect` 扩展点，受 `channel.bridge` 权限门控，接收外部通讯渠道的 `inboundMessage`、`beforeRender`、`outboundEvent` 三个阶段输入（每次调用限时 5 秒、出错跳过），供外部渠道桥接插件接入而无需修改内核。
 - 世界上下文、历史变换与压缩挂在流程的哪个位置，见[插件契约](./plugins.md#提示词与记忆扩展)。
 
 ## 会话世界上下文

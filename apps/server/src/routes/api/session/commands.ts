@@ -67,8 +67,10 @@ export function buildSessionCommandList(
     const entry = pluginRegistry.get(pluginId);
     if (!entry || entry.status === "error") continue;
     for (const command of mergePluginCommands(entry)) {
+      if (command.scope === "instance" || !command.action) continue;
       commands.push({
         ...command,
+        action: command.action,
         id: `${pluginId}:${command.name}`,
         pluginId,
         source: "plugin",

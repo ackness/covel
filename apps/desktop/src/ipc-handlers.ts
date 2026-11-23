@@ -18,6 +18,7 @@ import {
   getMainWindow,
   getMainWindowUrl,
   navigateToApp,
+  openExternalUrl,
   setTitleBarColors,
   type TitleBarColors,
 } from "./windows.js";
@@ -460,5 +461,19 @@ export function registerDesktopIpcHandlers({
       writeLog("error", "settings:save failed:", err);
       return { ok: false };
     }
+  });
+
+  ipcMain.handle("covel:open-external", async (event, payload: unknown) => {
+    if (!isTrustedSender(event, "covel:open-external")) {
+      return { ok: false, reason: "untrusted_sender" };
+    }
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      typeof (payload as { url?: unknown }).url !== "string"
+    ) {
+      return { ok: false, reason: "invalid_payload" };
+    }
+    return openExternalUrl(getMainWindow(), (payload as { url: string }).url);
   });
 }

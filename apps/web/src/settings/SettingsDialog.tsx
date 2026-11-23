@@ -13,6 +13,7 @@ import {
   Puzzle,
   Search,
   Settings2,
+  Shield,
   ShieldCheck,
   SlidersHorizontal,
   Workflow,
@@ -27,6 +28,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
+import {
+  PluginSettingsSectionPane,
+  type PluginSettingsSectionTarget,
+} from "@/components/platform/plugin-settings-sections.js";
+import { usePlatformUiSpecs } from "@/components/platform/use-session-platform-specs.js";
 import { isOperatorTokenRequired } from "@/services/api/health.js";
 import { getOperatorToken } from "@/services/session-credentials.js";
 import {
@@ -41,6 +48,7 @@ import {
   MEDIA_LIBRARY_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
+  PERMISSIONS_NODE_ID,
   RAW_CONFIG_NODE_ID,
   READING_KEYS,
   type NavNode,
@@ -57,6 +65,7 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
+import { PermissionsPane } from "./panes/PermissionsPane.js";
 import { PluginSettingsPane } from "./panes/PluginSettingsPane.js";
 import { RawConfigPane } from "./panes/RawConfigPane.js";
 import { MediaLibraryPane } from "./panes/MediaLibraryPane.js";
@@ -70,6 +79,14 @@ interface SettingsDialogProps {
   plugins?: readonly Pick<PluginSummary, "id" | "displayName">[];
 }
 
+const SECTION_GROUP_HEADER_ID: Readonly<Record<string, string>> = {
+  general: "group.general",
+  llm: "llm",
+  plugins: "plugin",
+  data: "group.saves",
+  advanced: "group.advanced",
+};
+
 export function SettingsDialog({
   open,
   onOpenChange,
@@ -79,6 +96,8 @@ export function SettingsDialog({
   const store = useSettingsStore();
   const writable = useSettingsWritable();
   const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const { settingsSection } = usePlatformUiSpecs(open);
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
   const [storeRevision, setStoreRevision] = useState(0);
@@ -104,34 +123,89 @@ export function SettingsDialog({
     setQuery("");
   }, [i18n.language]);
 
-  const tree = useMemo(
-    () =>
-      buildNavTree(store, {
-        includeDesktop: desktop,
-        // Shown while the server has not answered, and while a token is
-        // stored here so that it can still be cleared.
-        includeOperatorAccess:
-          isOperatorTokenRequired() !== false ||
-          getOperatorToken() !== undefined,
-        // A server that checks the operator token is shared, and a shared
-        // server has no media library.
-        includeMediaLibrary: isOperatorTokenRequired() !== true,
-        developerMode: developerMode === true,
-        locale: i18n.language,
-        pluginDisplayNames,
-      }),
-    // `open` included so the tree rebuilds when dialog opens and plugins
-    // registered new entries since last render.
-    [
-      store,
-      desktop,
-      i18n.language,
-      open,
-      storeRevision,
+  const { tree, pluginSections } = useMemo(() => {
+    const base = buildNavTree(store, {
+      includeDesktop: desktop,
+      // Shown while the server has not answered, and while a token is
+      // stored here so that it can still be cleared.
+      includeOperatorAccess:
+        isOperatorTokenRequired() !== false || getOperatorToken() !== undefined,
+      // A server that checks the operator token is shared, and a shared
+      // server has no media library.
+      includeMediaLibrary: isOperatorTokenRequired() !== true,
+      developerMode: developerMode === true,
+      locale: i18n.language,
       pluginDisplayNames,
-      developerMode,
-    ],
-  );
+    });
+
+    const sectionMap = new Map<string, PluginSettingsSectionTarget>();
+    const byHeader = new Map<string, Array<{ node: NavNode; order: number }>>();
+
+    for (const entry of settingsSection) {
+      for (const spec of entry.specs) {
+        if (!spec.id || spec.webview) continue;
+        const id = `plugin-section:${entry.pluginId}:${spec.id}`;
+        const label =
+          resolveDisplayText(spec.label, locale) || spec.id || entry.pluginId;
+        const headerId =
+          SECTION_GROUP_HEADER_ID[spec.sectionGroup ?? "plugins"] ?? "plugin";
+        sectionMap.set(id, { pluginId: entry.pluginId, spec });
+        const bucket = byHeader.get(headerId) ?? [];
+        bucket.push({
+          order: spec.order ?? 0,
+          node: {
+            id,
+            label,
+            kind: "plugin",
+            parentId: headerId,
+            children: [],
+          },
+        });
+        byHeader.set(headerId, bucket);
+      }
+    }
+
+    if (byHeader.size === 0) {
+      return { tree: base, pluginSections: sectionMap };
+    }
+
+    const merged: NavNode[] = [];
+    let currentHeaderId: string | undefined;
+    const flushGroup = (headerId: string | undefined) => {
+      if (!headerId) return;
+      const extras = byHeader.get(headerId);
+      if (!extras) return;
+      extras.sort(
+        (a, b) => a.order - b.order || a.node.label.localeCompare(b.node.label),
+      );
+      for (const item of extras) merged.push(item.node);
+      byHeader.delete(headerId);
+    };
+
+    for (const node of base) {
+      if (node.kind === "header") {
+        flushGroup(currentHeaderId);
+        currentHeaderId = node.id;
+      }
+      merged.push(node);
+    }
+    flushGroup(currentHeaderId);
+    for (const leftovers of byHeader.values()) {
+      for (const item of leftovers) merged.push(item.node);
+    }
+
+    return { tree: merged, pluginSections: sectionMap };
+  }, [
+    store,
+    desktop,
+    i18n.language,
+    locale,
+    open,
+    storeRevision,
+    pluginDisplayNames,
+    developerMode,
+    settingsSection,
+  ]);
   const filtered = useMemo(
     () => filterNav(tree, query, i18n.language),
     [tree, query, i18n.language],
@@ -296,7 +370,7 @@ export function SettingsDialog({
                   {t("settings.loadFailedReadOnly")}
                 </p>
               )}
-              {renderPane(selectedNode, t)}
+              {renderPane(selectedNode, t, pluginSections)}
             </div>
           </section>
         </div>
@@ -318,6 +392,7 @@ const NAV_ICONS: Readonly<Record<string, LucideIcon>> = {
   [RAW_CONFIG_NODE_ID]: FileCode,
   [MEDIA_LIBRARY_NODE_ID]: Images,
   [OPERATOR_ACCESS_NODE_ID]: ShieldCheck,
+  [PERMISSIONS_NODE_ID]: Shield,
 };
 
 function navIcon(node: NavNode): LucideIcon {
@@ -332,6 +407,7 @@ function isSelectable(node: NavNode): boolean {
 function renderPane(
   node: NavNode | null,
   t: TranslateFn,
+  pluginSections?: ReadonlyMap<string, PluginSettingsSectionTarget>,
 ) {
   if (!node) {
     return (
@@ -339,6 +415,10 @@ function renderPane(
         {t("settings.noGroupSelected")}
       </div>
     );
+  }
+  const dynamicSection = pluginSections?.get(node.id);
+  if (dynamicSection) {
+    return <PluginSettingsSectionPane section={dynamicSection} />;
   }
   if (node.id === "llm.slots") return <LlmSlotsPane />;
   if (node.id === "llm.providers") return <LlmPresetsPane />;
@@ -399,6 +479,16 @@ function renderPane(
         )}
       </>
     );
+  if (node.id === PERMISSIONS_NODE_ID)
+    return (
+      <>
+        <SettingsPaneHeader
+          title={node.label}
+          description={t("settings.panePermissionsDescription")}
+        />
+        <PermissionsPane />
+      </>
+    );
   if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
   if (node.kind === "plugin")
     return (
@@ -437,13 +527,7 @@ function renderPane(
  * Preferences and Advanced list their registered entries. Preferences ends
  * with a Reading section; Advanced keeps the developer-mode switch first.
  */
-function EntryPane({
-  node,
-  t,
-}: {
-  node: NavNode;
-  t: TranslateFn;
-}) {
+function EntryPane({ node, t }: { node: NavNode; t: TranslateFn }) {
   const reading = node.children.filter((entry) => READING_KEYS.has(entry.key));
   const rest = node.children.filter((entry) => !READING_KEYS.has(entry.key));
   return (
