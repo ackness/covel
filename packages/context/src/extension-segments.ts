@@ -16,6 +16,7 @@ import {
 import type { TokenEstimator } from "./budget.js";
 
 const TRUNCATION_SUFFIX = "\n...[truncated to budget]";
+const promptPriority = { high: 0, normal: 1, low: 2 } as const;
 const PROTECTED_BLOCK_SET: ReadonlySet<string> = new Set(
   PROTECTED_PROMPT_BLOCKS,
 );
@@ -291,6 +292,8 @@ export function governPromptSegments(
   const sorted = [...(segments ?? [])].sort(
     (a, b) =>
       volatility[a.volatility] - volatility[b.volatility] ||
+      promptPriority[a.priority ?? "normal"] -
+        promptPriority[b.priority ?? "normal"] ||
       (a.order ?? 0) - (b.order ?? 0) ||
       codeUnit(a.providerPluginId ?? "", b.providerPluginId ?? "") ||
       codeUnit(a.id, b.id),

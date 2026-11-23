@@ -24,8 +24,11 @@ export function registerTextWire(
 ): () => void {
   return registerWire("text", wire, owner);
 }
-export function getTextWire(id: string): TextWire | null {
-  return getWire("text", id);
+export function getTextWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): TextWire | null {
+  return getWire("text", id, approvedInstanceOwner);
 }
 export function listTextWires(): TextWire[] {
   return listWires("text");

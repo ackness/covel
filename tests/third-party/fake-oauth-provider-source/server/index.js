@@ -49,13 +49,51 @@ function summarizeAccounts(vault) {
 }
 
 export default function registerFakeOauthProviderSource(covel) {
+  const generateText = async (config, params) => {
+    const response = await covel.http.fetchWithRetry(
+      `${config.baseUrl}/converse`,
+      {
+        method: "POST",
+        headers: { ...config.headers, "content-type": "application/json" },
+        body: JSON.stringify({ deployment: params.model }),
+        signal: config.signal,
+        maxRetries: 0,
+      },
+    );
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw Object.assign(new Error("Fake Converse request failed"), {
+        statusCode: response.status,
+      });
+    }
+    const { answer, tokens } = await response.json();
+    return { text: answer, finishReason: "stop", usage: tokens };
+  };
+  covel.registerWires({
+    text: [
+      {
+        id: "fake-converse",
+        label: "Fake Converse",
+        generateText,
+        async *streamText(config, params) {
+          const result = await generateText(config, params);
+          yield { type: "text-delta", textDelta: result.text };
+          yield {
+            type: "done",
+            finishReason: result.finishReason,
+            usage: result.usage,
+          };
+        },
+      },
+    ],
+  });
   covel.registerConfigFlow("oauth-sign-in", {
     requiredCapabilities: ["secrets.own", "net.loopbackCallback"],
     async start(_input, ctx) {
       const loopback = await ctx.startLoopbackCallback();
       const params = new URLSearchParams({
         redirect_uri: loopback.callbackUrl,
-        state: "fake-oauth-state",
+        state: loopback.state,
       });
       return {
         kind: "browser",

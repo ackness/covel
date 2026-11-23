@@ -3,7 +3,10 @@ import type { TFunction } from "i18next";
 import { Terminal } from "lucide-react";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { openPluginWindow } from "@/lib/platform-ui-events.js";
+import {
+  openPluginConfigFlow,
+  openPluginWindow,
+} from "@/lib/platform-ui-events.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import type { UISlotEntry, UISlotSpec } from "@/services/api.js";
 import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
@@ -26,13 +29,20 @@ export function ComposerActionButtons({
 
   const items = entries.flatMap((entry) =>
     entry.specs
-      .filter((spec) => spec.action || spec.command || spec.openWindow)
+      .filter(
+        (spec) =>
+          spec.action || spec.command || spec.openWindow || spec.openFlow,
+      )
       .map((spec) => ({ pluginId: entry.pluginId, spec })),
   );
   if (items.length === 0) return null;
 
   const invoke = async (pluginId: string, spec: UISlotSpec, key: string) => {
     if (disabled || busyKey) return;
+    if (spec.openFlow) {
+      openPluginConfigFlow(pluginId, spec.openFlow, spec.params);
+      return;
+    }
     if (spec.openWindow) {
       openPluginWindow(pluginId, spec.openWindow);
       return;

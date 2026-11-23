@@ -50,8 +50,10 @@ import {
 import {
   createFailedAccountTracker,
   handleTargetFailure,
+  preparationFailure,
   prepareTargetAsync,
   tryRefreshSourceTarget,
+  withProviderSourceAccounts,
 } from "./gateway-fallback-chain.js";
 import type { ProviderRegistryLike } from "./gateway-fallback-chain.js";
 import type {
@@ -243,6 +245,7 @@ async function executeTargetWithRefresh<TResult>(args: {
           providerSources,
           provider,
           mode: spec.mode,
+          model: targetModel(target),
           sourceAttempt: state.sourceAttempt,
           error,
           signal: scope?.signal ?? options?.signal,
@@ -300,7 +303,8 @@ export function createRunOperation(
         spec.fallbackTag,
         options,
       );
-      const targets = spec
+      const providerSources = activeProviderSources(deps);
+      const resolvedTargets = spec
         .resolveTargets(effectivePresetId)
         .map((target, index) =>
           applyRequestCapabilityOverlay(
@@ -312,20 +316,34 @@ export function createRunOperation(
           ),
         );
       const resolveUsage = spec.resolveUsage ?? (() => null);
-      const providerSources = activeProviderSources(deps);
+      const targets = withProviderSourceAccounts(
+        resolvedTargets,
+        providerSources,
+      );
       let lastError: AiProviderError | null = null;
       const failedAccounts = createFailedAccountTracker();
 
       for (const [index, target] of targets.entries()) {
-        const preparedTarget = spec.prepare
-          ? await spec.prepare(target, options)
-          : await prepareTargetAsync(
-              deps.providerRegistry,
-              providerSources,
-              target,
-              spec.mode,
-              options,
-            );
+        let preparedTarget;
+        try {
+          preparedTarget = spec.prepare
+            ? await spec.prepare(target, options)
+            : await prepareTargetAsync(
+                deps.providerRegistry,
+                providerSources,
+                target,
+                spec.mode,
+                options,
+              );
+        } catch (error) {
+          lastError = preparationFailure(
+            error,
+            target,
+            options,
+            index < targets.length - 1,
+          );
+          continue;
+        }
         const provider = preparedTarget.provider;
         const state: TargetExecutionState = {
           resolved: preparedTarget.resolved,

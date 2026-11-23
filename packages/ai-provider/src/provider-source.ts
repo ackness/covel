@@ -19,6 +19,7 @@ export interface ProviderSourceErrorClassification {
 
 export interface ProviderSourceAttemptContext {
   readonly sourceId: string;
+  readonly approvedInstanceOwner?: string;
   readonly declaredBaseUrl: string;
   readonly declaredProtocol: string;
   readonly accountId?: string;
@@ -45,6 +46,7 @@ export interface ProviderSourceInspectResult {
 }
 
 export interface ProviderSourceResolver {
+  listReadyAccounts?(sourceId: string): readonly string[];
   inspectSync(
     sourceId: string,
     accountId?: string,
@@ -60,6 +62,8 @@ export interface ProviderSourceResolver {
   refresh?(request: {
     readonly sourceId: string;
     readonly accountId?: string;
+    readonly mode: ProviderSourceMode;
+    readonly model: string;
     readonly failedGeneration?: number;
     readonly statusCode: number;
     readonly signal?: AbortSignal;

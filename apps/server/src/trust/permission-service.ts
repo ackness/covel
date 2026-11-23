@@ -126,41 +126,38 @@ export interface PermissionServiceDeps {
 
 export type PermissionService = ReturnType<typeof createPermissionService>;
 
-function denialResponse(
+const capabilityDenials = {
+  ceiling: {
+    code: "capability_disabled",
+    message: "is disabled on this host",
+  },
+  policy: {
+    code: "capability_denied_by_policy",
+    message: "is denied by instance policy",
+  },
+  grant: {
+    code: "capability_denied_by_grant",
+    message: "is denied by persistent plugin grant",
+  },
+} as const;
+
+export function capabilityDenialResponse(
   c: Context,
-  key: CapabilityKey,
-  state: EffectiveCapabilityState,
+  reason: keyof typeof capabilityDenials,
+  key?: string,
+  ceiling?: CapabilityCeiling,
 ): Response {
-  if (state.lockedBy === "ceiling") {
-    if (state.ceiling === "operator-only") {
-      return c.json(
-        errorBody(`Operator token required for capability "${key}"`, {
-          code: "operator_token_required",
-        }),
-        401,
-      );
-    }
+  const subject = key ? `Capability "${key}"` : "Operation";
+  if (reason === "ceiling" && ceiling === "operator-only") {
     return c.json(
-      errorBody(`Capability "${key}" is disabled on this host`, {
-        code: "capability_disabled",
+      errorBody(`Operator token required for capability "${key}"`, {
+        code: "operator_token_required",
       }),
-      403,
+      401,
     );
   }
-  if (state.lockedBy === "policy") {
-    return c.json(
-      errorBody(`Capability "${key}" is denied by instance policy`, {
-        code: "capability_denied_by_policy",
-      }),
-      403,
-    );
-  }
-  return c.json(
-    errorBody(`Capability "${key}" is denied by persistent plugin grant`, {
-      code: "capability_denied_by_grant",
-    }),
-    403,
-  );
+  const { code, message } = capabilityDenials[reason];
+  return c.json(errorBody(`${subject} ${message}`, { code }), 403);
 }
 
 export function createPermissionService({
@@ -622,7 +619,12 @@ export function createPermissionService({
         isOperator,
       );
       if (state.effective !== "deny") return undefined;
-      return denialResponse(c, key, state);
+      return capabilityDenialResponse(
+        c,
+        state.lockedBy ?? "grant",
+        key,
+        state.ceiling,
+      );
     },
   };
 }

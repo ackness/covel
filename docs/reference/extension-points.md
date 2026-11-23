@@ -132,7 +132,7 @@ export default function (covel) {
 
 ### `order`
 
-同一个 `volatility` 层级内，片段按 `order` 升序排列，默认 0。
+同一个 `volatility` 层级内，片段先按 `priority` 排列，顺序为 `high`、`normal`、`low`，默认 `normal`。优先级相同时按 `order` 升序排列，默认 0。
 
 多个插件用了相同的 `order` 时，顺序由 `providerPluginId`（字典序）决定，再看 `id`。这个顺序是确定的，但它只是实现细节，不是承诺：插件改名会悄悄改变它在同层里的位置。需要明确先后的插件应该设不同的 `order`。
 
@@ -146,7 +146,7 @@ export default function (covel) {
 - 舞台的三个数据槽位是 `stage.backdrop@1`、`stage.cast@1`、`stage.choices@1`；对白名牌来自故事段落，不是槽位。handler 返回所选槽位的值，或 `null`；不需要改动时返回 `previous`。字段、必填项、枚举和上限见[舞台槽位值](./ui-panels.md#舞台槽位值)。每份输出按所选槽位校验；非法输出只跳过该提供者，保留前一个有效值。 `stage.cast@1` 可通过 `exitTransition` 选择从名单差异推断的退场；省略时关闭，与已送达的显式退场独立。见[舞台名单](./ui-panels.md#stagecast1)，无需新的扩展点或持久缓存。
 - 想让插件的状态出现在玩家的状态条或场景 HUD 上，提供 `session.summary@1`。见[状态摘要](./ui-panels.md#session-summary)。
 - 想让会话有背景音乐，提供 `stage.music@1`。见[背景音乐](./ui-panels.md#stage-music)。
-- `channel.bridge@1`：实例作用域的 `collect` 扩展点，受 `channel.bridge` 权限门控，接收外部通讯渠道的 `inboundMessage`、`beforeRender`、`outboundEvent` 三个阶段输入（每次调用限时 5 秒、出错跳过），供外部渠道桥接插件接入而无需修改内核。
+- `channel.bridge@1`：实例插件用 `covel.dispatchChannelBridge(input)` 分发 `inboundMessage`、`beforeRender` 和 `outboundEvent` 三种阶段。调用方和提供者都需要 `channel.bridge` 权限。宿主收集提供者通过校验的结果，每个处理器限时 5 秒，失败的结果跳过。
 - 世界上下文、历史变换与压缩挂在流程的哪个位置，见[插件契约](./plugins.md#提示词与记忆扩展)。
 
 ## 会话世界上下文

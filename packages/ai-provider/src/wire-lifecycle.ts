@@ -99,9 +99,20 @@ export function registerWire<T extends { id: string }>(
     if (live.get(key) === entry) live.delete(key);
   };
 }
-export function getWire<T>(kind: string, id: string): T | null {
+export function getWire<T>(
+  kind: string,
+  id: string,
+  approvedInstanceOwner?: string,
+): T | null {
+  const key = `${kind}:${id}`;
+  if (approvedInstanceOwner !== undefined) {
+    const entry = live.get(key);
+    return entry?.owner?.pluginId === approvedInstanceOwner
+      ? (entry.wire as T)
+      : null;
+  }
   const snapshot = snapshots.getStore();
-  const entry = (snapshot?.entries ?? live).get(`${kind}:${id}`);
+  const entry = (snapshot?.entries ?? live).get(key);
   return entry && usable(entry, snapshot) ? (entry.wire as T) : null;
 }
 export function listWires<T>(kind: string): T[] {

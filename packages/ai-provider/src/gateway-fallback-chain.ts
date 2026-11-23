@@ -11,6 +11,7 @@
 import { AiProviderError } from "./errors.js";
 import {
   assertLlmRequestBudget,
+  awaitLlmRequest,
   type ProviderFailureKind,
 } from "@covel/shared";
 import { classifyProviderFailure } from "./provider-failure.js";
@@ -126,7 +127,7 @@ export interface ProviderRegistryLike {
       protocol?: ProviderProtocol;
       requestScoped?: boolean;
     },
-    options?: { mode: OperationMode },
+    options?: { mode: OperationMode; approvedInstanceOwner?: string },
   ): ProviderResolution;
   withApiKeys(
     resolution: ProviderResolution,
@@ -140,6 +141,37 @@ export interface PreparedTarget {
   readonly provider: string;
   readonly resolved: ProviderResolution;
   readonly sourceAttempt?: ProviderSourceAttemptContext;
+}
+
+export function withProviderSourceAccounts(
+  targets: readonly ResolvedTarget[],
+  providerSources: ProviderSourceResolver | undefined,
+): ResolvedTarget[] {
+  return targets.flatMap((target) => {
+    const preset = target.preset;
+    if (!preset?.source || preset.account) return [target];
+    const accounts = providerSources?.listReadyAccounts?.(preset.source) ?? [];
+    return accounts.length
+      ? [...new Set(accounts)].map((account) => ({
+          ...target,
+          preset: { ...preset, account },
+        }))
+      : [target];
+  });
+}
+
+export function preparationFailure(
+  error: unknown,
+  target: ResolvedTarget,
+  options: GatewayOptions | undefined,
+  hasNext: boolean,
+): AiProviderError {
+  const failure =
+    error instanceof AiProviderError ? error : targetFailure(error, target);
+  if (!hasNext || options?.signal?.aborted || !shouldFallback(failure)) {
+    throw failure;
+  }
+  return failure;
 }
 
 function rethrowPrepareError(
@@ -211,7 +243,7 @@ function buildSourceProviderResolution(
       protocol: attempt.protocol,
       requestScoped: true,
     },
-    { mode },
+    { mode, approvedInstanceOwner: attempt.approvedInstanceOwner },
   );
   const nextConfig: ProviderConfig = {
     ...base.config,
@@ -265,16 +297,19 @@ export async function prepareTargetAsync(
         retriable: false,
       });
     }
-    const attempt = await providerSources.resolve({
-      sourceId,
-      ...(target.preset?.account ? { accountId: target.preset.account } : {}),
-      mode,
-      model: targetModel(target),
-      ...(target.preset?.baseUrl
-        ? { declaredBaseUrl: target.preset.baseUrl }
-        : {}),
-      ...(options?.signal ? { signal: options.signal } : {}),
-    });
+    const attempt = await awaitLlmRequest(
+      providerSources.resolve({
+        sourceId,
+        ...(target.preset?.account ? { accountId: target.preset.account } : {}),
+        mode,
+        model: targetModel(target),
+        ...(target.preset?.baseUrl
+          ? { declaredBaseUrl: target.preset.baseUrl }
+          : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      }),
+      options?.signal,
+    );
     if (
       target.preset?.baseUrl &&
       !hasSameOrigin(target.preset.baseUrl, attempt.declaredBaseUrl)
@@ -308,6 +343,7 @@ export async function tryRefreshSourceTarget(args: {
   readonly providerSources: ProviderSourceResolver | undefined;
   readonly provider: string;
   readonly mode: OperationMode;
+  readonly model: string;
   readonly sourceAttempt: ProviderSourceAttemptContext | undefined;
   readonly error: unknown;
   readonly signal?: AbortSignal;
@@ -320,6 +356,7 @@ export async function tryRefreshSourceTarget(args: {
     providerSources,
     provider,
     mode,
+    model,
     sourceAttempt,
     error,
     signal,
@@ -327,17 +364,23 @@ export async function tryRefreshSourceTarget(args: {
   if (!sourceAttempt || !providerSources?.refresh) return null;
   const normalized = normalizeError(error, provider);
   if (normalized.statusCode !== 401) return null;
-  const refreshed = await providerSources.refresh({
-    sourceId: sourceAttempt.sourceId,
-    ...(sourceAttempt.accountId !== undefined
-      ? { accountId: sourceAttempt.accountId }
-      : {}),
-    ...(sourceAttempt.credentialGeneration !== undefined
-      ? { failedGeneration: sourceAttempt.credentialGeneration }
-      : {}),
-    statusCode: 401,
-    ...(signal ? { signal } : {}),
-  });
+  signal?.throwIfAborted();
+  const refreshed = await awaitLlmRequest(
+    providerSources.refresh({
+      sourceId: sourceAttempt.sourceId,
+      mode,
+      model,
+      ...(sourceAttempt.accountId !== undefined
+        ? { accountId: sourceAttempt.accountId }
+        : {}),
+      ...(sourceAttempt.credentialGeneration !== undefined
+        ? { failedGeneration: sourceAttempt.credentialGeneration }
+        : {}),
+      statusCode: 401,
+      ...(signal ? { signal } : {}),
+    }),
+    signal,
+  );
   if (!refreshed) return null;
   return {
     resolved: buildSourceProviderResolution(

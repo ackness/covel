@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   configureProviderHostPolicy,
   parseLlmConfig,
+  withWireRegistrySnapshot,
 } from "@covel/ai-provider";
 import { readRuntimeEnv } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
@@ -143,6 +144,28 @@ async function startFakeOAuthAndResponsesServer(): Promise<FakeServerState> {
           remaining: 80,
           limit: 100,
           summary: "80/100 remaining",
+        }),
+      );
+      return;
+    }
+
+    if (req.method === "POST" && reqUrl.pathname === "/backend-api/converse") {
+      state.capturedRequests.push({
+        auth: req.headers.authorization,
+        body: jsonBody,
+      });
+      if (
+        state.expiredAccessTokens.has(req.headers.authorization?.slice(7) ?? "")
+      ) {
+        res.writeHead(401);
+        res.end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          answer: "hello from a custom wire",
+          tokens: { inputTokens: 4, outputTokens: 6 },
         }),
       );
       return;
@@ -335,6 +358,13 @@ account = "acct-healthy"
 model = "sub-pro-1"
 protocol = "openai-responses-v1"
 baseUrl = "http://127.0.0.1:${port}/backend-api"
+
+[covel.pool]
+provider = "fake-sub"
+source = "fake-oauth-provider-source/fake-sub"
+model = "sub-pro-1"
+protocol = "openai-responses-v1"
+baseUrl = "http://127.0.0.1:${port}/backend-api"
 `);
     ai.providerRegistry.reconfigure({ providerDefaults: aiConfig.providers });
     ai.presetRegistry.reconfigure({
@@ -405,6 +435,91 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     });
   }
 
+  it("executes a third-party source's own custom wire without enabling the plugin in a session", async () => {
+    const pluginId = "fake-oauth-provider-source";
+    const manifestPath = path.join(userDir, pluginId, "PLUGIN.md");
+    const manifest = await readFile(manifestPath, "utf8");
+    await writeFile(
+      manifestPath,
+      manifest.replace(
+        "protocol: openai-responses-v1",
+        `protocol: ${pluginId}/fake-converse`,
+      ),
+    );
+    const { booted, hostApp, ai } = await bootApp();
+    await grantSourcePlugin(booted);
+    const flowPath = `/api/plugins/${pluginId}/flows/paste-import`;
+    const start = await hostApp.request(`${flowPath}/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(start.status).toBe(200);
+    const { run } = (await start.json()) as {
+      run: { runId: string; step: { stepId: string } };
+    };
+    const completed = await hostApp.request(
+      `${flowPath}/runs/${run.runId}/step`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stepId: run.step.stepId,
+          data: {
+            accountId: "acct-main",
+            accessToken: "custom-wire-token",
+            refreshToken: "custom-wire-refresh",
+          },
+        }),
+      },
+    );
+    expect(completed.status).toBe(200);
+    const protocols = await hostApp.request("/api/ai/protocols");
+    expect(await protocols.text()).toContain(`${pluginId}/fake-converse`);
+
+    const params = {
+      presetId: "story",
+      messages: [{ role: "user" as const, content: "hello" }],
+    };
+    await withWireRegistrySnapshot(async () => {
+      expect(ai.gateway.resolveSlot("story")).toMatchObject({
+        protocol: `${pluginId}/fake-converse`,
+        credentialSource: { ready: true },
+      });
+      await expect(ai.gateway.generateText(params)).resolves.toMatchObject({
+        text: "hello from a custom wire",
+      });
+      const events = await Array.fromAsync(ai.gateway.streamText(params));
+      expect(events).toContainEqual({
+        type: "text-delta",
+        textDelta: "hello from a custom wire",
+      });
+    }, []);
+    const ping = await hostApp.request("/api/ai/ping", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slot: "story" }),
+    });
+    expect(await ping.json()).toMatchObject({
+      ok: true,
+      testedTarget: { protocol: `${pluginId}/fake-converse` },
+    });
+    expect(fakeServer.capturedRequests).toEqual(
+      Array.from({ length: 3 }, () => ({
+        auth: "Bearer custom-wire-token",
+        body: { deployment: "sub-pro-1" },
+      })),
+    );
+    fakeServer.expiredAccessTokens.add("custom-wire-token");
+    await expect(ai.gateway.generateText(params)).resolves.toMatchObject({
+      text: "hello from a custom wire",
+    });
+    expect(fakeServer.refreshCalls).toBe(1);
+    expect(fakeServer.capturedRequests.at(-1)?.auth).toBe(
+      "Bearer tok-acct-main-gen-2",
+    );
+  });
+
   it("handles dormant startup, OAuth & import flows, warm restart, live SSE gateway, 5-way single-flight 401 refresh, multi-account failover, origin-lock, zero leaks, and L1 ceilings", async () => {
     // 1. Grant permissions BEFORE secrets exist, then reboot to verify dormant boot
     const firstBoot = await bootApp();
@@ -463,7 +578,10 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     expect(oauthStart.run.step.kind).toBe("browser");
     const callbackUrl = new URL(oauthStart.run.step.callbackUrl!);
     callbackUrl.searchParams.set("code", "code-main");
-    callbackUrl.searchParams.set("state", "fake-oauth-state");
+    callbackUrl.searchParams.set(
+      "state",
+      new URL(oauthStart.run.step.authorizeUrl!).searchParams.get("state")!,
+    );
 
     const cbHttpRes = await ORIGINAL_FETCH(callbackUrl.href);
     expect(cbHttpRes.status).toBe(200);
@@ -497,12 +615,15 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     const pasteStart = (await pasteStartRes.json()) as {
       run: {
         runId: string;
-        step: { stepId: string; callbackUrl?: string };
+        step: { stepId: string; callbackUrl?: string; authorizeUrl: string };
       };
     };
     const manualPasteUrl = new URL(pasteStart.run.step.callbackUrl!);
     manualPasteUrl.searchParams.set("code", "code-paste");
-    manualPasteUrl.searchParams.set("state", "fake-oauth-state");
+    manualPasteUrl.searchParams.set(
+      "state",
+      new URL(pasteStart.run.step.authorizeUrl).searchParams.get("state")!,
+    );
     const manualStepRes = await dormantBoot.hostApp.request(
       `/api/plugins/fake-oauth-provider-source/flows/oauth-sign-in/runs/${pasteStart.run.runId}/step`,
       {
@@ -646,6 +767,18 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     const lastCaptured =
       fakeServer.capturedRequests[fakeServer.capturedRequests.length - 1];
     expect(lastCaptured?.account).toBe("acct-healthy");
+    fakeServer.quotaAccounts.add("acct-main");
+    const poolStart = fakeServer.capturedRequests.length;
+    await expect(
+      liveBoot.ai.gateway.generateText({
+        presetId: "pool",
+        messages: [{ role: "user", content: "automatic account failover" }],
+      }),
+    ).resolves.toMatchObject({ text: "hello from sub sse" });
+    const poolAttempts = fakeServer.capturedRequests.slice(poolStart);
+    expect(poolAttempts[0]?.account).toBe("acct-main");
+    expect(poolAttempts.at(-1)?.account).not.toBe("acct-main");
+    fakeServer.quotaAccounts.delete("acct-main");
 
     // 7. Embed on text-only source fails fast with CONFIG_ERROR
     await expect(

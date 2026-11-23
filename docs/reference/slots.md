@@ -172,7 +172,7 @@ model    = "glm-5"
 
 - 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议如果使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
 - 插件 SDK 不能依赖 `@covel/shared`，自己保留一份内置协议 ID 类型（`PluginProviderProtocol`）。两份不一致时 `packages/shared/src/provider-protocols.ts` 编译失败。
-- **由插件提供一种协议**：不改框架。插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。只有启用了该插件的会话能选用它，否则以配置错误失败。没有会话的请求（如连接测试）可以用内置插件的协议，`self` 部署下也可以用社区插件的。见 [plugin-extensions.md § 文本协议 wire](./plugin-extensions.md#文本协议-wire)。
+- 插件用 `covel.registerWires({ text: [...] })` 注册协议，模型的 `protocol` 写 `<pluginId>/<wireId>`。会话可通过启用插件或选择该插件获准的[实例供应商源](#插件托管供应商源-providersource1)来使用其协议。没有会话的请求（如连接测试）可以用内置插件的协议，`self` 部署下也可以用社区插件的。见[文本协议 wire](./plugin-extensions.md#文本协议-wire)。
 - **由插件托管一个供应商凭据源**：见下文[插件托管供应商源](#插件托管供应商源-providersource1)。
 
 ## API Key 流转
@@ -890,10 +890,12 @@ agent 完成使用工具参数里的 schema，不请求 `responseFormat`、`text
 
 需要 OAuth、多账号池、订阅凭据交换或周期刷新令牌的模型服务商，可通过实例化作用域插件（`apiVersion: 2`、`scope: instance` 或 `both`）以通用契约 `provider.source@1` 接入，无需修改框架代码：
 
-- **声明与权限**：根 `PLUGIN.md` 在 `contributes.providerSources` 声明来源、`protocol`（必须是框架已知协议）、`modes` 与关联认证 `flows`（须在 `contributes.flows` 声明），并在 `entry` 通过 `covel.registerProviderSources` 注册解析、列表、用量查询与可选的错误分类回调。访问 `covel.secrets`、`permissions.http` 与实例级来源受 [L1–L3 权限策略](./plugin-installation.md#权限与四层策略) 约束；`browser-private` 与托管形态在 L1 永久禁用 `plugin.providerSource`。
+- **声明与权限**：在根 `PLUGIN.md` 的 `contributes.providerSources` 中声明来源、协议、模式和关联的认证流。认证流也要列在 `contributes.flows`。用 `covel.registerProviderSources` 注册凭据解析，并按需提供刷新、账号列表、模型列表、用量和错误分类。`browser-private` 与托管形态在 [L1 权限天花板](./plugin-installation.md#权限与四层策略) 禁用 `plugin.providerSource`。
+- **协议**：使用内置协议，或用 [`covel.registerWires`](./plugin-extensions.md#文本协议-wire) 注册本包的文本协议，并把 `protocol` 设为 `<pluginId>/<wireId>`。省略时使用 `openai-responses-v1`。设置中的模型预设通过 `source` 选择供应商源。获准的实例插件可用自己的协议处理该源的文本请求。
 - **休眠启动与热激活**：未在 `SecretVault` 写入任何账号凭据前，按 `onFlow:*` / `onAppAction:*` 声明延迟激活的插件启动后保持休眠；完成首次认证流或已保存凭据后，重启自动预热并可刷新状态与可用模型列表。
-- **凭据隔离与来源锁定**：插件返回的有效 `baseUrl` 必须命中该包 `permissions.http` 声明的允许源，解析后的密钥与私有请求头只留在服务端内存和单次出站请求中，绝不写入 `X-Provider-Keys`、Web 响应、trace 或错误文本。
-- **协议塑形与故障切换**：供应商源可返回声明式 `requestShape`（如 `endpointPath` 覆盖非 `/v1` 路径、`systemAs: "instructions"` 提升系统提示、`omit` 删除不受支持参数、`force` 强制 `store: false` / `stream: true` 以开启 `generateText` / `generateObject` 的服务端 SSE 聚合，以及可选 `transform`）；遇到 `401` 时按单飞互斥刷新一次并重试请求，多账号源遇到 `429` 或认证失效时按账号顺序自动切换，并强制校验来源允许的模式集合（`text`、`structured`、`stream`、`vision`、`tools`、`embed`、`image`、`audio`）。
+- **凭据与地址**：有效 `baseUrl` 的源必须与清单一致。HTTPS 模型端点需要 `net.httpDeclared` 和 `permissions.http` 中相应的请求方法。内置协议的模型请求使用 `POST`。回环模型端点还需 `network.localModels`。解析后的密钥和私有请求头用于服务端出站请求。
+- **请求塑形**：Responses 协议支持 `requestShape.endpointPath`，例如把 `/responses` 追加到 `baseUrl` 路径。提供此字段时，适配器不自动插入 `/v1`。路径需以 `/` 开头，不含查询、片段或点路径段。供应商源也可设置 `systemAs`、`omit`、`force` 和 `transform`。
+- **刷新与切换**：模型请求收到 `401` 时，同一账号的并发请求共用一次刷新。多账号源的预设省略 `account` 时优先尝试默认账号，额度耗尽或认证失效时可切换到其他就绪账号。指定 `account` 时使用该账号及预设配置的备用目标。网关检查来源声明的 `modes`。
 
 ## Provider 流式响应
 

@@ -8,27 +8,12 @@ import { describeUnavailableWire } from "./wire-lifecycle.js";
 import { ModelConfigurationError } from "./errors.js";
 import { hasSameOrigin } from "./provider-source.js";
 import type {
-  CacheStrategy,
   OperationMode,
   ProviderConfig,
   ProviderDefaults,
   ProviderLifecycleHook,
   ProviderProtocol,
 } from "./types.js";
-
-/**
- * Resolve the default prompt-cache strategy for a given provider protocol.
- *
- * §A15 of the improvement plan: each protocol declares its own strategy in
- * the protocol registry (Anthropic → explicit `cache_control` markers,
- * OpenAI-family → `auto-prefix`); an unregistered protocol falls through to
- * `none`. Individual callers can still override the chosen strategy by
- * setting `ProviderConfig.cacheStrategy` explicitly on the registered
- * defaults or protocol route.
- */
-function defaultCacheStrategyFor(protocol: ProviderProtocol): CacheStrategy {
-  return getProtocolDefinition(protocol)?.cacheStrategy ?? "none";
-}
 
 interface ProtocolRoute {
   adapter?: ModelProviderAdapter;
@@ -132,7 +117,9 @@ export function createProviderRegistry(options?: {
       /** Provenance of the target (overlay presets set this — see types.ts). */
       requestScoped?: boolean;
     },
-    _opts: { mode: OperationMode } = { mode: "text" },
+    options: { mode: OperationMode; approvedInstanceOwner?: string } = {
+      mode: "text",
+    },
   ): ProviderResolution {
     // Request-scoped or source-backed targets may name providers that exist
     // only per request or via a registered plugin provider source.
@@ -159,8 +146,15 @@ export function createProviderRegistry(options?: {
       builtinDefaults?.protocol ??
       (sourceBacked ? "openai-responses-v1" : DEFAULT_PROVIDER_PROTOCOL);
     const protocolRoute = registered.protocols?.[protocol];
+    const definition = getProtocolDefinition(
+      protocol,
+      sourceBacked ? options.approvedInstanceOwner : undefined,
+    );
+    const registeredAdapter = protocolRoute?.adapter ?? registered.adapter;
     const adapter =
-      protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);
+      sourceBacked && options.approvedInstanceOwner
+        ? definition?.createAdapter()
+        : (registeredAdapter ?? definition?.createAdapter());
 
     if (!adapter) {
       const unavailable = describeUnavailableWire("text", protocol);
@@ -186,7 +180,7 @@ export function createProviderRegistry(options?: {
       ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
     };
     if (mergedConfig.cacheStrategy === undefined) {
-      mergedConfig.cacheStrategy = defaultCacheStrategyFor(protocol);
+      mergedConfig.cacheStrategy = definition?.cacheStrategy ?? "none";
     }
 
     // Bind server-env keys to trusted origins. The trusted baseUrl is
@@ -226,7 +220,9 @@ export function createProviderRegistry(options?: {
 
     return {
       adapter,
-      usesBuiltinAdapter: !protocolRoute?.adapter && !registered.adapter,
+      usesBuiltinAdapter: Boolean(
+        (sourceBacked && options.approvedInstanceOwner) || !registeredAdapter,
+      ),
       config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],
@@ -306,10 +302,4 @@ export function createProviderRegistry(options?: {
     hasProvider,
     reconfigure,
   };
-}
-
-function builtinAdapter(
-  protocol: ProviderProtocol,
-): ModelProviderAdapter | null {
-  return getProtocolDefinition(protocol)?.createAdapter() ?? null;
 }

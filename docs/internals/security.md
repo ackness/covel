@@ -288,7 +288,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 面向实例级与 OAuth/多账号供应商源的能力受到更细粒度的宿主凭据边界保护，且在 `browser-private` 与托管形态通过 [L1 天花板](#能力天花板l1) 硬关闭（`plugin.instanceScope`、`plugin.providerSource`、`secrets.own`、`net.loopbackCallback`、`net.authProxy`、`app.scheduler`、`channel.bridge`、`compute.sandboxWorker`、`exec.localBridge`）：
 
 - **`SecretVault` 包私有凭据**：仅声明 `permissions.secrets: true` 且取得 L1–L3 `secrets.own` 授权的插件可以通过 `covel.secrets` 读写宿主加密存储的包私有凭据（`apps/server/src/trust/secret-vault.ts`）。凭据按 `pluginId` 严格隔离，摘要或权限变更不放宽跨包读取，值也绝不发送给浏览器或记录到日志与 trace。
-- **临时回环回调（`net.loopbackCallback`）**：仅用于声明了 `permissions.loopbackCallback` 并获授权的 Config Flow `browser` 步骤（`apps/server/src/trust/loopback-callback.ts`）；监听器只绑定本地回环接口、校验一次性随机 state、收到一次回调或超时后立即销毁。
+- **临时回环回调（`net.loopbackCallback`）**：配置流的 `browser` 步骤需声明 `permissions.loopbackCallback` 并获授权。把 `ctx.startLoopbackCallback()` 返回的 `session.state` 放进授权 URL 的 `state` 参数。回环监听与手工粘贴都检查该值，并在推进流程前重新检查权限。监听器在接收有效回调、取消或超时后关闭。
 - **受限认证代理（`net.authProxy`）**：声明 `permissions.authProxy: true` 且通过 `net.authProxy` 门控后，实例插件的登录/刷新请求方可使用配置好的出站代理通道。
 - **`provider.source@1` 来源锁定与零泄露**：供应商源解析返回的 `baseUrl` 在宿主端校验是否命中该插件 `permissions.http` 的声明允许源；解析得到的短期 Bearer token 与自定义请求头仅用于当次服务端模型调用，从不写入 `X-Provider-Keys`、Web 响应、错误详情或执行 trace。
 

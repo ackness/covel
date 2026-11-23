@@ -152,17 +152,18 @@ export function createMiscApiRoutes(
       const credentialSource = projectCredentialSource(inspected);
       // Fall back to the provider's registered default baseUrl/protocol
       // when the preset itself doesn't override them.
-      let providerBaseUrl: string | undefined = inspected?.baseUrl;
-      let providerProtocol: string | undefined = inspected?.protocol;
+      let providerBaseUrl: string | undefined;
+      let providerProtocol: string | undefined;
       try {
-        const resolution = ai.providerRegistry.resolve({
-          provider: p.provider,
-          ...(p.source ? { source: p.source } : {}),
-        });
-        providerBaseUrl = resolution.config.baseUrl ?? providerBaseUrl;
-        providerProtocol = resolution.protocol ?? providerProtocol;
+        if (!p.source) {
+          const resolution = ai.providerRegistry.resolve({
+            provider: p.provider,
+          });
+          providerBaseUrl = resolution.config.baseUrl;
+          providerProtocol = resolution.protocol;
+        }
       } catch {
-        // Unknown provider — keep source-derived values or leave undefined.
+        // Unknown provider.
       }
 
       return {
@@ -182,9 +183,9 @@ export function createMiscApiRoutes(
         baseUrl: visibleBaseUrl(
           canReadDiagnostics,
           p.provider,
-          p.baseUrl ?? providerBaseUrl,
+          inspected?.baseUrl ?? p.baseUrl ?? providerBaseUrl,
         ),
-        protocol: p.protocol ?? providerProtocol,
+        protocol: inspected?.protocol ?? p.protocol ?? providerProtocol,
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
         ...(p.capability ? { capability: p.capability } : {}),
         parameterOverrides: modelParameters(p.providerRequestMetadata),
@@ -262,7 +263,9 @@ export function createMiscApiRoutes(
         preset.account,
       );
       const credentialSource = projectCredentialSource(inspected);
-      const resolved = ai.providerRegistry.resolve(preset);
+      const resolved = preset.source
+        ? undefined
+        : ai.providerRegistry.resolve(preset);
       const fallbackPresetId = preset.fallbackPresetIds?.[0];
       const fallbackSlotId =
         typeof fallbackPresetId === "string"
@@ -274,7 +277,7 @@ export function createMiscApiRoutes(
         baseUrl: visibleBaseUrl(
           canReadDiagnostics,
           preset.provider,
-          resolved.config.baseUrl ?? inspected?.baseUrl,
+          inspected?.baseUrl ?? resolved?.config.baseUrl ?? preset.baseUrl,
         ),
         provider: preset.provider,
         ...diagnosticSourceFields(
@@ -285,7 +288,10 @@ export function createMiscApiRoutes(
         ),
         model: preset.model,
         protocol:
-          resolved.protocol ?? inspected?.protocol ?? "openai-responses-v1",
+          inspected?.protocol ??
+          resolved?.protocol ??
+          preset.protocol ??
+          "openai-responses-v1",
         builtinDefault: ai.configSource?.kind === "builtin",
         serverKeyConfigured: preset.source
           ? Boolean(
@@ -601,18 +607,19 @@ export function createMiscApiRoutes(
       preset.source,
       preset.account,
     );
-    let effectiveBaseUrl = preset.baseUrl ?? inspectedSource?.baseUrl;
+    let effectiveBaseUrl = inspectedSource?.baseUrl ?? preset.baseUrl;
     let effectiveProtocol: string | undefined =
-      preset.protocol ?? inspectedSource?.protocol;
+      inspectedSource?.protocol ?? preset.protocol;
     try {
-      const resolution = ai.providerRegistry.resolve({
-        provider: preset.provider,
-        ...(preset.source ? { source: preset.source } : {}),
-        baseUrl: preset.baseUrl,
-        protocol: preset.protocol,
-      });
-      effectiveBaseUrl = resolution.config.baseUrl ?? effectiveBaseUrl;
-      effectiveProtocol = resolution.protocol ?? effectiveProtocol;
+      if (!preset.source) {
+        const resolution = ai.providerRegistry.resolve({
+          provider: preset.provider,
+          baseUrl: preset.baseUrl,
+          protocol: preset.protocol,
+        });
+        effectiveBaseUrl = resolution.config.baseUrl ?? effectiveBaseUrl;
+        effectiveProtocol = resolution.protocol ?? effectiveProtocol;
+      }
     } catch {
       // Provider not registered — fall back to preset/source fields as-is.
     }

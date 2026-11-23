@@ -24,6 +24,7 @@ import {
 } from "@covel/runtime";
 import {
   APP_EVENT_NAMES,
+  channelBridgeV1,
   configFlowIdSchema,
   providerSourceIdSchema,
   scheduledTaskIdSchema,
@@ -290,6 +291,9 @@ export function buildPluginInstanceSurface(
       : undefined;
 
   const http = createEntryHttp(pluginId, httpPermissions, {
+    canUseDeclaredHttp: () =>
+      !getPermissionService || checkCapability("net.httpDeclared"),
+    canUseLocalModels: () => checkCapability("network.localModels"),
     canUseAuthProxy: () =>
       pluginManifest?.permissions?.authProxy === true &&
       getPermissionService?.()?.snapshot().deploymentForm === "personal" &&
@@ -356,6 +360,40 @@ export function buildEntryApi(
     httpPermissions,
   });
   const http = surface.http;
+  const extensions = params.extensions;
+  let channelBridgePublished = false;
+  const dispatchChannelBridge: PluginAPI["dispatchChannelBridge"] =
+    extensions && surface.instanceData
+      ? async (input, options) => {
+          if (
+            !channelBridgePublished ||
+            !(await params.isInstanceServerCodeApproved?.(pluginId)) ||
+            !surface.checkCapability("channel.bridge")
+          ) {
+            throw new Error(
+              `Channel bridge is not allowed for plugin "${pluginId}"`,
+            );
+          }
+          return batch.invoke(() =>
+            extensions
+              .createInstanceExecution({
+                locale: options?.locale ?? "en-US",
+                signal: options?.signal
+                  ? AbortSignal.any([options.signal, batch.signal])
+                  : batch.signal,
+              })
+              .run(channelBridgeV1, input),
+          );
+        }
+      : undefined;
+  if (dispatchChannelBridge) {
+    batch.stage(() => {
+      channelBridgePublished = true;
+      batch.track(() => {
+        channelBridgePublished = false;
+      });
+    });
+  }
   // A service or extension provider's code sends its own requests, so it
   // reaches what its own package declares, whoever calls it.
   const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
@@ -379,6 +417,7 @@ export function buildEntryApi(
   return {
     pluginId,
     ...pickPluginInstanceSurfaceFields(surface),
+    ...(dispatchChannelBridge ? { dispatchChannelBridge } : {}),
     provideExtension(point, id, definition) {
       provideExtension(point, id, {
         ...definition,

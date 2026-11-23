@@ -649,18 +649,21 @@ Requests and keys:
 - The wire sends its own HTTP requests. So these requests do not appear in the provider request trace, and the framework's transport retries and request budget do not apply to them.
 - `config.signal` fires when the call is cancelled or times out. Pass it to the request.
 - `config` holds the address and key that this role resolves to. They may only be used to send requests to that address. They must not be written into results, logs, or the interface.
-- If the plugin that the model's `protocol` points to is not loaded, or is not enabled in the current session, the call fails with a configuration error. The error says which plugin to enable. The call does not switch to another protocol.
+- The call fails with a configuration error if the plugin that provides the model's `protocol` is unavailable or the request does not meet the conditions in the table.
 
 Which requests can select this protocol:
 
 | Request                                                                                                 | Condition                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A text request bound to a plugin-managed provider source                                                | The source has instance approval and the same plugin provides the protocol.                                                                       |
 | A request inside a session                                                                              | The plugin is enabled in this session. (For a community plugin, enabling it already includes the player's authorization.)                         |
 | A request that is not part of any session (connection test, reading the model list, generating a world) | Can select the protocol of a built-in plugin.                                                                                                     |
 | The same as above, in the `self` deployment                                                             | There is only one player, and every loaded community plugin was authorized by that player. So a community plugin's protocol can also be selected. |
 | The same as above, in the hosted deployment                                                             | A community plugin's protocol must be used in a session that has enabled it.                                                                      |
 
 A request-level preset, the `llm.toml` slots, and a runtime's own slot preference are all checked against this table. The protocol dropdown on the settings page still lists the protocols of all loaded plugins. Image, speech, transcription and music wires that a plugin registers are chosen by the same table; when none can be chosen, generation fails with a configuration error that names the plugin to enable.
+
+A text wire used by a [plugin-managed provider source](./slots.md#plugin-managed-provider-sources-providersource1) can throw an `Error` with a numeric `statusCode` after an HTTP failure. The gateway uses the status for 401 refresh and account failover, and generates its own error message.
 
 > [!CAUTION]
 > The trust boundary is the same as for media wires. A community plugin's server code runs only after the player authorizes it. `covel.http` in a wire reaches only the origins declared in the package's `permissions.http` and the endpoint of the slot it is serving. The difference is that a text wire handles **all the prompts and answers** of the role that selects it.

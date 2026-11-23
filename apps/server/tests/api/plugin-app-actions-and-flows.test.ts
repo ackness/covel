@@ -357,6 +357,7 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
                 const session = await ctx.startLoopbackCallback();
                 const authUrl = new URL("https://auth.example/authorize");
                 authUrl.searchParams.set("redirect_uri", session.callbackUrl);
+                authUrl.searchParams.set("state", session.state);
                 return {
                   kind: "browser",
                   stepId: "oauth-wait",
@@ -391,13 +392,19 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
       await (
         await postJson("/api/plugins/browser-flow-plugin/flows/oauth/start")
       ).json()
-    ).run as { runId: string; step: { stepId: string; callbackUrl: string } };
+    ).run as {
+      runId: string;
+      step: { stepId: string; callbackUrl: string; authorizeUrl: string };
+    };
     expect(runA.step.callbackUrl).toMatch(
       /^http:\/\/127\.0\.0\.1:\d+\/oauth\/cb$/,
     );
 
+    const browserState = new URL(runA.step.authorizeUrl).searchParams.get(
+      "state",
+    );
     const browserHit = await fetch(
-      `${runA.step.callbackUrl}?code=loop42&state=s1`,
+      `${runA.step.callbackUrl}?code=loop42&state=${browserState}`,
     );
     expect(browserHit.status).toBe(200);
 
@@ -427,12 +434,29 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
       await (
         await postJson("/api/plugins/browser-flow-plugin/flows/oauth/start")
       ).json()
-    ).run as { runId: string; step: { stepId: string; callbackUrl: string } };
+    ).run as {
+      runId: string;
+      step: { stepId: string; callbackUrl: string; authorizeUrl: string };
+    };
+    const pasteState = new URL(runB.step.authorizeUrl).searchParams.get(
+      "state",
+    );
+    const invalidPaste = await postJson(
+      `/api/plugins/browser-flow-plugin/flows/oauth/runs/${runB.runId}/step`,
+      {
+        stepId: runB.step.stepId,
+        callbackUrl: `${runB.step.callbackUrl}?code=paste99`,
+      },
+    );
+    expect(invalidPaste.status).toBe(400);
+    expect(await invalidPaste.json()).toMatchObject({
+      code: "invalid_callback_state",
+    });
     const pasteRes = await postJson(
       `/api/plugins/browser-flow-plugin/flows/oauth/runs/${runB.runId}/step`,
       {
         stepId: runB.step.stepId,
-        callbackUrl: `${runB.step.callbackUrl}?code=paste99&state=s2`,
+        callbackUrl: `${runB.step.callbackUrl}?code=paste99&state=${pasteState}`,
       },
     );
     expect(pasteRes.status).toBe(200);

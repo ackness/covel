@@ -147,11 +147,23 @@ describe("instance plugins & dual-axis apiVersion", () => {
     );
     expect(startupPluginDir).toBeTruthy();
     expect(lazyPluginDir).toBeTruthy();
+    await writePluginDir(
+      builtinDir,
+      "lazy-builtin-both",
+      {
+        apiVersion: 2,
+        scope: "both",
+        activationEvents: ["onAppAction:demo"],
+        entry: "./server.mjs",
+      },
+      { "server.mjs": "export default function () {}" },
+    );
 
     // First boot: neither plugin has L3 grants, so neither activates at startup.
     let booted = await bootServer();
     expect(booted.instancePlugins.isActivated("startup-inst")).toBe(false);
     expect(booted.instancePlugins.isActivated("lazy-action-inst")).toBe(false);
+    expect(booted.instancePlugins.isActivated("lazy-builtin-both")).toBe(false);
     expect(
       await store.getInstanceData("startup-inst", "boot", "ran"),
     ).toBeNull();
@@ -185,7 +197,7 @@ describe("instance plugins & dual-axis apiVersion", () => {
     // Trigger lazy activation event -> activates only lazy-action-inst cleanly.
     const activated =
       await booted.instancePlugins.activateForEvent("onAppAction:demo");
-    expect(activated).toEqual(["lazy-action-inst"]);
+    expect(activated).toEqual(["lazy-action-inst", "lazy-builtin-both"]);
     expect(booted.instancePlugins.isActivated("lazy-action-inst")).toBe(true);
     expect(
       (await store.getInstanceData("lazy-action-inst", "lazy", "ran"))?.value,
@@ -228,7 +240,6 @@ describe("instance plugins & dual-axis apiVersion", () => {
       {
         apiVersion: 2,
         scope: "both",
-        activationEvents: ["onAppAction:probe"],
         permissions: { secrets: true, sandboxWorker: true },
         entry: "./server.mjs",
       },

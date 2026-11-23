@@ -21,9 +21,11 @@ import {
   type ProviderSourceResolver,
 } from "@covel/ai-provider";
 import {
+  awaitLlmRequest,
   compareText,
-  DEFAULT_PROVIDER_PROTOCOL,
   FRAMEWORK_PLUGIN_ID,
+  isBuiltinProviderProtocol,
+  isLoopbackBaseUrl,
   isProviderProtocolId,
 } from "@covel/shared";
 import {
@@ -63,6 +65,7 @@ import {
 } from "./plugin-entry-api.js";
 
 const DEFAULT_ACCOUNT_KEY = "__default__";
+const DEFAULT_SOURCE_PROTOCOL = "openai-responses-v1";
 const DEFAULT_CALL_TIMEOUT_MS = 15_000;
 const REFRESH_TIMEOUT_MS = 25_000;
 
@@ -271,6 +274,12 @@ export function createProviderSourceHost(
       registry,
       "plugin.providerSource",
       pluginId,
+    ) &&
+    isPluginCapabilityEffectivelyAllowed(
+      permissionService,
+      registry,
+      "net.httpDeclared",
+      pluginId,
     );
 
   const evaluateGateSync = (
@@ -408,18 +417,34 @@ export function createProviderSourceHost(
     assignedGeneration: number,
   ): ProviderSourceAttemptContext => {
     const declaredBaseUrl = declared.decl.baseUrl;
-    const declaredProtocol =
-      declared.decl.protocol ?? DEFAULT_PROVIDER_PROTOCOL;
+    const declaredProtocol = declared.decl.protocol ?? DEFAULT_SOURCE_PROTOCOL;
     const resolvedBaseUrl = resolved.baseUrl ?? declaredBaseUrl;
+    const protocol = resolved.protocol ?? declaredProtocol;
 
     if (
-      resolved.protocol !== undefined &&
-      !isProviderProtocolId(resolved.protocol)
+      !evaluateGateSync(declared.pluginId).allowed ||
+      entries.get(registryKey(declared.pluginId, declared.sourceId)) !==
+        registered
     ) {
       throw new AiProviderError({
         code: "CONFIG_ERROR",
         provider: declared.qualifiedId,
-        message: `Provider source "${declared.qualifiedId}" returned unknown protocol "${resolved.protocol}"`,
+        message: `Provider source "${declared.qualifiedId}" is no longer active or permitted`,
+        retriable: false,
+      });
+    }
+    if (
+      !isProviderProtocolId(protocol) ||
+      (protocol.includes("/") &&
+        (!protocol.startsWith(`${declared.pluginId}/`) ||
+          !declared.entry.packageManifest?.plugin.contributes?.wires?.includes(
+            protocol.slice(declared.pluginId.length + 1),
+          )))
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: declared.qualifiedId,
+        message: `Provider source "${declared.qualifiedId}" must use a built-in protocol or a text wire declared by its own package`,
         retriable: false,
       });
     }
@@ -436,6 +461,26 @@ export function createProviderSourceHost(
         code: "CONFIG_ERROR",
         provider: declared.qualifiedId,
         message: `Provider source "${declared.qualifiedId}" baseUrl origin does not match manifest declared baseUrl`,
+        retriable: false,
+      });
+    }
+    const permittedOrigin = isLoopbackBaseUrl(resolvedBaseUrl)
+      ? isPluginCapabilityEffectivelyAllowed(
+          deps.getPermissionService(),
+          registry,
+          "network.localModels",
+          declared.pluginId,
+        )
+      : packageHttpPermissions(declared.entry).some(
+          ({ origin, methods }) =>
+            hasSameOrigin(origin, resolvedBaseUrl) &&
+            (!isBuiltinProviderProtocol(protocol) || methods?.includes("POST")),
+        );
+    if (!permittedOrigin) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: declared.qualifiedId,
+        message: `Provider source "${declared.qualifiedId}" is not permitted to send model requests to its baseUrl origin`,
         retriable: false,
       });
     }
@@ -502,11 +547,12 @@ export function createProviderSourceHost(
 
     return {
       sourceId: declared.qualifiedId,
+      approvedInstanceOwner: declared.pluginId,
       declaredBaseUrl,
       declaredProtocol,
       ...(effectiveAccountId ? { accountId: effectiveAccountId } : {}),
       baseUrl: resolvedBaseUrl,
-      protocol: resolved.protocol ?? declaredProtocol,
+      protocol,
       headers,
       credentialGeneration: assignedGeneration,
       ...(resolved.requestShape ? { requestShape: resolved.requestShape } : {}),
@@ -563,9 +609,13 @@ export function createProviderSourceHost(
       }
     }
 
+    const activationTimeout = buildStatusTimeoutSignal(opts?.signal);
     let registered: RegisteredProviderSource;
     try {
-      registered = await ensureActivatedSource(declared);
+      registered = await awaitLlmRequest(
+        ensureActivatedSource(declared),
+        activationTimeout.signal,
+      );
     } catch {
       const failed: CachedSourceStatus = {
         ready: false,
@@ -574,13 +624,18 @@ export function createProviderSourceHost(
       };
       statusCache.set(declared.qualifiedId, failed);
       return failed;
+    } finally {
+      activationTimeout.dispose();
     }
 
     if (registered.source.listAccounts) {
       const timeout = buildStatusTimeoutSignal(opts?.signal);
       try {
-        const accounts = await registered.source.listAccounts(
-          buildContext(declared, timeout.signal),
+        const accounts = await awaitLlmRequest(
+          registered.source.listAccounts(
+            buildContext(declared, timeout.signal),
+          ),
+          timeout.signal,
         );
         const derived = deriveStatusFromAccounts(accounts);
         const cached: CachedSourceStatus = {
@@ -659,7 +714,7 @@ export function createProviderSourceHost(
         sourceId: declared.qualifiedId,
         ...(accountId ? { accountId } : {}),
         baseUrl: declared.decl.baseUrl,
-        protocol: declared.decl.protocol ?? DEFAULT_PROVIDER_PROTOCOL,
+        protocol: declared.decl.protocol ?? DEFAULT_SOURCE_PROTOCOL,
         modes: declared.decl.modes ?? (["text"] as const),
       };
 
@@ -697,15 +752,25 @@ export function createProviderSourceHost(
       };
     },
 
+    listReadyAccounts(qualifiedId) {
+      if (lookupDeclared(qualifiedId)?.decl.accounts !== "many") return [];
+      const ready = (statusCache.get(qualifiedId)?.accounts ?? []).filter(
+        (account) => account.status === "ready",
+      );
+      return [
+        ...ready.filter((account) => account.isDefault),
+        ...ready.filter((account) => !account.isDefault),
+      ].map((account) => account.id);
+    },
+
     async resolve(request): Promise<ProviderSourceAttemptContext> {
-      const configError = (message: string, cause?: unknown) =>
+      const configError = (message: string) =>
         new AiProviderError({
           code: "CONFIG_ERROR",
           provider: request.sourceId,
           model: request.model,
           message,
           retriable: false,
-          ...(cause !== undefined ? { cause } : {}),
         });
 
       const declared = lookupDeclared(request.sourceId);
@@ -735,28 +800,37 @@ export function createProviderSourceHost(
         );
       }
 
-      let registered: RegisteredProviderSource;
-      try {
-        registered = await ensureActivatedSource(declared);
-      } catch (error) {
-        throw configError(
-          error instanceof Error
-            ? error.message
-            : `Failed to activate provider source "${request.sourceId}"`,
-          error,
-        );
-      }
-
       const timeout = buildStatusTimeoutSignal(request.signal);
       try {
-        const resolved = await registered.source.resolve(
-          {
-            mode: request.mode,
+        const registered = await awaitLlmRequest(
+          ensureActivatedSource(declared),
+          timeout.signal,
+        ).catch(() => {
+          throw configError(
+            `Failed to activate provider source "${request.sourceId}"`,
+          );
+        });
+        const resolved = await awaitLlmRequest(
+          registered.source.resolve(
+            {
+              mode: request.mode,
+              model: request.model,
+              ...(request.accountId ? { accountId: request.accountId } : {}),
+            },
+            buildContext(declared, timeout.signal),
+          ),
+          timeout.signal,
+        ).catch(() => {
+          timeout.signal.throwIfAborted();
+          markSourceNeedsReauth(declared.qualifiedId, request.accountId);
+          throw new AiProviderError({
+            code: "MISSING_API_KEY",
+            provider: request.sourceId,
             model: request.model,
-            ...(request.accountId ? { accountId: request.accountId } : {}),
-          },
-          buildContext(declared, timeout.signal),
-        );
+            message: `Provider source "${request.sourceId}" could not resolve credentials`,
+            retriable: false,
+          });
+        });
         const key = generationKey(declared.qualifiedId, request.accountId);
         const currentGen = latestGenerations.get(key) ?? 1;
         const assignedGeneration = resolved.credentialGeneration ?? currentGen;
@@ -766,15 +840,6 @@ export function createProviderSourceHost(
           resolved,
           request.accountId,
           assignedGeneration,
-        );
-      } catch (error) {
-        if (error instanceof AiProviderError) throw error;
-        markSourceNeedsReauth(declared.qualifiedId, request.accountId);
-        throw configError(
-          error instanceof Error
-            ? error.message
-            : `Provider source "${request.sourceId}" failed to resolve credentials`,
-          error,
         );
       } finally {
         timeout.dispose();
@@ -800,8 +865,8 @@ export function createProviderSourceHost(
           .resolve({
             sourceId: request.sourceId,
             ...(request.accountId ? { accountId: request.accountId } : {}),
-            mode: declared.decl.modes?.[0] ?? "text",
-            model: "",
+            mode: request.mode,
+            model: request.model,
             signal: request.signal,
           })
           .catch(() => null);
@@ -820,24 +885,32 @@ export function createProviderSourceHost(
             const gate = await evaluateGateAsync(declared.pluginId);
             if (!gate.allowed) return null;
 
-            const registered = await ensureActivatedSource(declared);
+            const registered = await awaitLlmRequest(
+              ensureActivatedSource(declared),
+              timeout.signal,
+            );
             const refreshFn = registered.source.refresh;
             if (!refreshFn) {
               return null;
             }
 
-            const refreshed = await refreshFn(
-              {
-                ...(request.accountId ? { accountId: request.accountId } : {}),
-                ...(request.failedGeneration !== undefined
-                  ? { failedGeneration: request.failedGeneration }
-                  : {}),
-                statusCode: request.statusCode,
-              },
-              buildContext(declared, timeout.signal),
+            const refreshed = await awaitLlmRequest(
+              refreshFn(
+                {
+                  ...(request.accountId
+                    ? { accountId: request.accountId }
+                    : {}),
+                  ...(request.failedGeneration !== undefined
+                    ? { failedGeneration: request.failedGeneration }
+                    : {}),
+                  statusCode: request.statusCode,
+                },
+                buildContext(declared, timeout.signal),
+              ),
+              timeout.signal,
             );
             if (!refreshed) {
-              markSourceNeedsReauth(declared.qualifiedId);
+              markSourceNeedsReauth(declared.qualifiedId, request.accountId);
               return null;
             }
             const baseGen = Math.max(
@@ -857,7 +930,9 @@ export function createProviderSourceHost(
               nextGeneration,
             );
           } catch {
-            markSourceNeedsReauth(declared.qualifiedId);
+            if (!timeout.signal.aborted) {
+              markSourceNeedsReauth(declared.qualifiedId, request.accountId);
+            }
             return null;
           } finally {
             timeout.dispose();
@@ -900,17 +975,22 @@ export function createProviderSourceHost(
         `Provider source "${args.sourceId}" is not permitted`,
       );
     }
-    const registered = await ensureActivatedSource(declared);
     const timeout = buildStatusTimeoutSignal(args.signal);
     try {
-      return await invoke({ declared, registered, signal: timeout.signal });
+      const registered = await awaitLlmRequest(
+        ensureActivatedSource(declared),
+        timeout.signal,
+      );
+      return await awaitLlmRequest(
+        invoke({ declared, registered, signal: timeout.signal }),
+        timeout.signal,
+      );
     } catch (error) {
       if (error instanceof ProviderSourceHostError) throw error;
       throw new ProviderSourceHostError(
         502,
         "provider_source_error",
-        error instanceof Error ? error.message : String(error),
-        { cause: error },
+        "The provider source could not complete the request",
       );
     } finally {
       timeout.dispose();
@@ -1032,7 +1112,7 @@ export function createProviderSourceHost(
             pluginId: entry.id,
             sourceId: decl.id,
             label: decl.label,
-            protocol: decl.protocol ?? DEFAULT_PROVIDER_PROTOCOL,
+            protocol: decl.protocol ?? DEFAULT_SOURCE_PROTOCOL,
             modes: decl.modes ?? ["text"],
             baseUrl: decl.baseUrl,
             accountsMode: decl.accounts ?? "one",

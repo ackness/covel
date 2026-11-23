@@ -97,15 +97,35 @@ describe("RpcApprovalGate policy pre-check and plugin revocation", () => {
     );
   });
 
-  it("fails safe to ask and logs throttled warnings if policyDecision throws", () => {
+  it("denies even cached grants and logs if policyDecision throws", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
+      let unavailable = false;
       const gate = createRpcApprovalGate({
         policyDecision: () => {
-          throw new Error("boom");
+          if (unavailable) throw new Error("boom");
+          return { decision: "ask" };
         },
       });
-      expect(gate.evaluate(input()).status).toBe("pending");
+      const pending = gate.evaluate(input());
+      if (pending.status !== "pending") throw new Error("expected pending");
+      expect(
+        gate.decide(
+          {
+            approvalId: pending.approvalId,
+            decision: "allow",
+            scope: "session",
+            decidedAt: new Date().toISOString(),
+          },
+          "inc-1",
+        ).ok,
+      ).toBe(true);
+      expect(gate.evaluate(input()).status).toBe("allow");
+      unavailable = true;
+      expect(gate.evaluate(input())).toEqual({
+        status: "denied",
+        reason: "policy",
+      });
       expect(warn).toHaveBeenCalledOnce();
     } finally {
       warn.mockRestore();

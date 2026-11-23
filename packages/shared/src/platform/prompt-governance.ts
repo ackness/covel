@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const DEFAULT_PROMPT_SEGMENT_BUDGET = 2_000;
+export const promptPrioritySchema = z.enum(["high", "normal", "low"]);
 
 export const PROTECTED_PROMPT_BLOCKS = [
   "framework.preamble",

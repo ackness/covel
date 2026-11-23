@@ -203,10 +203,21 @@ export function createAppScheduler(
     const ac = new AbortController();
     inFlightControllers.set(key, ac);
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    let settled!: () => void;
-    const tracker = new Promise<void>((resolve) => {
-      settled = resolve;
-    });
+    const task = Promise.resolve().then(() =>
+      registered.handler({
+        signal: ac.signal,
+        pluginId,
+        taskId,
+        ...pickPluginInstanceSurfaceFields(surface),
+        http: withCallSignal(surface.http, ac.signal),
+      }),
+    );
+    const release = () => {
+      inFlightControllers.delete(key);
+      activePlugins.delete(pluginId);
+      inFlightPromises.delete(tracker);
+    };
+    const tracker = task.then(release, release);
     inFlightPromises.add(tracker);
 
     try {
@@ -227,18 +238,7 @@ export function createAppScheduler(
       }, timeoutMs);
       timeoutHandle.unref?.();
 
-      await Promise.race([
-        Promise.resolve(
-          registered.handler({
-            signal: ac.signal,
-            pluginId,
-            taskId,
-            ...pickPluginInstanceSurfaceFields(surface),
-            http: withCallSignal(surface.http, ac.signal),
-          }),
-        ),
-        aborted,
-      ]);
+      await Promise.race([task, aborted]);
       failureCounts.set(key, 0);
       return { status: "ran" };
     } catch (error) {
@@ -251,10 +251,6 @@ export function createAppScheduler(
       return { status: "failed" };
     } finally {
       if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
-      inFlightControllers.delete(key);
-      activePlugins.delete(pluginId);
-      inFlightPromises.delete(tracker);
-      settled();
     }
   }
 

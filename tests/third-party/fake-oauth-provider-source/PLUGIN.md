@@ -21,6 +21,8 @@ permissions:
         - GET
         - POST
 contributes:
+  wires:
+    - fake-converse
   appActions:
     - set-default-account
     - remove-account

@@ -1,4 +1,5 @@
 import {
+  AiProviderError,
   registerImageWire,
   registerMusicWire,
   registerSpeechWire,
@@ -154,21 +155,52 @@ function namespacedTextWire(
   call: <T>(args: readonly unknown[], fn: () => T | Promise<T>) => Promise<T>,
 ): TextWire {
   const { generateObject, listModels } = wire;
+  const callText = async <T>(
+    args: readonly [Parameters<TextWire["generateText"]>[0], ...unknown[]],
+    fn: () => T | Promise<T>,
+  ): Promise<T> => {
+    const [config] = args;
+    try {
+      return await call(args, fn);
+    } catch (error) {
+      if (!config.credentialSource) throw error;
+      config.signal?.throwIfAborted();
+      const reportedStatus =
+        error instanceof Error ? Reflect.get(error, "statusCode") : undefined;
+      const statusCode =
+        typeof reportedStatus === "number" &&
+        Number.isInteger(reportedStatus) &&
+        reportedStatus >= 400 &&
+        reportedStatus <= 599
+          ? reportedStatus
+          : undefined;
+      throw new AiProviderError({
+        code: statusCode === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
+        message: statusCode
+          ? `Provider wire "${id}" returned HTTP ${statusCode}`
+          : `Provider wire "${id}" failed`,
+        provider: id,
+        retriable:
+          statusCode === 429 || (statusCode !== undefined && statusCode >= 500),
+        ...(statusCode !== undefined ? { statusCode } : {}),
+      });
+    }
+  };
   return {
     ...wire,
     id,
     generateText: (...raw) => {
       const args = forWire(raw);
-      return call(args, () => wire.generateText(...args));
+      return callText(args, () => wire.generateText(...args));
     },
     async *streamText(...raw) {
       const args = forWire(raw);
-      const stream = await call(args, () => wire.streamText(...args));
+      const stream = await callText(args, () => wire.streamText(...args));
       const iterator = stream[Symbol.asyncIterator]();
       let done = false;
       try {
         for (;;) {
-          const step = await call(args, () => iterator.next());
+          const step = await callText(args, () => iterator.next());
           if (step.done) {
             done = true;
             return;
@@ -184,7 +216,9 @@ function namespacedTextWire(
       ? {
           generateObject: (...raw) => {
             const args = forWire(raw);
-            return call(args, () => Reflect.apply(generateObject, wire, args));
+            return callText(args, () =>
+              Reflect.apply(generateObject, wire, args),
+            );
           },
         }
       : {}),

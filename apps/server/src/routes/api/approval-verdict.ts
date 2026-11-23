@@ -6,6 +6,7 @@ import {
 } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../api-error.js";
+import { capabilityDenialResponse } from "../../trust/permission-service.js";
 import { sessionApprovalScope } from "./session/session-guard.js";
 
 export function hasServerCodeGrant(
@@ -31,22 +32,7 @@ export function approvalVerdictResponse(
   },
 ): Response | undefined {
   if (verdict.status === "denied") {
-    const code =
-      verdict.reason === "ceiling"
-        ? "capability_disabled"
-        : verdict.reason === "policy"
-          ? "capability_denied_by_policy"
-          : "capability_denied_by_grant";
-    const subject = verdict.capability
-      ? `Capability "${verdict.capability}"`
-      : "Operation";
-    const reasonText =
-      verdict.reason === "ceiling"
-        ? "is disabled on this host"
-        : verdict.reason === "policy"
-          ? "is denied by instance policy"
-          : "is denied by persistent plugin grant";
-    return c.json(errorBody(`${subject} ${reasonText}`, { code }), 403);
+    return capabilityDenialResponse(c, verdict.reason, verdict.capability);
   }
   if (verdict.status === "pending") {
     return c.json(

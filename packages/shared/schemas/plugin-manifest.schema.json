@@ -1614,6 +1614,11 @@
                 "enum": ["system", "user", "assistant"],
                 "description": "Message role of the segment. Defaults to `system`."
               },
+              "priority": {
+                "type": "string",
+                "enum": ["high", "normal", "low"],
+                "description": "Segment priority within its volatility tier. Defaults to `normal`."
+              },
               "budget": {
                 "type": "integer",
                 "exclusiveMinimum": 0,

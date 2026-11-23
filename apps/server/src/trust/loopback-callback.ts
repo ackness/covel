@@ -3,12 +3,14 @@
  * flows (`net.loopbackCallback`).
  *
  * Security invariants:
- * - Binds strictly on `127.0.0.1` (`ports: "ephemeral"` default -> OS port 0;
- *   or preferred ports with automatic ephemeral fallback on collision).
+ * - Binds on `127.0.0.1` and, when available, `::1`. The IPv4 listener uses
+ *   an ephemeral port by default or falls back to one if preferred ports are busy.
  * - Never logs the full callback URL or query parameters (tokens/auth codes).
- * - Auto-closes after the first matching `GET <path>`, on abort, or on timeout.
+ * - Auto-closes after the first authorized callback with matching state, on
+ *   abort, or on timeout.
  */
 
+import { randomBytes } from "node:crypto";
 import http from "node:http";
 
 export type LoopbackCallbackErrorCode =
@@ -32,7 +34,9 @@ export interface LoopbackCallbackWaitResult {
 
 export interface LoopbackCallbackSession {
   readonly callbackUrl: string;
+  readonly state: string;
   readonly port: number;
+  canAccept(): boolean;
   waitForCallback(): Promise<LoopbackCallbackWaitResult>;
   close(): Promise<void>;
 }
@@ -42,6 +46,7 @@ export interface StartLoopbackCallbackOptions {
   readonly ports?: "ephemeral" | readonly number[];
   readonly timeoutMs?: number;
   readonly signal?: AbortSignal;
+  readonly canAccept?: () => boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -131,6 +136,8 @@ export async function startLoopbackCallbackSession(
   options: StartLoopbackCallbackOptions,
 ): Promise<LoopbackCallbackSession> {
   const callbackPath = normalizeCallbackPath(options.path);
+  const state = randomBytes(32).toString("base64url");
+  const canAccept = options.canAccept ?? (() => true);
   const rawTimeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timeoutMs = Math.min(
     MAX_TIMEOUT_MS,
@@ -237,6 +244,16 @@ export async function startLoopbackCallbackSession(
       return;
     }
 
+    if (!matchesLoopbackState(reqUrl, state) || !canAccept()) {
+      res.writeHead(403, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        Connection: "close",
+      });
+      res.end("Callback rejected");
+      return;
+    }
+
     settled = true;
     cleanupHooks();
 
@@ -314,6 +331,11 @@ export async function startLoopbackCallbackSession(
   }
 
   options.signal?.addEventListener("abort", onAbort, { once: true });
+  if (options.signal?.aborted) {
+    onAbort();
+    await closeServer();
+    await waitPromise;
+  }
   timer = setTimeout(() => {
     if (!settled) {
       settled = true;
@@ -333,7 +355,9 @@ export async function startLoopbackCallbackSession(
 
   return {
     callbackUrl,
+    state,
     port: boundPort,
+    canAccept,
     waitForCallback() {
       return waitPromise;
     },
@@ -341,4 +365,9 @@ export async function startLoopbackCallbackSession(
       return closeServer();
     },
   };
+}
+
+export function matchesLoopbackState(url: URL, state: string): boolean {
+  const states = url.searchParams.getAll("state");
+  return states.length === 1 && states[0] === state;
 }

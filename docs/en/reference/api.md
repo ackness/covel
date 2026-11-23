@@ -3702,9 +3702,10 @@ In words:
 
 #### Extra response status for `POST /api/sessions/:id/plugin-rpc`
 
-| Status | Meaning                                                                      |
-| ------ | ---------------------------------------------------------------------------- |
-| 202    | The community plugin needs the player's approval. The response body is below |
+| Status | Meaning                                                                                                                                   |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 202    | The community plugin needs the player's approval. The response body is below                                                              |
+| 403    | A host capability, instance policy, or persistent plugin grant denied the request. The denial takes precedence over any L4 session grant. |
 
 Other 4xx and 5xx responses use the generic `{ error, code?, details? }` envelope described at the top of this page. They do not return `status: "error"`.
 
@@ -3728,6 +3729,8 @@ Other 4xx and 5xx responses use the generic `{ error, code?, details? }` envelop
 ```
 
 #### `GET /api/sessions/:id/approvals`
+
+Session grants in `grants` remain subject to permission checks on each request.
 
 Lists all requests in this session that are currently waiting for approval, along with active session-level grants valid under the current session approval scope. After a page refresh, the frontend uses it to rebuild the dialog queue and session grant view.
 

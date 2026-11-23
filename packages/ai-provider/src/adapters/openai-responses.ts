@@ -476,7 +476,7 @@ function responsesTargetPath(
   if (!isValidProviderSourceEndpointPath(endpointPath)) {
     throw new AiProviderError({
       code: "CONFIG_ERROR",
-      message: `Invalid provider source requestShape.endpointPath "${String(endpointPath)}".`,
+      message: "Invalid provider source requestShape.endpointPath.",
       provider: "openai-responses",
       retriable: false,
     });

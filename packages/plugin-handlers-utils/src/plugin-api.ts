@@ -1,6 +1,8 @@
 /** Public, structural types for a plugin server entry module. */
 import type { z, ZodType } from "zod";
 import type {
+  ChannelBridgeInput,
+  ChannelBridgeOutput,
   ExtensionAttributeDefinition,
   ExtensionPointId,
   ExtensionWorldModel,
@@ -1428,6 +1430,7 @@ export interface PluginLoopbackCallbackResult {
 
 export interface PluginLoopbackCallbackSession {
   readonly callbackUrl: string;
+  readonly state: string;
   readonly port: number;
   waitForCallback(): Promise<PluginLoopbackCallbackResult>;
   close(): Promise<void>;
@@ -1482,6 +1485,7 @@ export interface PluginProviderSourceCredentialStatus {
 }
 
 export interface PluginProviderSourceRequestShape {
+  /** Path appended to `baseUrl` by the OpenAI Responses adapter in place of its default path. */
   readonly endpointPath?: string;
   readonly omit?: readonly string[];
   readonly force?: Readonly<Record<string, unknown>>;
@@ -1605,6 +1609,10 @@ export interface PluginAPI extends PluginExtensionApi {
   readonly instanceData?: PluginInstanceDataStore;
   readonly secrets?: PluginSecretStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
+  dispatchChannelBridge?(
+    input: ChannelBridgeInput,
+    options?: { readonly locale?: string; readonly signal?: AbortSignal },
+  ): Promise<readonly ChannelBridgeOutput[]>;
   onDispose(cleanup: () => void | Promise<void>): void;
   registerService<I, O>(definition: PluginServiceDefinition<I, O>): void;
   registerTool(toolModule: PluginToolModule): void;

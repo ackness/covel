@@ -32,6 +32,10 @@ import type {
   RpcTrustLevel,
 } from "@covel/shared";
 import type {
+  ChannelBridgeInput,
+  ChannelBridgeOutput,
+} from "@covel/shared/platform";
+import type {
   shortId,
   shortIdBatch,
   tool,
@@ -335,6 +339,7 @@ export interface PluginLoopbackCallbackResult {
 
 export interface PluginLoopbackCallbackSession {
   readonly callbackUrl: string;
+  readonly state: string;
   readonly port: number;
   waitForCallback(): Promise<PluginLoopbackCallbackResult>;
   close(): Promise<void>;
@@ -500,6 +505,10 @@ export interface PluginAPI {
   readonly instanceData?: PluginInstanceDataStore;
   readonly secrets?: PluginSecretStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
+  dispatchChannelBridge?(
+    input: ChannelBridgeInput,
+    options?: { readonly locale?: string; readonly signal?: AbortSignal },
+  ): Promise<readonly ChannelBridgeOutput[]>;
   /** SSRF-guarded fetch helpers for wire implementations. */
   readonly http: {
     readonly fetchWithRetry: typeof fetchWithRetry;

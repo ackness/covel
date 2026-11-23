@@ -123,6 +123,7 @@ export type PromptSegment = {
   readonly role?: "system" | "user" | "assistant";
   readonly audience: "all" | "story" | "self" | { readonly contract: string };
   readonly volatility: "stable" | "session" | "turn";
+  readonly priority?: "high" | "normal" | "low";
   readonly order?: number;
   readonly budget?: number;
   readonly facts?: Record<string, PromptFactValue>;

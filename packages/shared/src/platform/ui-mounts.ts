@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { configFlowIdSchema } from "./config-flows.js";
 import { promptWhenSchema } from "./prompt-governance.js";
 import { rpcActionNameSchema } from "../schemas/rpc-action.js";
 import { PLUGIN_VIEW_ID_PATTERN } from "../schemas/view-mode.js";
@@ -72,18 +73,22 @@ export const composerActionSpecSchema = z
       .regex(/^[a-z][a-z0-9-]{0,31}$/)
       .optional(),
     openWindow: z.string().regex(PLUGIN_VIEW_ID_PATTERN).optional(),
+    openFlow: configFlowIdSchema.optional(),
     params: z.record(z.string(), z.unknown()).optional(),
     whenFact: promptWhenSchema.optional(),
   })
   .superRefine((spec, ctx) => {
-    const targets = [spec.action, spec.command, spec.openWindow].filter(
-      (value) => value !== undefined,
-    );
+    const targets = [
+      spec.action,
+      spec.command,
+      spec.openWindow,
+      spec.openFlow,
+    ].filter((value) => value !== undefined);
     if (targets.length !== 1) {
       ctx.addIssue({
         code: "custom",
         message:
-          "composerAction must specify exactly one target of action, command, or openWindow",
+          "composerAction must specify exactly one target of action, command, openWindow, or openFlow",
       });
     }
   });

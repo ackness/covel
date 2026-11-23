@@ -75,6 +75,7 @@ export interface UISlotSpec {
   tooltip?: unknown;
   action?: string;
   command?: string;
+  openFlow?: string;
   openWindow?: string;
   params?: Readonly<Record<string, unknown>>;
   roles?: readonly ("user" | "assistant")[];

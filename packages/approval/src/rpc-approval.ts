@@ -298,7 +298,7 @@ export function createRpcApprovalGate(
       return options.policyDecision(query);
     } catch (error) {
       warnPolicyFailure("policy evaluation failed", error);
-      return { decision: "ask" };
+      return { decision: "deny", reason: "policy" };
     }
   }
 

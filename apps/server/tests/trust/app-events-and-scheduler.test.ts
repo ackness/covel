@@ -107,6 +107,83 @@ describe("AppEvents, AppScheduler, and Instance UI Slot Gating", () => {
     });
   }
 
+  it("dispatches channel bridge phases to admitted instance providers", async () => {
+    await writePluginDir(
+      builtinDir,
+      "channel-adapter",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        activationEvents: ["onAppAction:render"],
+        contributes: { appActions: ["render"] },
+        entry: "./server.mjs",
+      },
+      {
+        "server.mjs": `
+          export default function (covel) {
+            covel.registerAppAction("render", (input) => covel.dispatchChannelBridge(input));
+          }
+        `,
+      },
+    );
+    await writePluginDir(
+      userDir,
+      "channel-renderer",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        activationEvents: ["onExtension:channel.bridge@1"],
+        contributes: {
+          extensions: [{ point: "channel.bridge@1", id: "render" }],
+        },
+        entry: "./server.mjs",
+      },
+      {
+        "server.mjs": `
+          export default function (covel) {
+            covel.provideExtension("channel.bridge@1", "render", {
+              handler(input) {
+                return { handled: true, formattedText: input.story.toUpperCase() };
+              },
+            });
+          }
+        `,
+      },
+    );
+    const { api: booted, app } = await bootServer();
+    const render = () =>
+      app.request("/api/plugins/channel-adapter/actions/render", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          phase: "beforeRender",
+          channelId: "fixture",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          story: "hello",
+        }),
+      });
+    expect(await (await render()).json()).toMatchObject({
+      ok: true,
+      result: [],
+    });
+    await grantPlugin(booted, "channel-renderer", {
+      "plugin.communityCode": "allow",
+      "plugin.instanceScope": "allow",
+      "channel.bridge": "allow",
+    });
+    expect(await (await render()).json()).toMatchObject({
+      ok: true,
+      result: [
+        {
+          handled: true,
+          formattedText: "HELLO",
+          providerPluginId: "channel-renderer",
+        },
+      ],
+    });
+  });
+
   it("isolates AppEventDispatcher payloads, catches failing handlers, and respects lazy activation gating", async () => {
     await writePluginDir(
       userDir,
@@ -376,6 +453,24 @@ describe("AppEvents, AppScheduler, and Instance UI Slot Gating", () => {
           ?.failureCount,
       ).toBe(0);
       expect(scheduler.stats().skippedOverlap).toBe(1);
+
+      const blocked = Promise.withResolvers<void>();
+      scheduler.register("builtin-sched-ok", "slow", () => blocked.promise);
+      try {
+        expect(await scheduler.runTaskNow("builtin-sched-ok", "slow")).toEqual({
+          status: "failed",
+        });
+        expect(await scheduler.runTaskNow("builtin-sched-ok", "tick")).toEqual({
+          status: "skipped-overlap",
+        });
+      } finally {
+        blocked.resolve();
+      }
+      await expect(
+        scheduler.runTaskNow("builtin-sched-ok", "tick"),
+      ).resolves.toEqual({
+        status: "ran",
+      });
       warnSpy.mockRestore();
     } finally {
       await scheduler.close();

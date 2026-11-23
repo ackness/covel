@@ -63,9 +63,11 @@ import {
 } from "./gateway-lifecycle.js";
 import {
   handleTargetFailure,
+  preparationFailure,
   prepareTargetAsync,
   createFailedAccountTracker,
   tryRefreshSourceTarget,
+  withProviderSourceAccounts,
   type PreparedTarget,
 } from "./gateway-fallback-chain.js";
 import type {
@@ -470,7 +472,7 @@ export function createGateway(deps: GatewayDependencies) {
       requestBudget: LLMRequestBudget;
     },
   ): AsyncIterable<StreamEvent> {
-    const targets = resolveTextTargets(
+    const resolvedTargets = resolveTextTargets(
       resolveSlotOrPassthrough(input.presetId, "text", options),
       options,
       input.presetId,
@@ -486,6 +488,10 @@ export function createGateway(deps: GatewayDependencies) {
     let lastError: AiProviderError | null = null;
     const failedAccounts = createFailedAccountTracker();
     const providerSources = activeProviderSources(deps);
+    const targets = withProviderSourceAccounts(
+      resolvedTargets,
+      providerSources,
+    );
     const sharedState: {
       metadataTarget: string | undefined;
       initialTarget: ResolvedTarget | undefined;
@@ -651,6 +657,7 @@ export function createGateway(deps: GatewayDependencies) {
               providerSources,
               provider,
               mode: "stream",
+              model: targetModel(target),
               sourceAttempt: targetState.sourceAttempt,
               error,
               signal: options.signal,
@@ -670,13 +677,24 @@ export function createGateway(deps: GatewayDependencies) {
     }
 
     for (const [index, target] of targets.entries()) {
-      const prepared = await prepareTargetAsync(
-        deps.providerRegistry,
-        providerSources,
-        target,
-        "stream",
-        options,
-      );
+      let prepared;
+      try {
+        prepared = await prepareTargetAsync(
+          deps.providerRegistry,
+          providerSources,
+          target,
+          "stream",
+          options,
+        );
+      } catch (error) {
+        lastError = preparationFailure(
+          error,
+          target,
+          options,
+          index < targets.length - 1,
+        );
+        continue;
+      }
       const provider = prepared.provider;
       const targetState = {
         resolved: prepared.resolved,

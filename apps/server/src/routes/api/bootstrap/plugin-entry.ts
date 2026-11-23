@@ -214,6 +214,7 @@ export async function createBootstrapPluginEntries(
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
   const packageScopes = new Map<string, "session" | "instance" | "both">();
+  const lazyDualScopeEntries = new Set<string>();
   const entryGenerations = new WeakMap<PluginEntryDefinition, string>();
   const scopes = new Set<PluginEntryScope>();
   const activeScopes = new Map<string, PluginEntryScope>();
@@ -325,6 +326,10 @@ export async function createBootstrapPluginEntries(
         pluginId,
         declared.packageManifest?.plugin.scope ?? "session",
       );
+      const plugin = declared.packageManifest?.plugin;
+      if (plugin?.scope === "both" && plugin.activationEvents?.length) {
+        lazyDualScopeEntries.add(pluginId);
+      }
       const definition = await loadPluginEntryDefinition(
         discovery,
         declared.packageManifest,
@@ -607,13 +612,16 @@ export async function createBootstrapPluginEntries(
     }
   >();
 
-  // Builtin session/dual-scope entries run at bootstrap so their capabilities
-  // are available from the first turn. Instance-only plugins defer to
-  // instancePlugins.activateForEvent("onStartup") once server trust loads.
+  // Builtin session entries and dual-scope entries without activation events
+  // are available at bootstrap. Explicit instance events use the instance host.
   for (const [pluginId, discovery] of discoveryMap) {
     const trust = getPluginTrustInfo(pluginId, discovery.source);
     if (!trust.autoLoad) continue;
-    if (packageScopes.get(pluginId) === "instance") continue;
+    if (
+      packageScopes.get(pluginId) === "instance" ||
+      lazyDualScopeEntries.has(pluginId)
+    )
+      continue;
     try {
       await invokeEntryForPlugin(pluginId);
       invokedPluginIds.add(pluginId);

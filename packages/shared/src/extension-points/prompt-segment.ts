@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   promptFactKeySchema,
   promptFactValueSchema,
+  promptPrioritySchema,
   promptWhenSchema,
 } from "../platform/prompt-governance.js";
 import { defineExtensionPoint } from "./definition.js";
@@ -20,6 +21,7 @@ export const promptSegmentSchema = z.strictObject({
     z.strictObject({ contract: z.string().min(1) }),
   ]),
   volatility: z.enum(["stable", "session", "turn"]),
+  priority: promptPrioritySchema.optional(),
   order: z.number().int().optional(),
   budget: z.number().int().positive().max(32_000).optional(),
   facts: z.record(promptFactKeySchema, promptFactValueSchema).optional(),

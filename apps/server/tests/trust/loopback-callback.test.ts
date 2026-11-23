@@ -36,9 +36,10 @@ describe("startLoopbackCallbackSession", () => {
 
     const wrongMethod = await fetch(session.callbackUrl, { method: "POST" });
     expect(wrongMethod.status).toBe(405);
+    expect((await fetch(session.callbackUrl)).status).toBe(403);
 
     const hit = await fetch(
-      `${session.callbackUrl}?code=oauth-code-1&state=csrf-42`,
+      `${session.callbackUrl}?code=oauth-code-1&state=${session.state}`,
     );
     expect(hit.status).toBe(200);
     expect(hit.headers.get("cache-control")).toBe("no-store");
@@ -49,11 +50,11 @@ describe("startLoopbackCallbackSession", () => {
 
     const result = await waitPromise;
     expect(result.callbackUrl).toBe(
-      `${session.callbackUrl}?code=oauth-code-1&state=csrf-42`,
+      `${session.callbackUrl}?code=oauth-code-1&state=${session.state}`,
     );
     expect(result.query).toEqual({
       code: "oauth-code-1",
-      state: "csrf-42",
+      state: session.state,
     });
 
     // Port closes immediately once callback completes.
@@ -120,34 +121,50 @@ describe("startLoopbackCallbackSession", () => {
     await session.close();
   });
 
-  it("accepts IPv6 ::1 callback connections when ::1 loopback is available and closes both listeners afterwards", async () => {
+  it("cancels when the signal is aborted while listeners are starting", async () => {
+    const controller = new AbortController();
+    const starting = startLoopbackCallbackSession({
+      path: "/auth/callback",
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(starting).rejects.toMatchObject({ code: "aborted" });
+  });
+
+  it("accepts IPv6 callbacks and closes both listeners afterwards", async ({
+    skip,
+  }) => {
+    const probe = http.createServer();
+    const ipv6Available = await new Promise<boolean>((resolve, reject) => {
+      probe.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EAFNOSUPPORT" || error.code === "EADDRNOTAVAIL") {
+          resolve(false);
+        } else {
+          reject(error);
+        }
+      });
+      probe.listen(0, "::1", () => probe.close(() => resolve(true)));
+    });
+    if (!ipv6Available) skip();
+
     const session = await startLoopbackCallbackSession({
       path: "/auth/callback",
     });
     sessions.push(session);
 
     const waitPromise = session.waitForCallback();
-    let ipv6Delivered = false;
-    try {
-      const res = await fetch(
-        `http://[::1]:${session.port}/auth/callback?code=v6-code&state=s6`,
-      );
-      expect(res.status).toBe(200);
-      ipv6Delivered = true;
-    } catch {
-      // Environments without ::1 loopback fall back cleanly to 127.0.0.1.
-      const res = await fetch(`${session.callbackUrl}?code=v4-code&state=s4`);
-      expect(res.status).toBe(200);
-    }
+    const ipv6Url = `http://[::1]:${session.port}/auth/callback`;
+    const suffix = `?code=callback-code&state=${session.state}`;
+    const response = await fetch(ipv6Url + suffix);
+    expect(response.status).toBe(200);
 
     const result = await waitPromise;
-    expect(result.query.code).toBe(ipv6Delivered ? "v6-code" : "v4-code");
+    expect(result.query).toMatchObject({
+      code: "callback-code",
+      state: session.state,
+    });
     await new Promise((r) => setTimeout(r, 25));
     await expect(fetch(session.callbackUrl)).rejects.toThrow();
-    if (ipv6Delivered) {
-      await expect(
-        fetch(`http://[::1]:${session.port}/auth/callback`),
-      ).rejects.toThrow();
-    }
+    await expect(fetch(ipv6Url)).rejects.toThrow();
   });
 });

@@ -596,9 +596,15 @@ export function ConfigFlowDialog() {
       activeConfigFlow.flowId,
       activeConfigFlow.initial,
     )
-      .then((res) => {
+      .then(async ({ run: startedRun }) => {
         if (!cancelled) {
-          applyRun(res.run);
+          applyRun(startedRun);
+        } else if (startedRun.status === "active") {
+          await cancelPluginConfigFlow(
+            activeConfigFlow.pluginId,
+            activeConfigFlow.flowId,
+            startedRun.runId,
+          );
         }
       })
       .catch((err) => {

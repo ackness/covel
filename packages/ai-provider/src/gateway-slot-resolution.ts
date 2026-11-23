@@ -554,21 +554,24 @@ export function createGatewaySlotResolution(
         options?.capabilityOverridePolicy ?? "restrict-only",
         true,
       );
-      let resolved = deps.providerRegistry.resolve(
-        target.preset ?? target.profile,
-        {
-          mode:
-            tag === "image" ? "image" : tag === "embedding" ? "embed" : "text",
-        },
-      );
       const sourceRef = target.preset?.source;
+      let resolved = sourceRef
+        ? undefined
+        : deps.providerRegistry.resolve(target.preset ?? target.profile, {
+            mode:
+              tag === "image"
+                ? "image"
+                : tag === "embedding"
+                  ? "embed"
+                  : "text",
+          });
       const sourceStatus = sourceRef
         ? activeProviderSources(deps)?.inspectSync(
             sourceRef,
             target.preset?.account,
           )
         : undefined;
-      if (!sourceRef && (options?.apiKeys || options?.envApiKeys)) {
+      if (resolved && (options?.apiKeys || options?.envApiKeys)) {
         resolved = deps.providerRegistry.withApiKeys(
           resolved,
           options.apiKeys ?? {},
@@ -580,10 +583,13 @@ export function createGatewaySlotResolution(
       const provider = targetProvider(target);
       const model = targetModel(target);
       const protocol =
-        sourceStatus?.protocol ?? target.preset?.protocol ?? resolved.protocol;
+        sourceStatus?.protocol ??
+        target.preset?.protocol ??
+        resolved?.protocol ??
+        "openai-responses-v1";
       const baseUrl =
         sourceStatus?.baseUrl ??
-        resolved.config.baseUrl ??
+        resolved?.config.baseUrl ??
         target.preset?.baseUrl;
       const presetTag = target.preset?.tag ?? "text";
       const presetMeta = target.preset?.providerRequestMetadata ?? {};
@@ -638,10 +644,8 @@ export function createGatewaySlotResolution(
         provider,
         protocol: protocol as string,
         ...(baseUrl ? { baseUrl } : {}),
-        ...(!sourceRef && resolved.config.apiKey
-          ? { apiKey: resolved.config.apiKey }
-          : {}),
-        ...(!sourceRef && resolved.config.headers
+        ...(resolved?.config.apiKey ? { apiKey: resolved.config.apiKey } : {}),
+        ...(resolved?.config.headers
           ? { headers: { ...resolved.config.headers } }
           : {}),
         model,
@@ -649,7 +653,7 @@ export function createGatewaySlotResolution(
         ...(credentialSource ? { credentialSource } : {}),
         ...(target.preset?.capability
           ? {
-              capability: resolved.usesBuiltinAdapter
+              capability: resolved?.usesBuiltinAdapter
                 ? projectCapabilityForBuiltinAdapter(
                     target.preset.capability,
                     resolved.protocol,

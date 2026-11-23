@@ -25,7 +25,10 @@ import {
   type ConfigFlowRunSnapshot,
   type ConfigFlowStep,
 } from "@covel/shared/platform";
-import type { LoopbackCallbackSession } from "../../../trust/loopback-callback.js";
+import {
+  matchesLoopbackState,
+  type LoopbackCallbackSession,
+} from "../../../trust/loopback-callback.js";
 
 export type ConfigFlowHttpStatus =
   400 | 403 | 404 | 409 | 410 | 413 | 422 | 429 | 500;
@@ -287,12 +290,10 @@ export function createConfigFlowEngine(options?: {
     void session.waitForCallback().then(
       async (result) => {
         await serializeRun(run.runId, async () => {
-          if (run.loopbackSession === session) {
-            run.loopbackSession = undefined;
-          }
           if (
             closed ||
             (await expireIfNeeded(run)) ||
+            run.loopbackSession !== session ||
             run.status !== "active" ||
             run.step.kind !== "browser"
           ) {
@@ -324,11 +325,7 @@ export function createConfigFlowEngine(options?: {
           }
         });
       },
-      () => {
-        if (run.loopbackSession === session) {
-          run.loopbackSession = undefined;
-        }
-      },
+      () => {},
     );
   };
 
@@ -399,13 +396,34 @@ export function createConfigFlowEngine(options?: {
       }
     }
 
-    await closeLoopback(run);
-
     const callbackUrl =
       payload.callbackUrl ??
       (typeof payload.data?.callbackUrl === "string"
         ? payload.data.callbackUrl
         : undefined);
+    const loopback = run.loopbackSession;
+    const completingCallback =
+      loopback !== undefined &&
+      run.step.kind === "browser" &&
+      !payload.cancelled;
+    if (completingCallback) {
+      const parsed = callbackUrl ? URL.parse(callbackUrl) : null;
+      if (!parsed || !matchesLoopbackState(parsed, loopback.state)) {
+        throw new ConfigFlowError(
+          400,
+          "invalid_callback_state",
+          "The callback does not match this authorization flow",
+        );
+      }
+    }
+    await loopback?.close().catch(() => {});
+    if (completingCallback && !loopback.canAccept()) {
+      throw new ConfigFlowError(
+        403,
+        "capability_denied",
+        "The authorization flow is no longer permitted",
+      );
+    }
     const ctx = makeRunContext(run, buildContext, requestSignal);
     const rawStep = await run.definition.step(
       {
@@ -419,6 +437,7 @@ export function createConfigFlowEngine(options?: {
       ctx,
     );
     const nextStep = validateStep(rawStep);
+    if (run.loopbackSession === loopback) run.loopbackSession = undefined;
     return applyValidatedStep(run, nextStep, buildContext);
   };
 

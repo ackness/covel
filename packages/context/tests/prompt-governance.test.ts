@@ -103,10 +103,22 @@ describe("Prompt Governance Engine", () => {
   });
 
   describe("governPromptSegments", () => {
-    it("orders by volatility -> order -> providerPluginId -> id", () => {
+    it("uses priority before order within each volatility tier", () => {
       const result = governPromptSegments(
         [
-          seg({ id: "t-1", volatility: "turn", order: 1 }),
+          seg({ id: "t-1", volatility: "turn", order: 1, priority: "high" }),
+          seg({
+            id: "s-high",
+            volatility: "session",
+            order: 100,
+            priority: "high",
+          }),
+          seg({
+            id: "s-low",
+            volatility: "session",
+            order: 0,
+            priority: "low",
+          }),
           seg({
             id: "s-2",
             volatility: "session",
@@ -125,13 +137,15 @@ describe("Prompt Governance Engine", () => {
       );
       expect(result.segments.map((s) => s.id)).toEqual([
         "st-1",
+        "s-high",
         "s-1",
         "s-2",
+        "s-low",
         "t-1",
       ]);
       expect(
         selectPromptSegments(result.segments, makeManifest()).map((s) => s.id),
-      ).toEqual(["st-1", "s-1", "s-2", "t-1"]);
+      ).toEqual(["st-1", "s-high", "s-1", "s-2", "s-low", "t-1"]);
     });
 
     it("propagates cross-plugin Facts across rounds before audience & when gating", () => {

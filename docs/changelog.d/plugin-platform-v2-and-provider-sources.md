@@ -6,3 +6,10 @@
 ### Security
 
 - **Server-only encrypted secret storage and strict provider-source isolation.** Added host `SecretVault` (`secrets.own`), ephemeral state-verified localhost OAuth callbacks (`net.loopbackCallback`), bounded proxy gating (`net.authProxy`), and `permissions.http` origin locking for `provider.source@1` endpoints; provider source tokens remain server-side and are omitted from `X-Provider-Keys`, web responses, traces, and error messages ([Security](../internals/security.md), [Plugin installation](../reference/plugin-installation.md)).
+
+### Fixed
+
+- Approved third-party provider sources can use a text wire registered by their own package in model presets, connection tests, and sessions. Unpinned presets try ready accounts in default-first order.
+- Responses sources can append a custom endpoint path to their base URL. Local OAuth callbacks accept IPv6 loopback connections where available.
+- Config Flow callbacks recheck permissions and OAuth state on both browser return and manual paste. Closing a wizard during startup cancels its run when the host responds.
+- RPC policy failures deny cached grants, timed-out scheduled handlers retain their overlap guard, and memory-backed instance data reads return isolated values.

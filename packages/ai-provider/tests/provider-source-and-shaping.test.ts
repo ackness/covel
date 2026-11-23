@@ -578,7 +578,10 @@ describe("provider-source gateway and OpenAI Responses request shaping", () => {
     for (const badPath of [
       "responses",
       "//evil.test/responses",
+      "/./responses",
       "/../secret",
+      "/%2e/responses",
+      "/.%2E/responses",
       "/responses?x=1",
     ]) {
       await expect(
@@ -598,5 +601,6 @@ describe("provider-source gateway and OpenAI Responses request shaping", () => {
         ),
       ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
     }
+    expect(fetchedUrls).toHaveLength(1);
   });
 });

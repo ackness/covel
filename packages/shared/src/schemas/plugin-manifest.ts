@@ -17,6 +17,7 @@ import {
   configFlowIdSchema,
   promptFactKeySchema,
   promptFactValueSchema,
+  promptPrioritySchema,
   promptWhenSchema,
   providerSourceContributionSchema,
   scheduledTaskSpecSchema,
@@ -680,6 +681,11 @@ export const pluginManifestSchema = z
               role: z
                 .enum(["system", "user", "assistant"])
                 .describe("Message role of the segment. Defaults to `system`.")
+                .optional(),
+              priority: promptPrioritySchema
+                .describe(
+                  "Segment priority within its volatility tier. Defaults to `normal`.",
+                )
                 .optional(),
               budget: z
                 .number()

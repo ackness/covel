@@ -19,10 +19,10 @@ export function createInstanceDataMethods(
 ): MemoryStoreMethods {
   return {
     async getInstanceData(pluginId, namespace, key) {
-      return (
-        state.instanceData.get(instanceDataMapKey(pluginId, namespace, key)) ??
-        null
+      const record = state.instanceData.get(
+        instanceDataMapKey(pluginId, namespace, key),
       );
+      return record ? structuredClone(record) : null;
     },
 
     async listInstanceData(pluginId, namespace?) {
@@ -30,7 +30,7 @@ export function createInstanceDataMethods(
       for (const record of state.instanceData.values()) {
         if (record.pluginId !== pluginId) continue;
         if (namespace !== undefined && record.namespace !== namespace) continue;
-        records.push(record);
+        records.push(structuredClone(record));
       }
       return sortInstanceData(records);
     },

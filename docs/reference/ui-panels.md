@@ -1374,3 +1374,5 @@ agent runtime 调用 `suspend` 之后，会话工具条左侧出现状态标记�
 ## 声明式配置流（Config Flows）
 
 需要外部账号授权、设备码轮询或导入配置的插件（如 `provider.source@1` 供应商源、外部服务同步等）在 `contributes.flows` 声明 Flow ID 并通过 `covel.registerConfigFlow` 注册步骤机。支持的步骤类型（`CONFIG_FLOW_STEP_KINDS`）为 `form`、`browser`（结合本地回环回调 `loopbackCallback`）、`device`、`import`、`confirm`、`done` 与 `error`。设置面板等宿主位置通过前端事件入口 `openPluginConfigFlow` 唤起通用向导对话框，并在流程结束后触发实例状态与供应商摘要刷新；密钥仍只保存在宿主端[秘钥库](./glossary.md#secret-vault)，不传给浏览器。
+
+`composerAction` 可以用 `openFlow` 指向同包的配置流，并用 `params` 提供初始值。关闭尚未启动完成的向导时，宿主收到启动响应后会取消该次运行。

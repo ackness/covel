@@ -1441,6 +1441,22 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       );
     });
 
+    it("isolates nested values returned by instance data reads", async () => {
+      const entry = makeEntry({ value: { nested: { count: 1 } } });
+      await store.upsertInstanceData(entry);
+      const record = await store.getInstanceData("plugin-a", "state", "k1");
+      const [listed] = await store.listInstanceData("plugin-a", "state");
+      (
+        record!.value as typeof entry.value & { nested: { count: number } }
+      ).nested.count = 2;
+      (
+        listed!.value as typeof entry.value & { nested: { count: number } }
+      ).nested.count = 3;
+      expect(await store.getInstanceData("plugin-a", "state", "k1")).toEqual(
+        entry,
+      );
+    });
+
     it("upserts preserving original createdAt while updating value and updatedAt", async () => {
       await store.upsertInstanceData(makeEntry({ value: { step: 1 } }));
       await store.upsertInstanceData(

@@ -1376,3 +1376,5 @@ Alongside session right panels and full-column views, Platform v2 adds two stric
 ## Declarative Config Flows
 
 Plugins needing external OAuth sign-in, device-code polling, or credential import (such as `provider.source@1` sources) declare flow IDs in `contributes.flows` and register a step machine via `covel.registerConfigFlow`. Supported step kinds (`CONFIG_FLOW_STEP_KINDS`) are `form`, `browser` (paired with `loopbackCallback`), `device`, `import`, `confirm`, `done`, and `error`. Host views launch the generic wizard dialog via `openPluginConfigFlow`; completion automatically notifies settings panes and refreshes provider-source summaries while secrets remain solely inside the host [secret vault](./glossary.md#secret-vault).
+
+A `composerAction` can use `openFlow` to launch a flow in the same package and `params` to pass its initial values. When the wizard is dismissed during startup, the host cancels the run as soon as the start response arrives.

@@ -8,6 +8,7 @@
 import { Hono, type Context } from "hono";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
+import { isCapabilityKey } from "@covel/shared/permissions";
 import { z } from "zod";
 import { errorBody } from "../../api-error.js";
 import { accessGuard } from "../../host-profile.js";
@@ -23,6 +24,7 @@ import {
 } from "./bootstrap/config-flows.js";
 import { withCallSignal } from "./bootstrap/entry-http.js";
 import {
+  isInstancePluginAllowed,
   isPluginCapabilityEffectivelyAllowed,
   type InstancePluginRegistry,
 } from "./bootstrap/instance-plugins.js";
@@ -174,6 +176,29 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
     const httpPermissions = packageHttpPermissions(entry);
     const loopbackDecl =
       entry.packageManifest?.plugin.permissions?.loopbackCallback;
+    const canAcceptLoopback = (flowId: string): boolean => {
+      const flow = configFlows.get(pluginId, flowId);
+      if (!flow) return false;
+      return (
+        isInstancePluginAllowed(
+          { registry, permissionService, trustedSources },
+          pluginId,
+        ) &&
+        [
+          "net.loopbackCallback" as const,
+          ...(flow.definition.requiredCapabilities ?? []),
+        ].every(
+          (capability) =>
+            isCapabilityKey(capability) &&
+            isPluginCapabilityEffectivelyAllowed(
+              permissionService,
+              registry,
+              capability,
+              pluginId,
+            ),
+        )
+      );
+    };
 
     return ({ pluginId: pId, flowId, runId, signal, onLoopbackStarted }) => {
       const surface = buildPluginInstanceSurface({
@@ -196,14 +221,7 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
         ...(loopbackDecl
           ? {
               async startLoopbackCallback() {
-                if (
-                  !isPluginCapabilityEffectivelyAllowed(
-                    permissionService,
-                    registry,
-                    "net.loopbackCallback",
-                    pluginId,
-                  )
-                ) {
+                if (!canAcceptLoopback(flowId)) {
                   throw new ConfigFlowError(
                     403,
                     "capability_denied",
@@ -214,6 +232,7 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
                   path: loopbackDecl.path,
                   ports: loopbackDecl.ports,
                   signal,
+                  canAccept: () => canAcceptLoopback(flowId),
                 });
                 onLoopbackStarted(session);
                 return session;

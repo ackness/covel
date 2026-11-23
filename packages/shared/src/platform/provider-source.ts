@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { PluginProviderSourceRequestShape } from "@covel/plugin-handlers-utils";
 import { isProviderProtocolId } from "../provider-protocols.js";
 import { isLoopbackBaseUrl } from "../utils/provider-defaults.js";
 import {
@@ -75,18 +76,24 @@ export function isAllowedProviderSourceBaseUrl(url: string): boolean {
   }
 }
 
-const MAX_ENDPOINT_PATH_LENGTH = 256;
+const providerSourceEndpointPathSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((value) => value.startsWith("/") && !value.startsWith("//"))
+  .refine(
+    (value) =>
+      !/[?#\\\s]/.test(value) &&
+      ![...value].some((character) => character.charCodeAt(0) < 32) &&
+      !value.split("/").some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment)),
+  );
 
 /**
  * Validates a relative endpoint path appended verbatim to a provider source's
  * declared `baseUrl` (rejects query/fragment/backslash/traversal/protocol-relative paths).
  */
 export function isValidProviderSourceEndpointPath(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  if (value.length < 1 || value.length > MAX_ENDPOINT_PATH_LENGTH) return false;
-  if (!value.startsWith("/") || value.startsWith("//")) return false;
-  if (/[?#\\\s]/.test(value)) return false;
-  return !value.split("/").includes("..");
+  return providerSourceEndpointPathSchema.safeParse(value).success;
 }
 
 const authFlowRefSchema = createPlatformIdSchema("Auth flow ID");
@@ -186,19 +193,7 @@ export interface ProviderSourceUsageSummary {
   }[];
 }
 
-export interface ProviderSourceRequestShape {
-  /**
-   * Relative path appended verbatim to `baseUrl` (e.g. `"/responses"` for
-   * non-`/v1` backends). When omitted, the adapter's default path logic applies.
-   */
-  readonly endpointPath?: string;
-  readonly omit?: readonly string[];
-  readonly force?: Readonly<Record<string, unknown>>;
-  readonly systemAs?: "instructions" | "input";
-  readonly transform?: (
-    body: Record<string, unknown>,
-  ) => Record<string, unknown>;
-}
+export type ProviderSourceRequestShape = PluginProviderSourceRequestShape;
 
 export interface ProviderSourceSummary {
   readonly id: string;

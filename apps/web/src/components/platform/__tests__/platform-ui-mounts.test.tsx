@@ -11,6 +11,7 @@ import i18n from "@/i18n/index.js";
 import type { ConfigFlowRunSnapshot } from "@covel/shared/platform";
 import {
   closeCommandPalette,
+  closePluginConfigFlow,
   openCommandPalette,
   openPluginConfigFlow,
   openPluginWindow,
@@ -22,6 +23,7 @@ import { TopbarStatusBadges } from "../topbar-status-badges.js";
 import { CommandPalette } from "../command-palette.js";
 import { PluginSettingsSectionPane } from "../plugin-settings-sections.js";
 import { FloatingWindowHost } from "../floating-window-host.js";
+import { ComposerActionButtons } from "@/components/session/game-view/composer-action-buttons.js";
 
 const mocks = vi.hoisted(() => ({
   startPluginConfigFlow: vi.fn(),
@@ -121,6 +123,63 @@ describe("Platform v2 Web UI mounts", () => {
   afterEach(() => {
     vi.useRealTimers();
     cleanup();
+  });
+
+  it("opens a config flow from the composer and cancels a start that returns after dismissal", async () => {
+    type StartResult = {
+      ok: true;
+      run: ConfigFlowRunSnapshot;
+    };
+    let resolveStart!: (result: StartResult) => void;
+    const pending = new Promise<StartResult>((resolve) => {
+      resolveStart = resolve;
+    });
+    mocks.startPluginConfigFlow.mockReturnValueOnce(pending);
+    mocks.cancelPluginConfigFlow.mockResolvedValueOnce({ ok: true });
+    render(
+      <>
+        <ComposerActionButtons
+          sessionId="session-1"
+          entries={[
+            {
+              pluginId: "demo-platform",
+              specs: [
+                {
+                  id: "connect",
+                  label: "Connect account",
+                  openFlow: "connect",
+                },
+              ],
+            },
+          ]}
+          disabled={false}
+          locale="en-US"
+          t={i18n.t}
+        />
+        <ConfigFlowDialog />
+      </>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Connect account" }));
+    await waitFor(() =>
+      expect(mocks.startPluginConfigFlow).toHaveBeenCalledOnce(),
+    );
+    act(() => closePluginConfigFlow());
+    await act(async () => {
+      resolveStart({
+        ok: true,
+        run: makeSnapshot({
+          kind: "form",
+          stepId: "connect",
+          title: "Connect",
+          fields: [],
+        }),
+      });
+    });
+    expect(mocks.cancelPluginConfigFlow).toHaveBeenCalledWith(
+      "demo-platform",
+      "connect",
+      "run-1",
+    );
   });
 
   it("drives ConfigFlowDialog across form, browser externalAuth + poll, confirm, import maxBytes, and done", async () => {
