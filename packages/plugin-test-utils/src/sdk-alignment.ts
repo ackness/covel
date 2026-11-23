@@ -131,6 +131,7 @@ type IoMember<P extends keyof KernelExtensionPointIo> = MutuallyAssignable<
   KernelExtensionPointIo[P],
   ExtensionPointIo[P]
 >;
+type _ChannelBridge = Assert<IoMember<"channel.bridge@1">>;
 type _Compact = Assert<IoMember<"history.compact@2">>;
 type _ImageFlow = Assert<IoMember<"media.image-flow@1">>;
 type _HistoryTransform = Assert<IoMember<"prompt.history-transform@1">>;
@@ -164,6 +165,7 @@ type Def<P extends keyof ExtensionPointIo> = PluginExtensionDefinition<
 >;
 type _SdkDef<P extends keyof ExtensionPointIo> =
   SdkExtensionDefinition<P> extends Def<P> ? true : false;
+type _DefChannelBridge = Assert<_SdkDef<"channel.bridge@1">>;
 type _DefCompact = Assert<_SdkDef<"history.compact@2">>;
 type _DefImageFlow = Assert<_SdkDef<"media.image-flow@1">>;
 type _DefHistoryTransform = Assert<_SdkDef<"prompt.history-transform@1">>;

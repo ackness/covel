@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { CharacterRecord, DataStore } from "../../types.js";
+import type {
+  CharacterRecord,
+  DataStore,
+  InstanceDataRecord,
+  PluginGrantRecord,
+} from "../../types.js";
 import {
   id,
   makeCharacter,
@@ -1267,6 +1272,257 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       ).rejects.toThrow("server setting boom");
       expect(await store.listServerSettings()).toEqual([
         { key: "a.key", value: 1, updatedAt: at },
+      ]);
+    });
+  });
+
+  describe("plugin grants", () => {
+    const at = ts(1);
+    const makeGrant = (
+      pluginId: string,
+      overrides: Partial<PluginGrantRecord> = {},
+    ): PluginGrantRecord => ({
+      pluginId,
+      version: "1.0.0",
+      contentDigest: `sha256:${pluginId}`,
+      grantedCapabilities: {
+        serverCode: true,
+        http: [],
+        hooks: [],
+        tools: [],
+        actions: [],
+        services: [],
+        wires: [],
+        extensions: [],
+        forms: [],
+        datasets: [],
+      },
+      decisions: { "plugin.communityCode": "allow" },
+      grantedAt: at,
+      updatedAt: at,
+      ...overrides,
+    });
+
+    it("lists grants in pluginId order and returns null for absent ids", async () => {
+      expect(await store.listPluginGrants()).toEqual([]);
+      expect(await store.getPluginGrant("missing")).toBeNull();
+
+      await store.upsertPluginGrant(makeGrant("zeta"));
+      await store.upsertPluginGrant(makeGrant("alpha"));
+      expect((await store.listPluginGrants()).map((r) => r.pluginId)).toEqual([
+        "alpha",
+        "zeta",
+      ]);
+      expect(await store.getPluginGrant("alpha")).toEqual(makeGrant("alpha"));
+    });
+
+    it("upserts over an existing grant without duplicating rows", async () => {
+      await store.upsertPluginGrant(makeGrant("alpha"));
+      await store.upsertPluginGrant(
+        makeGrant("alpha", {
+          version: "1.1.0",
+          contentDigest: "sha256:alpha-v2",
+          decisions: { "plugin.communityCode": "deny" },
+          updatedAt: ts(2),
+        }),
+      );
+      const list = await store.listPluginGrants();
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({
+        pluginId: "alpha",
+        version: "1.1.0",
+        contentDigest: "sha256:alpha-v2",
+        decisions: { "plugin.communityCode": "deny" },
+        grantedAt: at,
+        updatedAt: ts(2),
+      });
+    });
+
+    it("deletes a grant cleanly and ignores missing ids", async () => {
+      await store.upsertPluginGrant(makeGrant("alpha"));
+      await store.upsertPluginGrant(makeGrant("beta"));
+      await store.deletePluginGrant("alpha");
+      await store.deletePluginGrant("missing");
+      expect(await store.getPluginGrant("alpha")).toBeNull();
+      expect((await store.listPluginGrants()).map((r) => r.pluginId)).toEqual([
+        "beta",
+      ]);
+    });
+
+    it("does not belong to a session", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      await store.upsertPluginGrant(makeGrant("alpha"));
+      await store.deleteSession(session.id);
+      expect(await store.listPluginGrants()).toHaveLength(1);
+    });
+
+    it("rolls back with the transaction that wrote it", async () => {
+      await store.upsertPluginGrant(makeGrant("alpha"));
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.upsertPluginGrant(
+            makeGrant("alpha", { version: "2.0.0", updatedAt: ts(2) }),
+          );
+          await tx.deletePluginGrant("alpha");
+          await tx.upsertPluginGrant(makeGrant("beta"));
+          throw new Error("plugin grant boom");
+        }),
+      ).rejects.toThrow("plugin grant boom");
+      expect(await store.listPluginGrants()).toEqual([makeGrant("alpha")]);
+    });
+  });
+
+  describe("instance data", () => {
+    const at = ts(1);
+    const makeEntry = (
+      overrides?: Partial<InstanceDataRecord>,
+    ): InstanceDataRecord => ({
+      pluginId: "plugin-a",
+      namespace: "state",
+      key: "k1",
+      value: { count: 1 },
+      createdAt: at,
+      updatedAt: at,
+      ...overrides,
+    });
+
+    it("returns null or empty list for missing entries and lists sorted by namespace and key", async () => {
+      expect(
+        await store.getInstanceData("plugin-a", "state", "missing"),
+      ).toBeNull();
+      expect(await store.listInstanceData("plugin-a")).toEqual([]);
+      expect(await store.listInstanceData("plugin-a", "state")).toEqual([]);
+
+      await store.upsertInstanceData(
+        makeEntry({ namespace: "z-ns", key: "b", value: "zb" }),
+      );
+      await store.upsertInstanceData(
+        makeEntry({ namespace: "a-ns", key: "b", value: "ab" }),
+      );
+      await store.upsertInstanceData(
+        makeEntry({ namespace: "a-ns", key: "a", value: "30" }),
+      );
+      await store.upsertInstanceData(
+        makeEntry({
+          pluginId: "plugin-b",
+          namespace: "a-ns",
+          key: "a",
+          value: true,
+        }),
+      );
+
+      const allA = await store.listInstanceData("plugin-a");
+      expect(allA.map((r) => `${r.namespace}/${r.key}`)).toEqual([
+        "a-ns/a",
+        "a-ns/b",
+        "z-ns/b",
+      ]);
+      // Preserves stringified-number strings rather than coercing to number
+      expect(allA[0]?.value).toBe("30");
+
+      const onlyANs = await store.listInstanceData("plugin-a", "a-ns");
+      expect(onlyANs.map((r) => r.key)).toEqual(["a", "b"]);
+    });
+
+    it("prevents composite-key delimiter collisions across namespace and key", async () => {
+      await store.upsertInstanceData(
+        makeEntry({ namespace: "a:b", key: "c", value: 1 }),
+      );
+      await store.upsertInstanceData(
+        makeEntry({ namespace: "a", key: "b:c", value: 2 }),
+      );
+
+      expect((await store.getInstanceData("plugin-a", "a:b", "c"))?.value).toBe(
+        1,
+      );
+      expect((await store.getInstanceData("plugin-a", "a", "b:c"))?.value).toBe(
+        2,
+      );
+    });
+
+    it("isolates nested values returned by instance data reads", async () => {
+      const entry = makeEntry({ value: { nested: { count: 1 } } });
+      await store.upsertInstanceData(entry);
+      const record = await store.getInstanceData("plugin-a", "state", "k1");
+      const [listed] = await store.listInstanceData("plugin-a", "state");
+      (
+        record!.value as typeof entry.value & { nested: { count: number } }
+      ).nested.count = 2;
+      (
+        listed!.value as typeof entry.value & { nested: { count: number } }
+      ).nested.count = 3;
+      expect(await store.getInstanceData("plugin-a", "state", "k1")).toEqual(
+        entry,
+      );
+    });
+
+    it("upserts preserving original createdAt while updating value and updatedAt", async () => {
+      await store.upsertInstanceData(makeEntry({ value: { step: 1 } }));
+      await store.upsertInstanceData(
+        makeEntry({
+          value: { step: 2 },
+          createdAt: ts(5),
+          updatedAt: ts(5),
+        }),
+      );
+
+      const stored = await store.getInstanceData("plugin-a", "state", "k1");
+      expect(stored).toEqual({
+        pluginId: "plugin-a",
+        namespace: "state",
+        key: "k1",
+        value: { step: 2 },
+        createdAt: at,
+        updatedAt: ts(5),
+      });
+    });
+
+    it("deletes a single key or all keys of one plugin cleanly", async () => {
+      await store.upsertInstanceData(makeEntry({ key: "k1" }));
+      await store.upsertInstanceData(makeEntry({ key: "k2" }));
+      await store.upsertInstanceData(
+        makeEntry({ pluginId: "plugin-b", key: "k1" }),
+      );
+
+      expect(await store.deleteInstanceData("plugin-a", "state", "k1")).toBe(
+        true,
+      );
+      expect(await store.deleteInstanceData("plugin-a", "state", "k1")).toBe(
+        false,
+      );
+      expect(await store.getInstanceData("plugin-a", "state", "k1")).toBeNull();
+      expect(
+        (await store.listInstanceData("plugin-a")).map((r) => r.key),
+      ).toEqual(["k2"]);
+
+      expect(await store.deletePluginInstanceData("plugin-a")).toBe(1);
+      expect(await store.deletePluginInstanceData("plugin-a")).toBe(0);
+      expect(await store.listInstanceData("plugin-a")).toEqual([]);
+      expect(await store.listInstanceData("plugin-b")).toHaveLength(1);
+    });
+
+    it("persists across session deletion and rolls back inside withTransaction", async () => {
+      const session = makeSession();
+      await store.createSession(session);
+      await store.upsertInstanceData(makeEntry({ key: "k1", value: "v1" }));
+      await store.deleteSession(session.id);
+      expect(
+        (await store.getInstanceData("plugin-a", "state", "k1"))?.value,
+      ).toBe("v1");
+
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.upsertInstanceData(
+            makeEntry({ key: "k1", value: "v2", updatedAt: ts(2) }),
+          );
+          await tx.upsertInstanceData(makeEntry({ key: "k2", value: "v3" }));
+          throw new Error("instance data boom");
+        }),
+      ).rejects.toThrow("instance data boom");
+
+      expect(await store.listInstanceData("plugin-a")).toEqual([
+        makeEntry({ key: "k1", value: "v1" }),
       ]);
     });
   });

@@ -63,10 +63,19 @@ import {
 } from "./gateway-lifecycle.js";
 import {
   handleTargetFailure,
-  prepareTarget,
+  preparationFailure,
+  prepareTargetAsync,
   createFailedAccountTracker,
+  tryRefreshSourceTarget,
+  withProviderSourceAccounts,
+  type PreparedTarget,
 } from "./gateway-fallback-chain.js";
+import type {
+  ProviderSourceAttemptContext,
+  ProviderSourceResolver,
+} from "./provider-source.js";
 import {
+  activeProviderSources,
   createGatewaySlotResolution,
   targetMetadata,
   resolveGatewayEmbeddingTarget,
@@ -138,6 +147,8 @@ function missingMediaWireMessage(
 
 interface GatewayDependencies {
   providerRegistry: GatewaySlotResolutionDependencies["providerRegistry"];
+  providerSources?: ProviderSourceResolver;
+  getProviderSources?: () => ProviderSourceResolver | undefined;
   presetRegistry: {
     resolveTextTarget(input: { presetId?: string }): ResolvedTarget;
     resolveEmbeddingTarget(input?: { presetId?: string }): ResolvedTarget;
@@ -461,7 +472,7 @@ export function createGateway(deps: GatewayDependencies) {
       requestBudget: LLMRequestBudget;
     },
   ): AsyncIterable<StreamEvent> {
-    const targets = resolveTextTargets(
+    const resolvedTargets = resolveTextTargets(
       resolveSlotOrPassthrough(input.presetId, "text", options),
       options,
       input.presetId,
@@ -476,151 +487,252 @@ export function createGateway(deps: GatewayDependencies) {
     );
     let lastError: AiProviderError | null = null;
     const failedAccounts = createFailedAccountTracker();
-    let metadataTarget: string | undefined;
-    let initialTarget: ResolvedTarget | undefined;
-    // Argument fragments do not stop a fallback, but the consumer must learn
-    // that the next target starts the response over.
-    let streamedArguments = false;
+    const providerSources = activeProviderSources(deps);
+    const targets = await withProviderSourceAccounts(
+      resolvedTargets,
+      providerSources,
+      options.signal,
+    );
+    const sharedState: {
+      metadataTarget: string | undefined;
+      initialTarget: ResolvedTarget | undefined;
+      // Argument fragments do not stop a fallback, but the consumer must learn
+      // that the next target starts the response over.
+      streamedArguments: boolean;
+    } = {
+      metadataTarget: undefined,
+      initialTarget: undefined,
+      streamedArguments: false,
+    };
+
+    async function* streamTargetWithRefresh(args: {
+      readonly target: ResolvedTarget;
+      readonly primaryTarget: ResolvedTarget;
+      readonly provider: string;
+      readonly startTime: number;
+      readonly targetState: {
+        resolved: ProviderResolution;
+        sourceAttempt: ProviderSourceAttemptContext | undefined;
+        emittedDelta: boolean;
+      };
+    }): AsyncGenerator<StreamEvent, boolean> {
+      const { target, primaryTarget, provider, startTime, targetState } = args;
+      notifyTargetAttempt(options?.onTargetAttempt, target);
+      assertProviderCredentials(provider, targetState.resolved);
+      let refreshedOnce = false;
+      let started = false;
+
+      while (true) {
+        let slot: LLMSlot | undefined;
+        try {
+          slot = await acquireLLMSlot(options.signal, options.onQueueStart);
+          if (options?.requestBudget) {
+            assertLlmRequestBudget(options.requestBudget, {
+              signal: options.signal,
+              requireAttempt: true,
+            });
+          }
+          const resolved = targetState.resolved;
+          sharedState.metadataTarget ??= metadataTargetIdentity(
+            target,
+            resolved,
+          );
+          const request = prepareTextMetadata(
+            target,
+            resolved,
+            {
+              ...input,
+              messages: messagesForTarget(
+                input.messages,
+                target,
+                primaryTarget,
+              ),
+            },
+            options,
+            sharedState.metadataTarget,
+            (sharedState.initialTarget ??= target),
+          );
+          if (!started) {
+            started = true;
+            await notifyStart(
+              resolved.hooks,
+              provider,
+              resolved.protocol,
+              "stream",
+              targetModel(target),
+              options?.traceId,
+              options,
+            );
+          }
+          let completion: Extract<StreamEvent, { type: "done" }> | undefined;
+          if (sharedState.streamedArguments) {
+            sharedState.streamedArguments = false;
+            yield { type: "stream-reset" };
+          }
+
+          for await (const event of iterateLlmRequest(
+            resolved.adapter.streamText(
+              configWithSignal(resolved.config, options, {
+                provider: targetProvider(target),
+                protocol: resolved.protocol,
+              }),
+              {
+                model: targetModel(target),
+                messages: request.messages,
+                instructionLocale: input.instructionLocale,
+                tools: request.tools,
+                defaults: input.defaults,
+                responseFormat: input.responseFormat,
+                providerRequestMetadata: request.metadata,
+                promptCacheKey: input.promptCacheKey,
+              },
+              textContext(target, resolved, "stream"),
+            ),
+            options?.signal,
+          )) {
+            if (
+              (event.type === "text-delta" && event.textDelta.length > 0) ||
+              (event.type === "reasoning-delta" &&
+                event.reasoningDelta.length > 0) ||
+              event.type === "tool-call"
+            ) {
+              targetState.emittedDelta = true;
+            }
+            if (event.type === "tool-argument-delta") {
+              sharedState.streamedArguments = true;
+            }
+            if (event.type === "done") {
+              assertSuccessfulFinishReason(
+                event.finishReason,
+                provider,
+                event.usage,
+              );
+              completion = withProviderWarnings(
+                withUnifiedFinishReason(event),
+                request.warnings,
+              );
+              continue;
+            }
+            yield event;
+          }
+
+          if (!completion) {
+            throw new AiProviderError({
+              code: "PROVIDER_ERROR",
+              message: "Provider stream ended without a done event",
+              provider,
+              model: targetModel(target),
+              retriable: true,
+            });
+          }
+
+          // Release the LLM concurrency slot as soon as the upstream stream ends
+          // so slow consumer processing or iterator abandonment after `done`
+          // never holds a process-wide slot.
+          slot.release();
+
+          await notifySuccess(
+            resolved.hooks,
+            provider,
+            resolved.protocol,
+            "stream",
+            targetModel(target),
+            completion.usage,
+            Date.now() - startTime,
+            options?.traceId,
+            options,
+          );
+          yield completion;
+          return true;
+        } catch (error) {
+          slot?.release();
+          slot = undefined;
+          if (
+            !targetState.emittedDelta &&
+            !sharedState.streamedArguments &&
+            !refreshedOnce &&
+            targetState.sourceAttempt
+          ) {
+            const refreshed = await tryRefreshSourceTarget({
+              providerRegistry: deps.providerRegistry,
+              providerSources,
+              provider,
+              mode: "stream",
+              model: targetModel(target),
+              sourceAttempt: targetState.sourceAttempt,
+              error,
+              signal: options.signal,
+            });
+            if (refreshed) {
+              refreshedOnce = true;
+              targetState.resolved = refreshed.resolved;
+              targetState.sourceAttempt = refreshed.sourceAttempt;
+              continue;
+            }
+          }
+          throw error;
+        } finally {
+          slot?.release();
+        }
+      }
+    }
 
     for (const [index, target] of targets.entries()) {
-      const { provider, resolved } = prepareTarget(
-        deps.providerRegistry,
-        target,
-        "stream",
-        options,
-      );
-
-      if (failedAccounts.has(provider, resolved)) continue;
-
-      let emittedDelta = false;
-      const startTime = Date.now();
-      let slot: LLMSlot | undefined;
-
+      let prepared;
       try {
-        notifyTargetAttempt(options?.onTargetAttempt, target);
-        assertProviderCredentials(provider, resolved);
-        slot = await acquireLLMSlot(options.signal, options.onQueueStart);
-        if (options?.requestBudget)
-          assertLlmRequestBudget(options.requestBudget, {
-            signal: options.signal,
-            requireAttempt: true,
-          });
-        metadataTarget ??= metadataTargetIdentity(target, resolved);
-        const request = prepareTextMetadata(
+        prepared = await prepareTargetAsync(
+          deps.providerRegistry,
+          providerSources,
           target,
-          resolved,
-          {
-            ...input,
-            messages: messagesForTarget(input.messages, target, targets[0]!),
-          },
-          options,
-          metadataTarget,
-          (initialTarget ??= target),
-        );
-        await notifyStart(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
           "stream",
-          targetModel(target),
-          options?.traceId,
           options,
         );
-        let completion: Extract<StreamEvent, { type: "done" }> | undefined;
-        if (streamedArguments) {
-          streamedArguments = false;
-          yield { type: "stream-reset" };
-        }
-
-        for await (const event of iterateLlmRequest(
-          resolved.adapter.streamText(
-            configWithSignal(resolved.config, options, {
-              provider: targetProvider(target),
-              protocol: resolved.protocol,
-            }),
-            {
-              model: targetModel(target),
-              messages: request.messages,
-              instructionLocale: input.instructionLocale,
-              tools: request.tools,
-              defaults: input.defaults,
-              responseFormat: input.responseFormat,
-              providerRequestMetadata: request.metadata,
-              promptCacheKey: input.promptCacheKey,
-            },
-            textContext(target, resolved, "stream"),
-          ),
-          options?.signal,
-        )) {
-          if (
-            (event.type === "text-delta" && event.textDelta.length > 0) ||
-            (event.type === "reasoning-delta" &&
-              event.reasoningDelta.length > 0) ||
-            event.type === "tool-call"
-          ) {
-            emittedDelta = true;
-          }
-          if (event.type === "tool-argument-delta") streamedArguments = true;
-          if (event.type === "done") {
-            assertSuccessfulFinishReason(
-              event.finishReason,
-              provider,
-              event.usage,
-            );
-            completion = withProviderWarnings(
-              withUnifiedFinishReason(event),
-              request.warnings,
-            );
-            continue;
-          }
-          yield event;
-        }
-
-        if (!completion) {
-          throw new AiProviderError({
-            code: "PROVIDER_ERROR",
-            message: "Provider stream ended without a done event",
-            provider,
-            model: targetModel(target),
-            retriable: true,
-          });
-        }
-
-        // Release the LLM concurrency slot as soon as the upstream stream ends
-        // so slow consumer processing or iterator abandonment after `done`
-        // never holds a process-wide slot.
-        slot.release();
-
-        await notifySuccess(
-          resolved.hooks,
-          provider,
-          resolved.protocol,
-          "stream",
-          targetModel(target),
-          completion.usage,
-          Date.now() - startTime,
-          options?.traceId,
-          options,
-        );
-        yield completion;
-        return;
       } catch (error) {
-        failedAccounts.record(provider, resolved, error);
+        lastError = preparationFailure(
+          error,
+          target,
+          options,
+          index < targets.length - 1,
+        );
+        continue;
+      }
+      const provider = prepared.provider;
+      const targetState = {
+        resolved: prepared.resolved,
+        sourceAttempt: prepared.sourceAttempt,
+        emittedDelta: false,
+      };
+      if (failedAccounts.has(provider, targetState.resolved)) continue;
+
+      const startTime = Date.now();
+      try {
+        if (
+          yield* streamTargetWithRefresh({
+            target,
+            primaryTarget: targets[0]!,
+            provider,
+            startTime,
+            targetState,
+          })
+        ) {
+          return;
+        }
+      } catch (error) {
         // Once a delta has been emitted we can no longer retry on another
         // provider — the consumer has already seen partial output.
         lastError = await handleTargetFailure({
           error,
-          resolved,
+          resolved: targetState.resolved,
           provider,
           mode: "stream",
           target,
           startTime,
           options,
-          canFallback: !emittedDelta && index < targets.length - 1,
+          canFallback: !targetState.emittedDelta && index < targets.length - 1,
           previous: lastError,
+          sourceAttempt: targetState.sourceAttempt,
+          failedAccounts,
         });
-      } finally {
-        slot?.release();
       }
     }
 
@@ -683,21 +795,35 @@ export function createGateway(deps: GatewayDependencies) {
         // profile's bare provider name — the provider registry fills in
         // baseUrl/protocol from its registered defaults. Request keys bind to
         // the profile provider.
-        prepare: (target, opts) => {
-          const routingTarget = target.preset ?? {
-            provider: target.profile.provider,
-          };
-          let resolved = deps.providerRegistry.resolve(routingTarget, {
-            mode: "embed",
-          });
-          if (opts?.apiKeys || opts?.envApiKeys) {
-            resolved = deps.providerRegistry.withApiKeys(
-              resolved,
-              opts.apiKeys ?? {},
-              target.profile.provider,
-              opts.envApiKeys,
+        prepare: async (target, opts) => {
+          const providerSources = activeProviderSources(deps);
+          let prepared: PreparedTarget;
+          if (target.preset?.source) {
+            prepared = await prepareTargetAsync(
+              deps.providerRegistry,
+              providerSources,
+              target,
+              "embed",
+              opts,
             );
+          } else {
+            const routingTarget = target.preset ?? {
+              provider: target.profile.provider,
+            };
+            let resolved = deps.providerRegistry.resolve(routingTarget, {
+              mode: "embed",
+            });
+            if (opts?.apiKeys || opts?.envApiKeys) {
+              resolved = deps.providerRegistry.withApiKeys(
+                resolved,
+                opts.apiKeys ?? {},
+                target.profile.provider,
+                opts.envApiKeys,
+              );
+            }
+            prepared = { provider: targetProvider(target), resolved };
           }
+          const { resolved } = prepared;
           const expected = input.expectedConfiguration;
           if (
             expected &&
@@ -716,7 +842,7 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               retriable: false,
             });
-          return { provider: targetProvider(target), resolved };
+          return prepared;
         },
         execute: async (target, resolved) => {
           // Merge slot-level embeddingFormat into the per-call metadata so the

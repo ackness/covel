@@ -23,12 +23,46 @@ export function computePluginCapabilities({
   hasServerCode: boolean;
 }): PluginCapabilities {
   const contributes = root.plugin.contributes;
+  const allPermissions = [
+    root.plugin.permissions,
+    ...runtimes.map(({ manifest }) => manifest.permissions),
+  ];
+  const isInstance =
+    root.plugin.scope === "instance" || root.plugin.scope === "both";
+  const secrets = allPermissions.some((perm) => perm?.secrets === true);
+  const authProxy = allPermissions.some((perm) => perm?.authProxy === true);
+  const scheduler =
+    allPermissions.some((perm) => perm?.scheduler === true) ||
+    Boolean(contributes?.schedules?.length);
+  const sandboxWorker = allPermissions.some(
+    (perm) => perm?.sandboxWorker === true,
+  );
+  const loopbackCallback = root.plugin.permissions?.loopbackCallback;
+  const appEvents = [
+    ...new Set([
+      ...allPermissions.flatMap((perm) => perm?.appEvents ?? []),
+      ...(contributes?.appEvents ?? []),
+    ]),
+  ];
+  const appActions = contributes?.appActions ?? [];
+  const flows = contributes?.flows ?? [];
+  const providerSources = (contributes?.providerSources ?? []).map(
+    (source) => source.id,
+  );
+
   return pluginCapabilitiesSchema.parse({
     serverCode: hasServerCode,
-    http: [
-      root.plugin.permissions,
-      ...runtimes.map(({ manifest }) => manifest.permissions),
-    ].flatMap((permissions) =>
+    ...(isInstance ? { instanceScope: true } : {}),
+    ...(secrets ? { secrets: true } : {}),
+    ...(authProxy ? { authProxy: true } : {}),
+    ...(scheduler ? { scheduler: true } : {}),
+    ...(sandboxWorker ? { sandboxWorker: true } : {}),
+    ...(loopbackCallback ? { loopbackCallback } : {}),
+    ...(appEvents.length > 0 ? { appEvents } : {}),
+    ...(appActions.length > 0 ? { appActions } : {}),
+    ...(flows.length > 0 ? { flows } : {}),
+    ...(providerSources.length > 0 ? { providerSources } : {}),
+    http: allPermissions.flatMap((permissions) =>
       (permissions?.http ?? []).map((http) => ({
         ...http,
         methods: http.methods ?? ["GET"],

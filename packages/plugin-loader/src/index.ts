@@ -1,4 +1,5 @@
 export {
+  ID_BEARING_UI_SLOTS,
   loadPluginUiSpec,
   loadPluginUiSpecs,
   PLUGIN_UI_SLOTS,

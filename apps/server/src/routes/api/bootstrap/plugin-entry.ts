@@ -55,6 +55,13 @@ import type { ToolRegistry } from "@covel/tools";
 import { buildEntryApi } from "./plugin-entry-api.js";
 import { PluginRegistrationError } from "./plugin-registration-error.js";
 import { SESSION_DELETION_PENDING_KEY } from "../session/session-guard.js";
+import type { PermissionService } from "../../../trust/permission-service.js";
+import type { SecretVault } from "../../../trust/secret-vault.js";
+import type { AppActionRegistry } from "./app-actions.js";
+import type { ConfigFlowEngine } from "./config-flows.js";
+import type { AppEventDispatcher } from "./app-events.js";
+import type { AppScheduler } from "./app-scheduler.js";
+import type { ProviderSourceHost } from "./provider-sources.js";
 
 // `PluginAPI` / `PluginToolkit` (and the related option types) are the
 // Public Plugin API — they live in @covel/runtime so plugin authors can
@@ -78,6 +85,11 @@ export interface BootstrapPluginEntriesParams {
   readonly tools: ToolRegistry;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
+  readonly appActions?: AppActionRegistry;
+  readonly configFlows?: ConfigFlowEngine;
+  readonly appEvents?: AppEventDispatcher;
+  readonly appScheduler?: AppScheduler;
+  readonly providerSources?: ProviderSourceHost;
   readonly services?: import("@covel/runtime").PluginServiceRegistry;
   readonly extensions?: import("@covel/runtime").PluginExtensionHost;
   /** Fail-closed session authorization for community server code. */
@@ -94,6 +106,16 @@ export interface BootstrapPluginEntriesParams {
     sessionId: string,
     pluginId: string,
   ) => boolean | Promise<boolean>;
+  /** Installation-scoped host identifier exposed via `covel.hostId`. */
+  readonly hostId?: string;
+  /** Per-plugin secret vault backing `covel.secrets`. */
+  readonly secretVault?: SecretVault;
+  /** Dynamic permission service getter (bound once server trust loads). */
+  readonly getPermissionService?: () => PermissionService | undefined;
+  /** Instance-scope activation approval gate (separate from session grants). */
+  readonly isInstanceServerCodeApproved?: (
+    pluginId: string,
+  ) => boolean | Promise<boolean>;
   /** Separate upper bounds for entry initialization and failed-entry cleanup. */
   readonly entryActivationTimeoutMs?: number;
   /** Passive admission skips a failed entry for this long; explicit activation always retries. */
@@ -104,6 +126,9 @@ const DEFAULT_ENTRY_ACTIVATION_TIMEOUT_MS = 15_000;
 const DEFAULT_ENTRY_RETRY_DELAY_MS = 30_000;
 const MAX_SNAPSHOT_CAPTURE_ATTEMPTS = 8;
 const MAX_IN_FLIGHT_REVOCATION_RETRIES = 4;
+
+const INSTANCE_ACTIVATION = Symbol("instance");
+type ActivationCaller = string | undefined | typeof INSTANCE_ACTIVATION;
 
 class PluginEntryApprovalRevokedError extends Error {
   constructor(message: string) {
@@ -140,6 +165,8 @@ export interface BootstrapPluginEntries {
     pluginId: string,
     sessionId?: string,
   ) => Promise<void>;
+  /** Instance-scope deferred entry invocation — enforces instance-scope gates. */
+  readonly ensureInstancePluginEntry: (pluginId: string) => Promise<void>;
   /**
    * True when `pluginId` declares an `entry` and activation has not yet
    * succeeded (deferred community entry or failed builtin entry). The plugin-rpc
@@ -154,11 +181,40 @@ export interface BootstrapPluginEntries {
   readonly isEntryRetryDeferred: (pluginId: string) => boolean;
 }
 
+function replacePluginInstanceSurfaces(
+  params: Pick<
+    BootstrapPluginEntriesParams,
+    | "appActions"
+    | "configFlows"
+    | "appEvents"
+    | "appScheduler"
+    | "providerSources"
+  >,
+  pluginId: string,
+  fn: () => void,
+): void {
+  const engines = [
+    params.appActions,
+    params.configFlows,
+    params.appEvents,
+    params.appScheduler,
+    params.providerSources,
+  ];
+  const run = engines.reduceRight<() => void>(
+    (next, engine) =>
+      engine ? () => engine.replacePlugin(pluginId, next) : next,
+    fn,
+  );
+  run();
+}
+
 export async function createBootstrapPluginEntries(
   params: BootstrapPluginEntriesParams,
 ): Promise<BootstrapPluginEntries> {
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
+  const packageScopes = new Map<string, "session" | "instance" | "both">();
+  const lazyDualScopeEntries = new Set<string>();
   const entryGenerations = new WeakMap<PluginEntryDefinition, string>();
   const scopes = new Set<PluginEntryScope>();
   const activeScopes = new Map<string, PluginEntryScope>();
@@ -169,6 +225,12 @@ export async function createBootstrapPluginEntries(
   const draining = new Set<Promise<void>>();
   const development =
     params.development ?? readRuntimeEnv().nodeEnv === "development";
+  const armPluginScheduler = (pluginId: string, phase: string): void => {
+    void params.appScheduler?.armPlugin(pluginId).catch((error) => {
+      console.warn(`[app-scheduler] failed to ${phase} "${pluginId}":`, error);
+    });
+  };
+
   const activationTimeoutMs =
     params.entryActivationTimeoutMs ?? DEFAULT_ENTRY_ACTIVATION_TIMEOUT_MS;
   const retryDelayMs = params.entryRetryDelayMs ?? DEFAULT_ENTRY_RETRY_DELAY_MS;
@@ -260,6 +322,14 @@ export async function createBootstrapPluginEntries(
     const registryEntry = params.pluginRegistry?.get(pluginId);
     try {
       const declared = registryEntry ?? (await loadPluginDefinition(discovery));
+      packageScopes.set(
+        pluginId,
+        declared.packageManifest?.plugin.scope ?? "session",
+      );
+      const plugin = declared.packageManifest?.plugin;
+      if (plugin?.scope === "both" && plugin.activationEvents?.length) {
+        lazyDualScopeEntries.add(pluginId);
+      }
       const definition = await loadPluginEntryDefinition(
         discovery,
         declared.packageManifest,
@@ -284,46 +354,73 @@ export async function createBootstrapPluginEntries(
 
   const isServerCodeApprovedAny = async (
     pluginId: string,
-    sessions: Iterable<string | undefined>,
+    callers: Iterable<ActivationCaller>,
   ): Promise<boolean> => {
-    if (
-      getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source).autoLoad
-    ) {
-      return true;
-    }
-    for (const sid of sessions) {
-      if (await isCommunityServerCodeApproved?.(sid, pluginId)) return true;
+    const autoLoad = getPluginTrustInfo(
+      pluginId,
+      discoveryMap.get(pluginId)?.source,
+    ).autoLoad;
+    for (const caller of callers) {
+      if (caller === INSTANCE_ACTIVATION) {
+        if (await params.isInstanceServerCodeApproved?.(pluginId)) return true;
+        continue;
+      }
+      if (
+        autoLoad ||
+        (await isCommunityServerCodeApproved?.(caller, pluginId))
+      ) {
+        return true;
+      }
     }
     return false;
   };
 
   const canActivateAny = async (
     pluginId: string,
-    sessions: Iterable<string | undefined>,
+    callers: Iterable<ActivationCaller>,
   ): Promise<boolean> => {
+    const autoLoad = getPluginTrustInfo(
+      pluginId,
+      discoveryMap.get(pluginId)?.source,
+    ).autoLoad;
+    let hasSessionCaller = false;
+    for (const caller of callers) {
+      if (caller === INSTANCE_ACTIVATION) {
+        if (await params.isInstanceServerCodeApproved?.(pluginId)) return true;
+      } else {
+        hasSessionCaller = true;
+      }
+    }
+    if (!hasSessionCaller) return false;
     if (
-      getPluginTrustInfo(pluginId, discoveryMap.get(pluginId)?.source)
-        .autoLoad ||
-      (await params.isDeclarativePackage?.(pluginId))
+      autoLoad ||
+      (params.isDeclarativePackage &&
+        (await params.isDeclarativePackage(pluginId)))
     ) {
       return true;
     }
-    for (const sid of sessions) {
-      if (await isCommunityServerCodeApproved?.(sid, pluginId)) return true;
+    for (const caller of callers) {
+      if (
+        caller !== INSTANCE_ACTIVATION &&
+        isCommunityServerCodeApproved &&
+        (await isCommunityServerCodeApproved(caller, pluginId))
+      ) {
+        return true;
+      }
     }
     return false;
   };
 
   const canActivate = (
     pluginId: string,
-    sessionId?: string,
-  ): Promise<boolean> => canActivateAny(pluginId, [sessionId]);
+    caller: ActivationCaller,
+  ): Promise<boolean> => canActivateAny(pluginId, [caller]);
 
   const prepareEntry = async (
     pluginId: string,
     definition: PluginEntryDefinition,
     generation?: string,
-    sessions: Iterable<string | undefined> = [undefined],
+    sessions: Iterable<ActivationCaller> = [undefined],
   ): Promise<PluginEntryScope> => {
     const batch = new PluginEntryScope();
     scopes.add(batch);
@@ -433,7 +530,7 @@ export async function createBootstrapPluginEntries(
 
   const invokeEntryForPlugin = async (
     pluginId: string,
-    sessions: Iterable<string | undefined> = [undefined],
+    sessions: Iterable<ActivationCaller> = [undefined],
   ): Promise<void> => {
     try {
       await publishEntryForPlugin(pluginId, sessions);
@@ -448,7 +545,7 @@ export async function createBootstrapPluginEntries(
 
   const publishEntryForPlugin = async (
     pluginId: string,
-    sessions: Iterable<string | undefined> = [undefined],
+    sessions: Iterable<ActivationCaller> = [undefined],
   ): Promise<void> => {
     const definition = entryDefinitions.get(pluginId);
     if (!definition) return;
@@ -485,6 +582,7 @@ export async function createBootstrapPluginEntries(
           throw error;
         }
       });
+      armPluginScheduler(pluginId, "arm");
     } catch (error) {
       const diagnostic =
         error instanceof PluginRegistrationError
@@ -509,16 +607,21 @@ export async function createBootstrapPluginEntries(
   const inFlight = new Map<
     string,
     {
-      readonly waiters: Set<string | undefined>;
+      readonly waiters: Set<ActivationCaller>;
       readonly promise: Promise<void>;
     }
   >();
 
-  // Builtin entries run at bootstrap so their capabilities are
-  // available from the first turn.
+  // Builtin session entries and dual-scope entries without activation events
+  // are available at bootstrap. Explicit instance events use the instance host.
   for (const [pluginId, discovery] of discoveryMap) {
     const trust = getPluginTrustInfo(pluginId, discovery.source);
     if (!trust.autoLoad) continue;
+    if (
+      packageScopes.get(pluginId) === "instance" ||
+      lazyDualScopeEntries.has(pluginId)
+    )
+      continue;
     try {
       await invokeEntryForPlugin(pluginId);
       invokedPluginIds.add(pluginId);
@@ -531,10 +634,14 @@ export async function createBootstrapPluginEntries(
   // lifecycle events emitted before activation are intentionally not replayed.
   const activate = async (
     pluginId: string,
-    sessionId?: string,
+    sessionId?: ActivationCaller,
   ): Promise<void> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return;
+    const callerLabel =
+      sessionId === INSTANCE_ACTIVATION
+        ? "instance"
+        : `session ${sessionId ?? "<missing>"}`;
     for (
       let attempt = 0;
       attempt < MAX_IN_FLIGHT_REVOCATION_RETRIES;
@@ -542,11 +649,11 @@ export async function createBootstrapPluginEntries(
     ) {
       if (!(await canActivate(pluginId, sessionId))) {
         throw new Error(
-          `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
+          `[plugin-entry] ${pluginId}: community server code requires explicit approval for ${callerLabel}`,
         );
       }
       if (closed) throw new Error("plugin entries are closed");
-      if (sessionId) {
+      if (typeof sessionId === "string") {
         const sessions = approvalSessions.get(pluginId) ?? new Set<string>();
         sessions.add(sessionId);
         approvalSessions.set(pluginId, sessions);
@@ -558,7 +665,7 @@ export async function createBootstrapPluginEntries(
       if (active) {
         active.waiters.add(sessionId);
       } else {
-        const waiters = new Set<string | undefined>([sessionId]);
+        const waiters = new Set<ActivationCaller>([sessionId]);
         const promise = serializePlugin(pluginId, async () => {
           try {
             if (closed) throw new Error("plugin entries are closed");
@@ -584,7 +691,7 @@ export async function createBootstrapPluginEntries(
       }
 
       const dropSessionApproval = () => {
-        if (!sessionId) return;
+        if (typeof sessionId !== "string") return;
         const sessions = approvalSessions.get(pluginId);
         sessions?.delete(sessionId);
         if (sessions?.size === 0) approvalSessions.delete(pluginId);
@@ -614,7 +721,7 @@ export async function createBootstrapPluginEntries(
       if (!(await canActivate(pluginId, sessionId))) {
         dropSessionApproval();
         throw new Error(
-          `[plugin-entry] ${pluginId}: community server code approval was revoked for session ${sessionId ?? "<missing>"}`,
+          `[plugin-entry] ${pluginId}: community server code approval was revoked for ${callerLabel}`,
         );
       }
       return;
@@ -627,6 +734,17 @@ export async function createBootstrapPluginEntries(
   ): Promise<void> => {
     if (closed) return Promise.reject(new Error("plugin entries are closed"));
     const admission = activate(pluginId, sessionId);
+    admissions.add(admission);
+    void admission.then(
+      () => admissions.delete(admission),
+      () => admissions.delete(admission),
+    );
+    return admission;
+  };
+
+  const ensureInstancePluginEntry = (pluginId: string): Promise<void> => {
+    if (closed) return Promise.reject(new Error("plugin entries are closed"));
+    const admission = activate(pluginId, INSTANCE_ACTIVATION);
     admissions.add(admission);
     void admission.then(
       () => admissions.delete(admission),
@@ -705,13 +823,15 @@ export async function createBootstrapPluginEntries(
           params.tools.replacePlugin(pluginId, () =>
             params.hookPipeline.replacePlugin(pluginId, () =>
               params.rpcRegistry.replacePlugin(pluginId, () =>
-                replacePluginWires(pluginId, () => {
-                  const publish = () =>
-                    params.pluginRegistry?.register(next.entry);
-                  if (params.services)
-                    params.services.replacePlugin(pluginId, publish);
-                  else publish();
-                }),
+                replacePluginInstanceSurfaces(params, pluginId, () =>
+                  replacePluginWires(pluginId, () => {
+                    const publish = () =>
+                      params.pluginRegistry?.register(next.entry);
+                    if (params.services)
+                      params.services.replacePlugin(pluginId, publish);
+                    else publish();
+                  }),
+                ),
               ),
             ),
           );
@@ -798,15 +918,17 @@ export async function createBootstrapPluginEntries(
             params.tools.replacePlugin(pluginId, () =>
               params.hookPipeline.replacePlugin(pluginId, () =>
                 params.rpcRegistry.replacePlugin(pluginId, () =>
-                  replacePluginWires(pluginId, () => {
-                    const publish = () => {
-                      batch.commit();
-                      params.pluginRegistry?.register(next.entry);
-                    };
-                    if (params.services)
-                      params.services.replacePlugin(pluginId, publish);
-                    else publish();
-                  }),
+                  replacePluginInstanceSurfaces(params, pluginId, () =>
+                    replacePluginWires(pluginId, () => {
+                      const publish = () => {
+                        batch.commit();
+                        params.pluginRegistry?.register(next.entry);
+                      };
+                      if (params.services)
+                        params.services.replacePlugin(pluginId, publish);
+                      else publish();
+                    }),
+                  ),
                 ),
               ),
             );
@@ -858,6 +980,7 @@ export async function createBootstrapPluginEntries(
           error,
         });
       }
+      armPluginScheduler(pluginId, "arm reloaded");
       return { pluginId, generation };
     });
 
@@ -1010,6 +1133,7 @@ export async function createBootstrapPluginEntries(
       }
     },
     ensurePluginEntry,
+    ensureInstancePluginEntry,
     hasPendingEntry,
     isEntryPublished: (pluginId) => !closed && activeScopes.has(pluginId),
     isEntryRetryDeferred: (pluginId) => {

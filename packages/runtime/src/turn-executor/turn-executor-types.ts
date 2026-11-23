@@ -245,6 +245,11 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * entry point creates it; a run without one gets its own.
    */
   readonly operationScope?: import("../operations/operation-stage.js").OperationExecutionScope;
+  /** Optional host collector for prompt segment governance diagnostics (truncation / protected refusal). */
+  readonly onPromptDiagnostics?: (
+    sessionId: string,
+    diagnostics: readonly import("@covel/shared/platform").PromptSegmentGovernanceDiagnostic[],
+  ) => void;
 }
 
 export interface TurnExecutorOptions {

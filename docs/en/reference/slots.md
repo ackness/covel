@@ -170,7 +170,8 @@ A server-side `{PROVIDER}_API_KEY` from the environment is sent only to a same-o
 
 - Request tracing records only the body fields on an allowlist (`MODEL_FIELDS` in `packages/ai-provider/src/adapters/http/request-observation.ts`). If a new protocol uses new top-level field names, add them there. Otherwise they do not appear in the trace.
 - The plugin SDK cannot depend on `@covel/shared`. It keeps its own copy of the built-in protocol ID type (`PluginProviderProtocol`). If the two copies differ, `packages/shared/src/provider-protocols.ts` fails to compile.
-- **A plugin can provide a protocol**, and the framework does not need to change. The plugin registers it with `covel.registerWires({ text: [...] })`, and the role's `protocol` is written as `<pluginId>/<wireId>`. Only sessions that enable that plugin can select it. Otherwise the call fails with a configuration error. A request without a session (such as a connection test) can use a protocol from a built-in plugin. In a `self` deployment it can also use one from a community plugin. See [plugin-extensions.md § Text protocol wire](./plugin-extensions.md#text-protocol-wire).
+- A plugin registers a protocol with `covel.registerWires({ text: [...] })`, and the model's `protocol` is written as `<pluginId>/<wireId>`. A session can use the protocol by enabling the plugin or by selecting its approved [instance provider source](#plugin-managed-provider-sources-providersource1). A request without a session (such as a connection test) can use a protocol from a built-in plugin. In a `self` deployment it can also use one from a community plugin. See [Text protocol wire](./plugin-extensions.md#text-protocol-wire).
+- **A plugin can manage provider credentials and connections**: see [Plugin-managed provider sources (`provider.source@1`)](#plugin-managed-provider-sources-providersource1) below.
 
 ## API key flow
 
@@ -190,7 +191,7 @@ Keys from the server's environment, and default credentials registered in the pr
 - If only the path changes within the same origin, the default credentials are kept.
 - A resolve request does not change a registered config.
 
-For a custom connection, the frontend uses the exact-connection result from [model lookup](./api.md#model-database-model-db) to determine server credential readiness. Matching a server preset's endpoint alone is insufficient. Protocol authentication headers also count. Results from an old lookup are not used after the connection, protocol or configuration revision changes.
+For a custom connection, the frontend uses the exact-connection result from [model lookup](./api.md#model-database-model-db) to determine server credential readiness. Matching a server preset's endpoint alone is insufficient. Protocol authentication headers also count. Results from an old lookup are not used after the connection, protocol or configuration revision changes. Presets bound to a `provider.source@1` source resolve short-lived credentials on the server via `source` and optional `account` bindings, and the client excludes source-backed providers from `X-Provider-Keys`.
 
 ## Config layers and the front end
 
@@ -220,7 +221,7 @@ Rules for the providers page:
 
 - Models are grouped by connection ID. A group shares one API key and one price multiplier.
 - A model from the TOML keeps its own address and protocol from its file. A model you add locally uses the address of the local connection, plus its own protocol override. Changing a local connection does not change the TOML models in the same group.
-- Model rows and role cards show the effective address, protocol, and config source.
+- Model rows and role cards show the effective address, protocol, and config source. For source-backed providers, the settings UI exposes source and account selectors together with the Config Flow sign-in trigger, renders the endpoint read-only, hides manual API-key entry, and evaluates readiness from server `credentialSource` state.
 
 Rules for the role picker:
 
@@ -882,6 +883,17 @@ Before it sends a request, `gateway.generateObject({ schema, messages })` conver
 `gateway.generateText` and `gateway.streamText` both accept `responseFormat`. It is passed to the adapter of each actual call, including fallback models. Streamed output is still text deltas. `responseFormat` does not provide incremental object parsing, and it does not replace the caller's check of the complete result.
 
 Agent completion uses the schema in tool arguments without `responseFormat`, `text.format` or JSON MIME instructions. See [completion conditions](./plugins.md#agent-output-submission) for submission and correction, and [tool submission capabilities](#tool-submission-capabilities) for target checks and strict policy. This adds no correction model calls to `gateway.generateObject`.
+
+## Plugin-managed provider sources (provider.source@1)
+
+Providers requiring OAuth logins, multi-account pools, subscription token exchange, or automatic refresh attach through the generic `provider.source@1` contract in instance-capable plugins (`apiVersion: 2`, `scope: instance` or `both`) without changing framework code:
+
+- **Manifest and permissions**: Declare the source, protocol, modes, and associated sign-in flows under `contributes.providerSources` in the root `PLUGIN.md`. List the flow IDs under `contributes.flows` as well. Use `covel.registerProviderSources` to resolve credentials and optionally refresh them, list accounts and models, report usage, and classify errors. Hosted and `browser-private` deployments disable `plugin.providerSource` at the [L1 capability ceiling](./plugin-installation.md#permissions-and-the-four-layer-policy).
+- **Protocol**: Use a built-in protocol or [register a text wire](./plugin-extensions.md#text-protocol-wire) in the same package and set `protocol` to `<pluginId>/<wireId>`. The default is `openai-responses-v1`. Select the provider source through the `source` field in the model preset. An approved instance plugin can serve the source's text requests with its own wire.
+- **Dormant boot & warm restore**: Packages using lazy `activationEvents` (`onFlow:*`, `onAppAction:*`) stay dormant on boot while no credentials exist in `SecretVault`, and warm on startup once secrets are stored.
+- **Credentials and endpoints**: The effective `baseUrl` must match the origin in the manifest. HTTPS model endpoints require `net.httpDeclared` and the applicable methods in `permissions.http`. Built-in model protocols use `POST`. Loopback model endpoints also require `network.localModels`. Resolved credentials and private headers are used for outbound requests on the server.
+- **Request shaping**: The Responses protocol supports `requestShape.endpointPath`, for example to append `/responses` to the `baseUrl` path. With this field set, the adapter skips automatic insertion of `/v1`. The path starts with `/` and excludes queries, fragments, and dot segments. The source can also set `systemAs`, `omit`, `force`, and `transform`.
+- **Refresh and failover**: When a model request receives a `401`, concurrent requests for that account share one refresh. A preset that omits `account` tries the default account first and can switch to another ready account when the first runs out of quota or loses authentication. A preset that specifies `account` uses that account and its configured fallback targets. The gateway checks the source's declared `modes`.
 
 ## Provider streaming responses
 

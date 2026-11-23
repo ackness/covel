@@ -19,6 +19,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Capability | 能力标签 | The `tag` of a model route (`text`, `image`, and so on). Plugins are found by **Contract**, not by capability tag. |
 | Capability snapshot | 能力快照 | The declaration bounds in an install receipt; see [trusted sources](./plugin-installation.md#trusted-sources). |
 | Collection | 合集 | An install manifest that distributes worlds and plugins together; distinct from a Pack used during play. |
+| Config flow | 配置流 | A multi-step configuration or sign-in wizard registered by a plugin (`contributes.flows`). |
 | Contract | 契约 | A versioned ID, for example `narrative-engine@2`. |
 | Credits | 作者信息 | The `author`, `license`, and `homepage` fields of a package. |
 | Dataset | 数据集 | Typed plugin data a plugin declares (`contributes.datasets`). Not the install-time **Collection**. |
@@ -31,6 +32,7 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Fault latch | 熔断 | A session-local pause after consecutive self-caused auxiliary plugin faults, cleared by the player or a process restart. See the [protocol](./protocol.md#plugin-fault-latch). |
 | Finalizer step | 收尾步骤 | The one request at an agent limit that offers only the submission tool for its final output. |
 | Imported tool | 导入工具 | A tool generated from another plugin's model-facing service, which an agent imports with `agent.tools.services`; a read service's import is read-only and a write service's import stages writes. |
+| Instance scope | 实例作用域 | An activation scope bound to the host instance (`scope: instance` or `both`) rather than individual game sessions. |
 | Kernel | 内核 | The framework core that schedules work, assembles context, runs tools, validates proposals and commits writes. |
 | Local model relay | 本地模型中继 | On a shared form, the server reaches a model on the player's computer or local network through the player's browser. See [Security boundaries](../internals/security.md#local-model-relay). |
 | Official web app | 官方网页版 | A hosted product that is not yet supported; browser-private infrastructure alone is not the complete product. |
@@ -44,12 +46,14 @@ Each English term has only one Chinese term. The Chinese docs, the UI text, and 
 | Preset | 预设 | An internal model connection plan containing the provider, endpoint, protocol and model ID. |
 | Proposal | 提案 | A runtime’s request to write data, persisted only after kernel validation. |
 | Provider | 提供商 | The model service selected through slot routing. |
+| Provider source | 供应商源 | A plugin-registered credential and connection resolver (`provider.source@1`) that keeps short-lived tokens, refresh, and multi-account failover on the server. |
 | Read / Stage | 阅读 / 舞台 | The two built-in views of the session screen: Read is the page-by-page text view, Stage is the picture with background and portraits. Formerly Text, Parsed view and Stage view. |
 | Recursive call | 嵌套调用 | A same-package runtime call whose writes commit with its parent; distinct from a read-only sub-agent. |
 | Roleplay notes | 扮演说明 | What the world author writes in the `blueprint` field of a character record to tell the narrative how to play the character; read by Character Profiles. Not the character itself. |
 | Runtime | runtime | Kept in English. It means one execution unit in a manifest, not the general word "runtime". |
 | Runtime manifest | runtime 清单 | The internal execution structure compiled from an author’s manifest, not the authoring format. |
 | Seat | 座位 | Who plays in a session, in which role, and which characters they control (`session.seats`). |
+| Secret vault | 秘钥库 | Encrypted, package-isolated credential store accessed via `covel.secrets`, never exposed to the browser or traces. |
 | Segment | 提示词段 | One section of an assembled prompt. A part of a story is a **Story segment**. |
 | Server-scoped setting | 服务端设置 | A setting with `scope: "server"`. All other settings are per-device settings. |
 | Session | 会话 | One game played in a world, with its own characters, plugin data and progress. |
@@ -173,6 +177,12 @@ It only matters at install time. What gets installed is still ordinary plugins a
 
 See: [collections](../ship/collections.md), [plugin installation](./plugin-installation.md).
 
+## Config flow
+
+A multi-step declarative configuration or authorization wizard declared under `contributes.flows` and registered with `covel.registerConfigFlow`, supporting `form`, `browser` (loopback callback), `device`, `import`, `confirm`, `done`, and `error` steps. Settings panes and UI slots launch the shared wizard dialog and refresh provider-source state on completion.
+
+See: [Declarative Config Flows](./ui-panels.md#declarative-config-flows), [HTTP API](./api.md#instance-app-actions-config-flows--provider-sources).
+
 ## Contract
 
 A versioned ID, such as `narrative-engine@2`, that says what ability a plugin provides or needs.
@@ -244,6 +254,12 @@ The read-only tool the kernel generates, when an agent runtime starts, for anoth
 Without exactly one active provider the tool is absent and the runtime runs as usual. It is not in the tool registry and cannot be a completing tool.
 
 See: [Imported service tools](./tools.md#imported-service-tools), [Model-facing services](./plugin-extensions.md#model-facing-services).
+
+## Instance scope
+
+A plugin activation scope (`scope: instance` or `scope: both`) that runs at the host-instance level rather than inside a single game session. Instance-capable plugins expose `appActions`, `flows`, `appEvents`, `schedules`, `channel.bridge@1`, and `provider.source@1` under L1–L3 capability governance.
+
+See: [Plugin field reference](./plugins.md#instance-scope-and-ecosystem-extensions), [Permissions and the four-layer policy](./plugin-installation.md#permissions-and-the-four-layer-policy).
 
 ## Kernel
 
@@ -326,6 +342,12 @@ A specific model service: text, image, or vector (OpenAI, Anthropic, DeepSeek, A
 
 See: `packages/ai-provider/`, [plugin field reference](./plugins.md).
 
+## Provider source
+
+A model provider credential and connection resolver (`provider.source@1`) registered by an `instance` or `both` scoped plugin via `contributes.providerSources` and `covel.registerProviderSources`. Credentials stay in the host `SecretVault`, backed by `permissions.http` origin locking, declarative `requestShape`, single-flight `401` refresh, and multi-account failover.
+
+See: [Model Slots · Plugin-managed provider sources](./slots.md#plugin-managed-provider-sources-providersource1), [HTTP API](./api.md#instance-app-actions-config-flows--provider-sources).
+
 ## Recursive call
 
 A runtime call within the caller's own plugin, made through `ctx.recursiveCall`. It can produce domain writes. The nested results and their parent form one commit unit; a parent failure discards the nested writes too. It is different from a sub-agent, which returns output only and can be selected across packages by contract.
@@ -359,6 +381,12 @@ See: [plugin field reference](./plugins.md), [rules to know when writing plugins
 A place in a session: who sits there (a human or nobody), in which role (player, host or spectator), which characters they control, and which one they play now. Seats are stored in the session record's `seats`. A new session has one human player seat that binds every character of type `player`. The story follows the current character of the primary seat.
 
 See: [World Model: seats](./world-model.md#seats), [HTTP API](./api.md#session-seats).
+
+## Secret vault
+
+The host's package-isolated encrypted credential store. Only plugins declaring `permissions.secrets: true` and holding L1–L3 `secrets.own` approval can read or write their own encrypted secrets via `covel.secrets`; plaintext secrets are never sent to browsers, logs, or traces.
+
+See: [Security boundaries · SecretVault and instance credentials](../internals/security.md#secretvault-and-instance-credentials), [Permissions and the four-layer policy](./plugin-installation.md#permissions-and-the-four-layer-policy).
 
 ## Segment
 

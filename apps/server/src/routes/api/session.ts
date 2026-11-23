@@ -332,12 +332,17 @@ sessionRoutes.post("/", async (c) => {
     get: (id: string) => entries.get(id),
     getAll: () => entries,
   };
+  const permissionOptions = {
+    permissionService: c.get("permissionService"),
+    allowCommunityCode: allowsAccess(c, "plugin.community"),
+  };
   const authorized = new Set(
     authorizedSessionPluginIds(
       catalogue,
       undefined,
       undefined,
       c.get("trustedSources"),
+      permissionOptions,
     ),
   );
   const inventory = rawWorldId
@@ -572,6 +577,7 @@ sessionRoutes.post("/", async (c) => {
         undefined,
         undefined,
         c.get("trustedSources"),
+        permissionOptions,
       ),
     );
     let staleReason: string | undefined;
@@ -786,6 +792,12 @@ sessionRoutes.post("/", async (c) => {
         preparedWorldData.diagnostics,
       )
     : worldDataImportNotices(preparedWorldData.diagnostics);
+
+  void c.get("appEvents")?.emit("SessionCreated", {
+    sessionId: id,
+    worldId: rawWorldId ?? "",
+    locale: contentLocale.locale,
+  });
 
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.

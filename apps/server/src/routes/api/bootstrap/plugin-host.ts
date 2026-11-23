@@ -12,12 +12,26 @@ import {
   createHookPipeline,
   type HookPipeline,
 } from "@covel/runtime";
+import type { SecretVault } from "../../../trust/secret-vault.js";
 import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
+import {
+  checkInstancePluginAllowed,
+  isPluginCapabilityEffectivelyAllowed,
+} from "./instance-plugins.js";
+import {
+  buildPluginInstanceSurface,
+  packageHttpPermissions,
+  pickPluginInstanceSurfaceFields,
+} from "./plugin-entry-api.js";
 import {
   createHostPluginFaults,
   type HostPluginFaults,
 } from "../plugin-faults.js";
-import { RecentPluginServiceCalls } from "../plugin-diagnostics.js";
+import {
+  RecentPluginServiceCalls,
+  RecentPromptDiagnostics,
+} from "../plugin-diagnostics.js";
+import { invalidateAndRefreshProviderSources } from "../instance-plugin-route-helpers.js";
 import type { BootstrapOwned } from "./event-infrastructure.js";
 import type { BootstrapPluginCatalog } from "./plugin-catalog.js";
 import {
@@ -29,15 +43,39 @@ import { createRuntimeLoader, type RuntimeLoader } from "./runtime-loader.js";
 import type { TrustedSourcesRef } from "./server-trust.js";
 import type { BootstrapStorage } from "./storage.js";
 import { setupPluginTools, type PluginToolsResult } from "./tools.js";
+import {
+  createAppActionRegistry,
+  type AppActionRegistry,
+} from "./app-actions.js";
+import {
+  createConfigFlowEngine,
+  type ConfigFlowEngine,
+} from "./config-flows.js";
+import {
+  createAppEventDispatcher,
+  linkAppEventDispatcherToBus,
+  type AppEventDispatcher,
+} from "./app-events.js";
+import { createAppScheduler, type AppScheduler } from "./app-scheduler.js";
+import {
+  createProviderSourceHost,
+  type ProviderSourceHost,
+} from "./provider-sources.js";
 
 export interface BootstrapPluginHost {
   readonly runtimeLoader: RuntimeLoader;
   readonly loadRuntimeFn: RuntimeLoader["loadRuntimeFn"];
   readonly tools: PluginToolsResult;
   readonly rpc: BootstrapPluginRpc;
+  readonly appActions: AppActionRegistry;
+  readonly configFlows: ConfigFlowEngine;
+  readonly appEvents: AppEventDispatcher;
+  readonly appScheduler: AppScheduler;
+  readonly providerSources: ProviderSourceHost;
   readonly pluginFaultHost: HostPluginFaults;
   readonly pluginFaults: HostPluginFaults["latch"];
   readonly serviceCalls: RecentPluginServiceCalls;
+  readonly promptDiagnostics: RecentPromptDiagnostics;
   readonly serviceAdmission: ReturnType<typeof createPluginServiceAdmission>;
   readonly services: PluginServiceRegistry;
   readonly extensions: PluginExtensionHost;
@@ -50,8 +88,11 @@ export async function createPluginHost(args: {
   readonly catalog: BootstrapPluginCatalog;
   readonly trust: TrustedSourcesRef;
   readonly owned: BootstrapOwned;
+  readonly hostId?: string;
+  readonly secretVault?: SecretVault;
 }): Promise<BootstrapPluginHost> {
-  const { storage, eventBus, catalog, trust, owned } = args;
+  const { storage, eventBus, catalog, trust, owned, hostId, secretVault } =
+    args;
   const { store } = storage;
   const { registry, discoveryMap, manifestCache, eventDirectory } = catalog;
 
@@ -81,11 +122,59 @@ export async function createPluginHost(args: {
 
   const rpc = createBootstrapPluginRpc({
     implicitGrant: (query) => trust.current?.implicitGrant(query) ?? false,
+    policyDecision: (query) =>
+      trust.permissions
+        ? trust.permissions.evaluateRpcApproval(query)
+        : trust.current?.implicitGrant(query)
+          ? { decision: "allow", reason: "trusted-source" }
+          : { decision: "ask" },
   });
+  const appActions = createAppActionRegistry();
+  let providerSourcesRef: ProviderSourceHost | undefined;
+  const configFlows = createConfigFlowEngine({
+    onRunCompleted: (snapshot) =>
+      invalidateAndRefreshProviderSources(
+        providerSourcesRef,
+        registry.getCurrent(snapshot.pluginId),
+        snapshot.pluginId,
+        "config-flows",
+        `flow for "${snapshot.pluginId}"`,
+      ),
+  });
+  const appEvents = createAppEventDispatcher({
+    registry,
+    store,
+    hostId,
+    secretVault,
+    getPermissionService: () => trust.permissions,
+    getTrustedSources: () => trust.current,
+    activateForEvent: (event) =>
+      owned.instancePlugins?.activateForEvent(event) ?? Promise.resolve([]),
+  });
+  linkAppEventDispatcherToBus(eventBus, appEvents);
+  const appScheduler = createAppScheduler({
+    registry,
+    store,
+    hostId,
+    secretVault,
+    getPermissionService: () => trust.permissions,
+    getTrustedSources: () => trust.current,
+  });
+  const providerSources = createProviderSourceHost({
+    registry,
+    store,
+    hostId,
+    secretVault,
+    getPermissionService: () => trust.permissions,
+    getTrustedSources: () => trust.current,
+    getInstancePlugins: () => owned.instancePlugins,
+  });
+  providerSourcesRef = providerSources;
 
   const pluginFaultHost = createHostPluginFaults({ store, eventBus, registry });
   const pluginFaults = pluginFaultHost.latch;
   const serviceCalls = new RecentPluginServiceCalls();
+  const promptDiagnostics = new RecentPromptDiagnostics();
   const serviceAdmission = createPluginServiceAdmission({
     pluginFaults,
     store,
@@ -95,10 +184,104 @@ export async function createPluginHost(args: {
     isEntryRetryDeferred: (pluginId) =>
       owned.pluginEntries?.isEntryRetryDeferred(pluginId) ?? false,
   });
+  async function admitInstancePlugin(
+    pluginId: string,
+    contract?: string,
+  ): Promise<boolean> {
+    const allowed = await checkInstancePluginAllowed(
+      {
+        registry,
+        permissionService: trust.permissions,
+        trustedSources: trust.current,
+      },
+      pluginId,
+    );
+    if (!allowed) return false;
+    if (
+      contract === "channel.bridge@1" &&
+      !isPluginCapabilityEffectivelyAllowed(
+        trust.permissions,
+        registry,
+        "channel.bridge",
+        pluginId,
+      )
+    ) {
+      return false;
+    }
+    return true;
+  }
+
   const services = new PluginServiceRegistry(
     {
       onCallCompleted: (event) => serviceCalls.record(event),
       ...serviceAdmission.admission,
+      async instanceList(contract) {
+        const admitted: string[] = [];
+        for (const entry of registry.getAll().values()) {
+          const scope = entry.packageManifest?.plugin.scope ?? "session";
+          if (scope !== "instance" && scope !== "both") continue;
+          if (!(await admitInstancePlugin(entry.id, contract))) continue;
+          const activationEvents =
+            entry.packageManifest?.plugin.activationEvents ?? [];
+          const matchesExtension =
+            contract !== undefined &&
+            activationEvents.includes(`onExtension:${contract}`);
+          if (
+            owned.pluginEntries &&
+            (matchesExtension || owned.pluginEntries.isEntryPublished(entry.id))
+          ) {
+            try {
+              await owned.pluginEntries.ensureInstancePluginEntry(entry.id);
+            } catch (error) {
+              console.warn(
+                `[plugin-host] skipped instance plugin ${entry.id} during extension discovery:`,
+                error,
+              );
+              continue;
+            }
+          }
+          if (
+            !owned.pluginEntries ||
+            owned.pluginEntries.isEntryPublished(entry.id)
+          ) {
+            admitted.push(entry.id);
+          }
+        }
+        return admitted;
+      },
+      async instanceEnsure(pluginId, contract) {
+        if (!(await admitInstancePlugin(pluginId, contract))) {
+          throw new Error(
+            `Instance plugin "${pluginId}" is not admitted${contract ? ` for contract ${contract}` : ""}`,
+          );
+        }
+        await owned.pluginEntries?.ensureInstancePluginEntry(pluginId);
+      },
+      instanceContext(pluginId, signal) {
+        const entry = registry.getCurrent(pluginId) ?? registry.get(pluginId);
+        const surface = buildPluginInstanceSurface({
+          pluginId,
+          pluginRegistry: registry,
+          store,
+          hostId,
+          secretVault,
+          getPermissionService: () => trust.permissions,
+          httpPermissions: entry ? packageHttpPermissions(entry) : [],
+        });
+        const { sandbox: _sandbox, ...surfaceWithoutSandbox } =
+          pickPluginInstanceSurfaceFields(surface);
+        return {
+          ...surfaceWithoutSandbox,
+          http: {
+            validateBaseUrl: surface.http.validateBaseUrl,
+            fetchWithRetry: (input, init) =>
+              surface.http.fetchWithRetry(input, {
+                ...init,
+                signal: init?.signal ?? signal,
+              }),
+          },
+        };
+      },
     },
     (pluginId) => registry.get(pluginId)?.messages,
   );
@@ -116,9 +299,15 @@ export async function createPluginHost(args: {
     loadRuntimeFn,
     tools,
     rpc,
+    appActions,
+    configFlows,
+    appEvents,
+    appScheduler,
+    providerSources,
     pluginFaultHost,
     pluginFaults,
     serviceCalls,
+    promptDiagnostics,
     serviceAdmission,
     services,
     extensions,

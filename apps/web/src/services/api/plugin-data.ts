@@ -57,9 +57,40 @@ export interface UISlotSpec {
   group?: string;
   groupLabel?: unknown;
   groupOrder?: number;
+  /** Target Settings group for `contributes.ui.settingsSection`. */
+  sectionGroup?: "general" | "llm" | "plugins" | "data" | "advanced";
+  order?: number;
+  /** `contributes.ui.topbarStatus` fields */
+  statusAction?: string;
+  defaultStatus?: {
+    tone: "idle" | "ok" | "syncing" | "warning" | "error";
+    text: unknown;
+  };
+  pollIntervalSec?: number;
+  /** `contributes.ui.window` fields */
+  windowScope?: "session" | "instance";
+  defaultWidth?: number;
+  defaultHeight?: number;
+  /** Composer / message micro-mount fields */
+  tooltip?: unknown;
+  action?: string;
+  command?: string;
+  openFlow?: string;
+  openWindow?: string;
+  params?: Readonly<Record<string, unknown>>;
+  roles?: readonly ("user" | "assistant")[];
+  kinds?: readonly string[];
+  activeField?: string;
+  maxHeight?: number;
   /** Explicit top-level navigation destination, independent of its icon. */
   navTarget?: "images";
-  dataSource?: { namespace: string };
+  dataSource?: {
+    source?: string;
+    namespace?: string;
+    key?: string;
+    bindings?: Readonly<Record<string, string>>;
+  };
+  sources?: Readonly<Record<string, string>>;
   emptyState?: { message: unknown };
   view?: Record<string, unknown>;
   webview?: { html?: string; url?: string; height?: number };
@@ -74,11 +105,41 @@ export interface UISlotEntry {
   specs: UISlotSpec[];
 }
 
+export interface AppCommandEntry {
+  id: string;
+  pluginId: string;
+  source: "plugin";
+  sourceLabel: unknown;
+  name: string;
+  aliases?: readonly string[];
+  description: unknown;
+  scope?: "session" | "instance";
+  palette?: boolean;
+  shortcutHint?: string;
+  action?: string;
+  appAction?: string;
+  openFlow?: string;
+  openPage?: string;
+  openWindow?: string;
+}
+
 /** A spec rejected by server-side validation, with concrete per-field issues. */
 export interface UiSpecDiagnostic {
   pluginId: string;
   runtimeId: string;
-  slot: "right" | "message" | "view" | "segment" | "theme";
+  slot:
+    | "right"
+    | "message"
+    | "view"
+    | "segment"
+    | "settingsSection"
+    | "appPage"
+    | "topbarStatus"
+    | "composerAction"
+    | "messageAction"
+    | "messageBelow"
+    | "window"
+    | "theme";
   specIndex: number;
   declaredPath?: string;
   specId?: string;
@@ -92,15 +153,28 @@ export interface UISpecsResponse {
   view?: UISlotEntry[];
   /** Story paragraph templates, in the session's plugin order. */
   segment?: UISlotEntry[];
+  settingsSection?: UISlotEntry[];
+  appPage?: UISlotEntry[];
+  topbarStatus?: UISlotEntry[];
+  composerAction?: UISlotEntry[];
+  messageAction?: UISlotEntry[];
+  messageBelow?: UISlotEntry[];
+  window?: UISlotEntry[];
+  appCommands?: AppCommandEntry[];
   /** Specs dropped from the slots above because they failed validation. */
   diagnostics?: UiSpecDiagnostic[];
 }
 
 const uiSpecReads = new Map<string, Promise<UISpecsResponse>>();
 
+export function invalidateUiSpecsCache(): void {
+  uiSpecReads.clear();
+}
+
 export function fetchUiSpecs(
   sessionId?: string,
   activePluginKey = "",
+  options?: { readonly silentErrors?: boolean },
 ): Promise<UISpecsResponse> {
   const qs = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
   const key = JSON.stringify([sessionId, activePluginKey, i18n.language]);
@@ -108,6 +182,7 @@ export function fetchUiSpecs(
   if (existing) return existing;
   const read = request<UISpecsResponse>(`/api/ui-specs${qs}`, {
     sessionId,
+    ...(options?.silentErrors ? { silentErrors: true } : {}),
   }).finally(() => {
     if (uiSpecReads.get(key) === read) uiSpecReads.delete(key);
   });

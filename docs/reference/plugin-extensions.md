@@ -532,7 +532,7 @@ agent:
 
 ### 用已有的模型能力
 
-- 文本、图片、语音、音乐：用 `ctx.gateway`、`ctx.images`、`ctx.speech`、`ctx.music`。它们的类型（`PluginServiceGateway`、`PluginImages`、`PluginSpeech`、`PluginMusic`、`PluginMedia`）由 `@covel/plugin-handlers-utils` 导出，宿主实现的就是这些类型。
+- 文本、图片、语音、音乐：用 `ctx.gateway`（含 `generateText`、`generateObject`、`streamText`）、`ctx.images`、`ctx.speech`、`ctx.music`。它们的类型（`PluginServiceGateway`、`PluginImages`、`PluginSpeech`、`PluginMusic`、`PluginMedia`）由 `@covel/plugin-handlers-utils` 导出，宿主实现的就是这些类型。
 - 评估：`ctx.gateway.evaluate({ presetId, state, questions, signal })`，支持 Boolean、Choice、Score 三种问题。
 
 ### 自己拼长提示词时的预算
@@ -557,12 +557,13 @@ agent:
 
 ### 新的服务商、新的协议
 
-| 情况                                         | 做法                                                                                                                                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 新服务商，用的是已有的 wire                  | 只配置 provider、base URL、模型和用途。不用改插件或框架。                                                                                                                                    |
-| 新 wire，或新的返回形式                      | 在一个服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。 |
-| 图片、语音、转写、音乐，想复用统一的媒体管线 | 用 `covel.registerWires`。媒体落库仍通过现有的媒体接口。                                                                                                                                     |
-| 新的文本协议（内置四种之外的请求和响应格式） | 也用 `covel.registerWires` 注册，见下文[文本协议 wire](#文本协议-wire)。注册后它和内置协议一样，任何文本用途都可以选用，主叙事也可以。                                                       |
+| 情况                                                            | 做法                                                                                                                                                                                                                              |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 新服务商，用的是已有的 wire                                     | 只配置 provider、base URL、模型和用途。不用改插件或框架。                                                                                                                                                                         |
+| 需要 OAuth / 多账号或插件托管凭据的供应商 (`provider.source@1`) | 在 `scope: instance` / `both` 插件中声明 `contributes.providerSources` 与 `contributes.flows`，并通过 `covel.registerProviderSources` 实现；凭据留在宿主 `SecretVault`，见[模型用途](./slots.md#插件托管供应商源-providersource1) |
+| 新 wire，或新的返回形式                                         | 在一个服务内部用 `ctx.gateway.resolveSlot` 取得本次请求的模型配置，再用 `ctx.utils.validateBaseUrl` / `fetchWithRetry` 实现协议，定义自己的输入输出 schema。结果通过服务契约提供给其他插件。                                      |
+| 图片、语音、转写、音乐，想复用统一的媒体管线                    | 用 `covel.registerWires`。媒体落库仍通过现有的媒体接口。                                                                                                                                                                          |
+| 新的文本协议（内置四种之外的请求和响应格式）                    | 也用 `covel.registerWires` 注册，见下文[文本协议 wire](#文本协议-wire)。注册后它和内置协议一样，任何文本用途都可以选用，主叙事也可以。                                                                                            |
 
 密钥只留在服务端，不写进结果、日志或界面。
 
@@ -587,6 +588,8 @@ ctx.music.generate({ prompt, lyrics?, instrumental?, durationSeconds?, format?, 
 ### “不用改框架”的范围
 
 它指插件能用自己的契约实现功能。如果希望框架的通用模型设置、调度器或媒体系统直接认识一种全新的能力类型（文本、图像、语音、转写、音乐、评估之外的），那仍然要改宿主的公共契约。注册一个服务不会自动给这份能力清单添加新成员。
+
+对于平台级与实例级扩展（`apiVersion: 2`，`scope: instance` / `both`），插件可通过受四层权限治理约束的原生原语（`covel.secrets`、`covel.instanceData`、`covel.sandbox`、`registerAppAction`、`registerConfigFlow`、`onAppEvent`、`registerScheduledTask`、`channel.bridge@1` 与 `registerProviderSources`）自行接入 MCP 工具桥接、备份与导入导出、外部渠道连接和 OAuth/订阅模型源，而无需改动框架核心。
 
 ### 文本协议 wire
 
@@ -646,18 +649,21 @@ export default function register(covel) {
 - wire 自己发 HTTP。所以这些请求不出现在 provider 请求追踪里，框架的传输重试和请求预算也不作用于它。
 - `config.signal` 在调用被取消或超时时触发，要把它传给请求。
 - `config` 里有该用途解析出的地址和密钥。它们只能用于向该地址发请求，不得写入结果、日志或界面。
-- 模型的 `protocol` 指向的插件没有加载，或没有在当前会话启用时，调用以配置错误失败，错误里写明要启用哪个插件。它不会改用别的协议。
+- 模型的 `protocol` 指向的插件未加载或当前请求不符合下表条件时，调用以配置错误失败。
 
 哪些请求可以选用这个协议：
 
 | 请求                                                     | 条件                                                                     |
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| 绑定插件托管供应商源的文本请求                           | 来源已获实例授权，且协议由同一个插件提供。                               |
 | 会话里的请求                                             | 该插件在这个会话里处于启用状态（社区插件的启用已含玩家授权）。           |
 | 不属于任何会话的请求（连接测试、读取模型列表、生成世界） | 可以选用内置插件的协议。                                                 |
 | 同上，`self` 形态                                        | 只有一个玩家，已加载的社区插件都经他授权，所以也可以选用社区插件的协议。 |
 | 同上，托管形态                                           | 社区插件的协议要在已启用它的会话里使用。                                 |
 
 请求级预设、`llm.toml` 的槽位和 runtime 自己的槽位偏好都按这张表判断。设置页的协议下拉仍列出所有已加载插件的协议。插件注册的图像、语音、转写和音乐 wire 也按这张表选用；选不到时，生成以配置错误失败，错误里写明要启用哪个插件。
+
+用于[插件托管供应商源](./slots.md#插件托管供应商源-providersource1)的文本 wire 收到 HTTP 错误时，可以抛出带数字 `statusCode` 的 `Error`。网关据此处理 401 刷新和账号切换，并使用宿主生成的错误文本。
 
 > [!CAUTION]
 > 信任边界和媒体 wire 相同：社区插件的服务端代码要玩家授权后才运行。wire 里的 `covel.http` 只能访问包里 `permissions.http` 声明的源，以及它正在服务的那个用途的端点。不同的是，文本 wire 会经手选用它的那个用途的**全部提示词和回答**。

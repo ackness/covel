@@ -6,28 +6,14 @@ import {
 import { getProtocolDefinition } from "./protocol-registry.js";
 import { describeUnavailableWire } from "./wire-lifecycle.js";
 import { ModelConfigurationError } from "./errors.js";
+import { hasSameOrigin } from "./provider-source.js";
 import type {
-  CacheStrategy,
   OperationMode,
   ProviderConfig,
   ProviderDefaults,
   ProviderLifecycleHook,
   ProviderProtocol,
 } from "./types.js";
-
-/**
- * Resolve the default prompt-cache strategy for a given provider protocol.
- *
- * §A15 of the improvement plan: each protocol declares its own strategy in
- * the protocol registry (Anthropic → explicit `cache_control` markers,
- * OpenAI-family → `auto-prefix`); an unregistered protocol falls through to
- * `none`. Individual callers can still override the chosen strategy by
- * setting `ProviderConfig.cacheStrategy` explicitly on the registered
- * defaults or protocol route.
- */
-function defaultCacheStrategyFor(protocol: ProviderProtocol): CacheStrategy {
-  return getProtocolDefinition(protocol)?.cacheStrategy ?? "none";
-}
 
 interface ProtocolRoute {
   adapter?: ModelProviderAdapter;
@@ -125,21 +111,23 @@ export function createProviderRegistry(options?: {
   function resolve(
     target: {
       provider: string;
+      source?: string;
       baseUrl?: string;
       protocol?: ProviderProtocol;
       /** Provenance of the target (overlay presets set this — see types.ts). */
       requestScoped?: boolean;
     },
-    _opts: { mode: OperationMode } = { mode: "text" },
+    options: { mode: OperationMode; approvedInstanceOwner?: string } = {
+      mode: "text",
+    },
   ): ProviderResolution {
-    // Request-scoped targets (browser custom presets) may name providers
-    // that exist only in the request. Resolve them ephemerally instead of
-    // requiring a registration: nothing is written to the shared registry,
-    // so concurrent requests can never poison each other's provider config
-    // and env keys never attach (no trusted default origin).
+    // Request-scoped or source-backed targets may name providers that exist
+    // only per request or via a registered plugin provider source.
     const stored = providers.get(target.provider);
     const builtinDefaults = getBuiltinProviderConnection(target.provider);
-    if (!stored && !builtinDefaults && !target.requestScoped) {
+    const sourceBacked =
+      typeof target.source === "string" && target.source.length > 0;
+    if (!stored && !builtinDefaults && !target.requestScoped && !sourceBacked) {
       throw new ModelConfigurationError(
         `Provider registry: provider "${target.provider}" is not registered.`,
       );
@@ -150,15 +138,23 @@ export function createProviderRegistry(options?: {
         ? { defaults: builtinDefaults }
         : { requestScoped: true });
 
-    // A built-in provider names its own protocol; any other speaks OpenAI Chat.
+    // A built-in provider names its own protocol; a source-backed slot
+    // defaults to openai-responses-v1; any other speaks OpenAI Chat.
     const protocol =
       target.protocol ??
       registered.defaults?.protocol ??
       builtinDefaults?.protocol ??
-      DEFAULT_PROVIDER_PROTOCOL;
+      (sourceBacked ? "openai-responses-v1" : DEFAULT_PROVIDER_PROTOCOL);
     const protocolRoute = registered.protocols?.[protocol];
+    const definition = getProtocolDefinition(
+      protocol,
+      sourceBacked ? options.approvedInstanceOwner : undefined,
+    );
+    const registeredAdapter = protocolRoute?.adapter ?? registered.adapter;
     const adapter =
-      protocolRoute?.adapter ?? registered.adapter ?? builtinAdapter(protocol);
+      sourceBacked && options.approvedInstanceOwner
+        ? definition?.createAdapter()
+        : (registeredAdapter ?? definition?.createAdapter());
 
     if (!adapter) {
       const unavailable = describeUnavailableWire("text", protocol);
@@ -184,7 +180,7 @@ export function createProviderRegistry(options?: {
       ...(target.baseUrl ? { baseUrl: target.baseUrl } : {}),
     };
     if (mergedConfig.cacheStrategy === undefined) {
-      mergedConfig.cacheStrategy = defaultCacheStrategyFor(protocol);
+      mergedConfig.cacheStrategy = definition?.cacheStrategy ?? "none";
     }
 
     // Bind server-env keys to trusted origins. The trusted baseUrl is
@@ -197,8 +193,9 @@ export function createProviderRegistry(options?: {
       protocolRoute?.defaults?.baseUrl ??
       (registered.requestScoped ? undefined : registered.defaults?.baseUrl);
     const envKeyAllowed =
-      mergedConfig.baseUrl === undefined ||
-      hasSameOrigin(mergedConfig.baseUrl, trustedBaseUrl);
+      !sourceBacked &&
+      (mergedConfig.baseUrl === undefined ||
+        hasSameOrigin(mergedConfig.baseUrl, trustedBaseUrl));
 
     // Registered credentials must not follow a request-redirected origin.
     // Explicit request keys are applied separately by withApiKeys.
@@ -215,7 +212,7 @@ export function createProviderRegistry(options?: {
     const carriesServerCredentials =
       mergedConfig.apiKey !== undefined ||
       Object.keys(mergedConfig.headers ?? {}).length > 0;
-    if (endpointFromRequest && !carriesServerCredentials) {
+    if (!sourceBacked && endpointFromRequest && !carriesServerCredentials) {
       mergedConfig.relayable = true;
     } else {
       delete mergedConfig.relayable;
@@ -223,7 +220,9 @@ export function createProviderRegistry(options?: {
 
     return {
       adapter,
-      usesBuiltinAdapter: !protocolRoute?.adapter && !registered.adapter,
+      usesBuiltinAdapter: Boolean(
+        (sourceBacked && options.approvedInstanceOwner) || !registeredAdapter,
+      ),
       config: mergedConfig,
       protocol,
       hooks: [...(registered.hooks ?? [])],
@@ -303,20 +302,4 @@ export function createProviderRegistry(options?: {
     hasProvider,
     reconfigure,
   };
-}
-
-/** Origin-level comparison for the env-key trust gate. Unparseable → false. */
-function hasSameOrigin(url: string, trustedUrl: string | undefined): boolean {
-  if (!trustedUrl) return false;
-  try {
-    return new URL(url).origin === new URL(trustedUrl).origin;
-  } catch {
-    return false;
-  }
-}
-
-function builtinAdapter(
-  protocol: ProviderProtocol,
-): ModelProviderAdapter | null {
-  return getProtocolDefinition(protocol)?.createAdapter() ?? null;
 }

@@ -58,6 +58,8 @@ export interface AssembledContext {
    * nothing was pruned). Absent when no budget was configured.
    */
   readonly prunedMessageCount?: number;
+  /** Prompt governance diagnostics (segment truncation or protected-suppress refusal). */
+  readonly promptDiagnostics?: readonly import("@covel/shared/platform").PromptSegmentGovernanceDiagnostic[];
 }
 
 /** Message record from the store (minimal shape needed by context builder). */
@@ -242,6 +244,12 @@ export interface ContextBuildParams {
    * plugin template cannot override or omit. Absent → no block.
    */
   readonly activation?: RuntimeActivation;
+  /** Initial cross-plugin Facts Registry seed for conditional `prompt.segment@1` predicates. */
+  readonly promptFacts?: Readonly<
+    Record<string, import("@covel/shared/platform").PromptFactValue>
+  >;
+  /** Default per-segment token cap when a segment omits `budget`. */
+  readonly defaultSegmentBudget?: number;
 }
 
 // ── Session Context Snapshot ─────────────────────────────────────

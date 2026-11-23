@@ -111,6 +111,11 @@ The ID of this package is its directory name, `example`; its entry is `server/in
 | Root field | Meaning |
 | --- | --- |
 | `id` | The plugin ID. When left out, it is the package directory name; when written, it must match that name. |
+| `apiVersion` | Optional integer platform contract generation (such as `2`; see [PLUGIN Schema](./schema/plugin-manifest.md) for exact constraints). |
+| `scope` | Activation scope: `session` (default, per game session), `instance` (host-instance scoped), or `both`. |
+| `activationEvents` | Lazy activation triggers for `instance` or `both` packages (such as `onStartup`, `onFlow:*`, `onAppAction:*`). |
+| `globalSessionDefault` | Default new-session toggle behavior; cannot be `optional` when `scope` is `instance`. |
+| `permissions` | Instance and entry-level capability declarations (`secrets`, `http`, `loopbackCallback`, `authProxy`, `scheduler`, `sandboxWorker`, `appEvents`). |
 | `kind` | `core` (added to every game by default) or `plugin` (the value when left out; added only when chosen). |
 | `version`, `displayName`, `description`, `tags` | Metadata. Tags group and filter plugins in Getting ready; they do not determine runtime scheduling. Covel works out the `ui:*` and `cost:*` tags; authors write only the others, such as `mode:*`. See [Derived tags](#derived-tags). |
 | `author`, `license` | Author information, shown only for display. See [Author information](#author-information). |
@@ -143,6 +148,11 @@ Getting ready groups the plugins by whether they call a model, that is by the de
 | --- | --- |
 | `tools` | Tool names passed to `registerTool` |
 | `actions` | Nonempty `registerRpc` action names; `covel:`, `runtime:` and `event:` prefixes are reserved for framework approvals and rejected in declarations, registration and action requests. |
+| `appActions` | Instance-scoped action names passed to `registerAppAction`; requires `scope` to be `instance` or `both`. |
+| `flows` | Declarative multi-step Config Flow IDs passed to `registerConfigFlow`; requires `scope` to be `instance` or `both`. |
+| `appEvents` | Read-only application lifecycle event names passed to `onAppEvent`; requires `scope` to be `instance` or `both`. |
+| `schedules` | Bounded periodic background tasks registered with `registerScheduledTask`; requires `scope` to be `instance` or `both` and `permissions.scheduler: true`. |
+| `providerSources` | Model provider credential and connection sources registered with `registerProviderSources`; requires `scope` to be `instance` or `both` (see [Slots](./slots.md)). |
 | `commands` | Player command metadata. Its `action` must be listed in `actions`. |
 | `services` | Contract IDs passed to `registerService`. A model-facing service is written as `{contract, modelFacing: true}`; see [Model-facing services](./plugin-extensions.md#model-facing-services). A service that changes its provider's own data is written as `{contract, access: write}` (default `read`); see [Write services](./plugin-extensions.md#write-services) |
 | `extensions` | Extensions provided with `provideExtension`, written as `<point>/<id>`, such as `prompt.segment@1/notes`. To set options such as `order` or `slot`, write `{point, id, …}`. |
@@ -153,7 +163,7 @@ Getting ready groups the plugins by whether they call a model, that is by the de
 | `data` | The schema, version, accepts, and search settings for this plugin's data namespace |
 | `datasets` | Typed datasets the package owns: the name is the namespace, with schema, key and ops, and optional `tools` and `description`. See [Datasets](#datasets-contributesdatasets) |
 | `actionKinds` | Action kinds players may submit: name, roles, text rule, `fields` schema and display label. See [Action kinds](#action-kinds-contributesactionkinds) |
-| `ui` | Paths, relative to the package root, of the `right/message/view/segment` UI spec files |
+| `ui` | Package-root-relative UI spec paths: `right/message/view/segment`, plus instance slots (`settingsSection/appPage/topbarStatus`) and session micro-slots (`composerAction/messageAction/messageBelow/window`); see [UI Panels](./ui-panels.md). |
 | `ui.view` | Full-column view spec paths relative to the package root; see [Plugin views](./ui-panels.md#plugin-views) for declarations and consent |
 | `ui.segment` | Paths, relative to the package root, of segment template specs: matched by segment kind or speaker, display-only, for committed story paragraphs; see [Segment templates](./ui-panels.md#segment-templates) |
 | `worldProjections` | Declarations of world data projections |
@@ -1268,8 +1278,8 @@ After a namespace declares `search`, its records enter the framework's memory re
 
 ## Prompt and memory extensions
 
-- **Static sections** go in `contributes.prompt`. Each item has `id`, `content`, and `position`, and it may have `role`. The position is `system`, `pre-history`, `post-history`, or `{depth: number}`. The host registers static sections automatically, so you do not need to declare an extension for them. `static-prompt` is a reserved registration ID.
-- **Dynamic content** uses extension points. A dynamic prompt uses `prompt.segment@1`, world context uses `session.world-context@1`, history transforms use `prompt.history-transform@1`, and history compression uses `history.compact@2`. See [Plugin extension points](./plugin-extensions.md) for details. These extensions use the snapshot of the same execution, and they do not reread the manifest on each call.
+- **Static sections** go in `contributes.prompt`. Each item has `id`, `content`, and `position`, and may include `role`, a `when` predicate, `priority`, and a token budget. The host's four-pass prompt governance compiler assembles segments within declared budgets and protected-block boundaries automatically, so no extension declaration is needed. `static-prompt` is a reserved registration ID.
+- **Dynamic content** uses extension points. A dynamic prompt uses `prompt.segment@1` (also supporting `when` predicates while keeping protected framework blocks un-suppressible), world context uses `session.world-context@1`, history transforms use `prompt.history-transform@1`, and history compression uses `history.compact@2`. See [Plugin extension points](./plugin-extensions.md) and [Extension points](./extension-points.md) for details. These extensions use the snapshot of the same execution and do not reread the manifest on each call.
 - **Memory blocks** belong to the memory plugin. It keeps the four default blocks, then reads active `memory.block-definitions@1` services followed by world definitions imported through the `memory.blocks@1` data contract, appending new labels. Duplicate `label` values keep the first complete definition without overwriting its fields; world definitions cannot replace default blocks. The framework does not combine `memoryBlocks` or `summaryFocus` fields, and there is no separate working_memory table.
 
 ## Session plugin selection
@@ -1681,3 +1691,12 @@ Stage Scene declares **Stage reading** through public `contributes.ui.theme`, wi
 ## The input box on a page
 
 Plugin pages use spec paths under `contributes.ui.view`. The host input box sits below a page by default; the optional `composer: false` or an embedded `SessionComposer` hides it. No new placement, runtime trigger or proposal kind is introduced. Own manual-runtime invocation retains approvals, proposals and commit. See [the input box on a page](./ui-panels.md#the-input-box-on-a-page) for declarations, consent, composition and retirement.
+
+## Instance scope and ecosystem extensions
+
+Packages with `apiVersion: 2` and `scope: instance` or `scope: both` can participate outside individual game sessions—exposing instance settings flows, background tasks, or model provider sources. They may use `activationEvents` for lazy startup and call host-governed primitives under the [four-layer permission policy](./plugin-installation.md#permissions-and-the-four-layer-policy):
+
+- **Secrets and instance state**: `covel.secrets` reads and writes package-private encrypted credentials in the host `SecretVault`; `covel.instanceData` stores non-secret instance JSON records; `covel.sandbox` runs bounded worker computations.
+- **Actions, flows, lifecycle, and sources**: `registerAppAction` exposes instance actions; `registerConfigFlow` defines multi-step setup/auth flows (forms, OAuth callbacks, device codes, paste-import, confirmation); `onAppEvent` and `registerScheduledTask` subscribe to read-only app events and bounded periodic jobs; `registerProviderSources` registers credential and connection resolvers (`provider.source@1`).
+
+Future external ecosystem packages—such as MCP tool bridges, backup/import-export tools, chat-channel bridges (`channel.bridge@1`), and OAuth or subscription model sources—attach through these generic kernel contracts without framework changes or plugin special cases.

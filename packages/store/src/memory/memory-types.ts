@@ -24,6 +24,8 @@ import type {
   WorldDataImportLedgerRecord,
   WorldRecord,
   ServerSettingRecord,
+  PluginGrantRecord,
+  InstanceDataRecord,
   RecordChange,
 } from "../types.js";
 import type {
@@ -77,6 +79,8 @@ export interface MemoryState {
   readonly sessionVectorTargets: Map<string, VectorTarget | null>;
   readonly worlds: Map<string, WorldRecord>;
   readonly serverSettings: Map<string, ServerSettingRecord>;
+  readonly pluginGrants: Map<string, PluginGrantRecord>;
+  readonly instanceData: Map<string, InstanceDataRecord>;
   readonly traceEvents: TraceEventRecord[];
   readonly runtimeOutputs: RuntimeOutputRecord[];
   readonly interactionRecords: InteractionRecordRow[];

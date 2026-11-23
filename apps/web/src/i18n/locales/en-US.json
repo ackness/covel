@@ -1500,6 +1500,14 @@
     "desktopProxyMode": "Proxy mode",
     "desktopProxyUrl": "Proxy address",
     "providerIdLabel": "Provider ID",
+    "providerSource": "Credential source",
+    "providerSourceManual": "Manual (API key / endpoint)",
+    "providerSourceAccount": "Account",
+    "providerSourceDefaultAccount": "Default active account",
+    "providerSourceReady": "Ready",
+    "providerSourceNotReady": "Sign-in required",
+    "providerSourceSignIn": "Authenticate / Manage",
+    "providerSourceManagedCredentials": "Credentials and endpoint origin are managed by plugin source {{source}}.",
     "description": "Adjust appearance, models, packages, and local data.",
     "desktopRefreshFailed": "Could not refresh desktop information. Try again.",
     "providerImportSucceeded": "Providers and models imported.",
@@ -1628,6 +1636,187 @@
       "extensions": "Extensions",
       "forms": "Forms",
       "datasets": "Datasets"
+    },
+    "permissionsNavLabel": "Permissions & security",
+    "panePermissionsDescription": "Deployment capability ceilings, instance defaults, per-plugin persistent grants, diagnostics, and active session approvals.",
+    "permissions": {
+      "policyTitle": "Instance capability policy",
+      "policyDescription": "Default capability rules applied across plugins below the host ceiling.",
+      "refresh": "Refresh",
+      "loadFailed": "Failed to load permissions state.",
+      "policySaved": "Instance capability policy updated.",
+      "policyResetDone": "Instance capability policy reset to defaults.",
+      "resetPolicy": "Reset policy to defaults",
+      "grantSaved": "Persistent plugin grants updated.",
+      "grantRevoked": "Persistent plugin grants cleared.",
+      "sessionGrantsRevoked": "Active session grants revoked.",
+      "deploymentSummaryTitle": "Host ceiling (L1)",
+      "desktopShellBadge": "Electron desktop",
+      "deploymentSummaryDesc": "Host capability ceilings are resolved at server startup and cannot be widened by instance policies or per-plugin grants.",
+      "ceilingCountEnabled": "Enabled: {{count}}",
+      "ceilingCountOperator": "Operator-only: {{count}}",
+      "ceilingCountDisabled": "Disabled: {{count}}",
+      "deploymentForm": {
+        "personal": "Personal",
+        "browser_private": "Browser-private",
+        "hosted": "Hosted"
+      },
+      "risk": {
+        "critical": "Critical risk",
+        "high": "High risk",
+        "medium": "Medium risk",
+        "low": "Low risk"
+      },
+      "ceiling": {
+        "enabled": "Enabled",
+        "operator_only": "Operator-only",
+        "disabled": "Disabled"
+      },
+      "mode": {
+        "allow": "Allow",
+        "ask": "Ask",
+        "deny": "Deny"
+      },
+      "capabilityItems": {
+        "plugin_declarative": {
+          "label": "Declarative plugins",
+          "description": "Content-only packages with static prompts, UI schemas, and declared datasets."
+        },
+        "compute_sandboxWorker": {
+          "label": "Sandboxed compute workers",
+          "description": "Bounded worker execution without file, network, secret, or DOM access."
+        },
+        "plugin_communityCode": {
+          "label": "Community server code",
+          "description": "Executes third-party JavaScript inside the server host process."
+        },
+        "plugin_instanceScope": {
+          "label": "Instance-scoped plugins",
+          "description": "Allows community plugins to stay active at the instance level across sessions."
+        },
+        "plugin_providerSource": {
+          "label": "Provider sources",
+          "description": "Contributes account authentication and model source credentials to the gateway."
+        },
+        "channel_bridge": {
+          "label": "External channel bridges",
+          "description": "Connects external chat or messaging channels into sessions."
+        },
+        "plugin_globalAutoEnable": {
+          "label": "Global auto-enable defaults",
+          "description": "Allows helper plugins to join new sessions by default."
+        },
+        "secrets_own": {
+          "label": "Managed plugin secrets",
+          "description": "Reads and writes isolated opaque credentials stored in host secret storage."
+        },
+        "net_httpDeclared": {
+          "label": "Declared outbound HTTP",
+          "description": "Permits direct SSRF-guarded requests to origins declared in the plugin manifest."
+        },
+        "net_authProxy": {
+          "label": "Bounded authentication proxy",
+          "description": "Routes instance auth requests through the configured proxy only to declared origins."
+        },
+        "net_loopbackCallback": {
+          "label": "Loopback OAuth callbacks",
+          "description": "Temporarily listens on localhost to complete browser-based authentication flows."
+        },
+        "network_localModels": {
+          "label": "Local network models",
+          "description": "Allows the server to connect directly to loopback or LAN model endpoints."
+        },
+        "session_bridgeWrite": {
+          "label": "Sandboxed panel session writes",
+          "description": "Lets sandboxed UI panels invoke session bridge actions when approved."
+        },
+        "runtime_highRiskTools": {
+          "label": "High-risk runtime tools",
+          "description": "Allows model tool calls marked as requiring explicit confirmation."
+        },
+        "app_scheduler": {
+          "label": "Background scheduler",
+          "description": "Lets instance plugins run bounded periodic background jobs."
+        },
+        "host_installPackages": {
+          "label": "Package installation",
+          "description": "Installs, updates, reloads, and removes plugins or world packages."
+        },
+        "exec_localBridge": {
+          "label": "Local subprocess bridge",
+          "description": "Reserved capability for allowlisted local subprocess bridges such as stdio tools."
+        }
+      },
+      "pluginsTitle": "Per-plugin grants (L3)",
+      "pluginsDescription": "Persistent grants bind to each community package's content digest and capability snapshot. Explicit denials override trusted-source auto-approval and survive updates until cleared.",
+      "pluginsOperatorRequired": "Enter an operator token above to inspect per-plugin capability audits and persistent grants on this host.",
+      "showBuiltinCount": "Show bundled ({{count}})",
+      "noCommunityPlugins": "No third-party community plugins are currently installed.",
+      "source": {
+        "builtin": "Bundled",
+        "community": "Community"
+      },
+      "tier": {
+        "0": "Tier 0 · Declarative",
+        "3": "Tier 3 · Unsandboxed JS"
+      },
+      "integrity": {
+        "builtin": "Bundled",
+        "verified": "Receipt verified",
+        "modified": "Modified on disk",
+        "no_receipt": "No receipt",
+        "unreadable": "Unreadable"
+      },
+      "integrityDesc": {
+        "modified": "Package files differ from the installation receipt on disk.",
+        "unreadable": "Package files or manifest could not be read cleanly from disk."
+      },
+      "grantStatus": {
+        "none": "No grant",
+        "valid": "Grant valid",
+        "stale_digest": "Digest changed",
+        "capability_escalated": "Capabilities expanded",
+        "unreadable": "Package unreadable",
+        "builtin": "Bundled"
+      },
+      "grantStatusDesc": {
+        "stale_digest": "Package contents changed since grants were recorded; persisted allow grants are inactive until re-reviewed.",
+        "capability_escalated": "Package requested capabilities beyond the granted snapshot; persisted allow grants are inactive until re-reviewed.",
+        "unreadable": "Package digest or declarations are unreadable; persisted allow grants are inactive."
+      },
+      "viewCapabilities": "View declared capabilities",
+      "dangerZoneTitle": "Danger zone · Unsandboxed host code",
+      "dangerZoneWarning": "Community server-side JavaScript runs inside the host Node process with the process's own permissions.",
+      "dangerZoneConfirm": "I understand this plugin executes unsandboxed code inside the host process.",
+      "grantServerCode": "Grant server code",
+      "denyServerCode": "Deny server code",
+      "allowDeclarative": "Allow declarative",
+      "denyDeclarative": "Deny declarative",
+      "revokePluginGrant": "Revoke persistent grants",
+      "diagnosticsTitle": "Plugin diagnostics",
+      "diagnosticsDescription": "Aggregated load errors, registration mismatches, manifest classification notes, grant invalidations, and recent blocked or failed calls.",
+      "diagnosticsEmpty": "No plugin permission or load issues detected.",
+      "diagLoadError": "Load error",
+      "diagLoadErrorFallback": "Plugin failed to load cleanly on the host.",
+      "diagRegistrationError": "Registration mismatch",
+      "diagExecutionNotice": "Manifest classification",
+      "diagGrantInvalidated": "Grant invalidated",
+      "diagIntegrity": "Package integrity",
+      "diagBlocked": "Blocked by policy",
+      "diagBlockedCode": "Server-side code execution is denied for this plugin.",
+      "diagSessionRejection": "Session selection",
+      "diagServiceCall": "Service call",
+      "sessionGrantsTitle": "Active session grants (L4)",
+      "sessionPendingCount": "Pending prompts: {{count}}",
+      "revokeAllSessionGrants": "Revoke all session grants",
+      "noSessionGrants": "No cached grants are currently active in this session.",
+      "revokePlugin": "Revoke",
+      "desktopSecurityTitle": "Desktop shell security boundaries (read-only)",
+      "desktopSecurityDesc": "Enforced natively by the Electron main process:",
+      "desktopRuleExternalNav": "External links open in the OS browser; the main window stays pinned to the local host.",
+      "desktopRuleSubframeIpc": "Sandboxed plugin subframes cannot invoke privileged desktop IPC channels.",
+      "desktopRuleClipboard": "Clipboard permissions stay restricted to explicit user actions.",
+      "desktopRuleFileMode": "Local keys and managed secrets remain in 0600 files under the desktop config directory."
     },
     "liveOutput": {
       "text": "As it is written",
@@ -2845,5 +3034,28 @@
         "failed": "A command failed"
       }
     }
+  },
+  "platform": {
+    "openExternalFailed": "Could not open external URL",
+    "webviewNotAllowed": "Webviews are not permitted in this slot.",
+    "flowLoading": "Starting configuration flow...",
+    "fieldRequired": "{{field}} is required",
+    "flowSubmit": "Continue",
+    "openInBrowser": "Open authorization page",
+    "waitingCallback": "Waiting for authorization callback...",
+    "pasteCallbackUrl": "Or paste the redirected callback URL",
+    "codeCopied": "Code copied",
+    "openVerificationPage": "Open verification page",
+    "pollingAuthorization": "Waiting for authorization confirmation...",
+    "importTooLarge": "Content exceeds {{maxBytes}} bytes",
+    "importSubmit": "Import",
+    "windowRestore": "Restore",
+    "windowMinimize": "Minimize",
+    "commandWorldsDesc": "Browse and launch worlds",
+    "commandSettingsDesc": "Open application settings",
+    "commandPaletteTitle": "Command palette",
+    "commandPalettePlaceholder": "Type a command or destination...",
+    "commandPaletteEmpty": "No matching commands",
+    "confirmAction": "Confirm"
   }
 }

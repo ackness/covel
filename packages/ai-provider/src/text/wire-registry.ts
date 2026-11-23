@@ -24,8 +24,11 @@ export function registerTextWire(
 ): () => void {
   return registerWire("text", wire, owner);
 }
-export function getTextWire(id: string): TextWire | null {
-  return getWire("text", id);
+export function getTextWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): TextWire | null {
+  return getWire("text", id, approvedInstanceOwner);
 }
 export function listTextWires(): TextWire[] {
   return listWires("text");
@@ -86,6 +89,9 @@ export function textWireAdapter(wire: TextWire): ModelProviderAdapter {
         object,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
+          : {}),
+        ...(result.providerContinuation
+          ? { providerContinuation: result.providerContinuation }
           : {}),
         finishReason: result.finishReason,
         usage: result.usage,

@@ -635,4 +635,215 @@ describe("live session view widgets", () => {
       },
     ]);
   });
+
+  describe("Platform v2 UI mount slots", () => {
+    it("validates settingsSection rules (sectionGroup, no webview, no session/secret sources)", () => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "accounts",
+            label: "Accounts",
+            sectionGroup: "plugins",
+            dataSource: { source: "instance.data", namespace: "accounts" },
+            view: {
+              component: "Stack",
+              children: [{ component: "Text", props: { content: "ok" } }],
+            },
+          },
+          "owner",
+          "settingsSection",
+        ),
+      ).toEqual([]);
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "bad-section",
+            label: "Bad",
+            sectionGroup: "unknown",
+            dataSource: { source: "session.characters", namespace: "chars" },
+            webview: { html: "<p>hi</p>" },
+          },
+          "owner",
+          "settingsSection",
+        ).map((issue) => issue.path),
+      ).toEqual(
+        expect.arrayContaining([
+          "sectionGroup",
+          "webview",
+          "dataSource.source",
+        ]),
+      );
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "sec-secrets",
+            label: "Secrets",
+            sectionGroup: "advanced",
+            dataSource: { source: "secrets.own", namespace: "keys" },
+            view: { component: "Stack", children: [] },
+          },
+          "owner",
+          "settingsSection",
+        ).map((issue) => issue.path),
+      ).toContain("dataSource.source");
+    });
+
+    it("validates appPage allows view or webview but rejects session/secret sources", () => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "dashboard",
+            label: "Dashboard",
+            webview: { root: "./ui", entry: "index.html" },
+          },
+          "owner",
+          "appPage",
+        ),
+      ).toEqual([]);
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "bad-page",
+            label: "Bad Page",
+            dataSource: { source: "session.state", namespace: "state" },
+            view: { component: "Stack", children: [] },
+          },
+          "owner",
+          "appPage",
+        ).map((issue) => issue.path),
+      ).toContain("dataSource.source");
+    });
+
+    it("validates topbarStatus, composerAction, and messageAction micro-mounts", () => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "sync-badge",
+            label: "Sync",
+            statusAction: "check-sync",
+            defaultStatus: { tone: "ok", text: "Synced" },
+            pollIntervalSec: 30,
+          },
+          "owner",
+          "topbarStatus",
+        ),
+      ).toEqual([]);
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "quick-roll",
+            label: "Roll",
+            icon: "sparkles",
+            action: "roll-dice",
+          },
+          "owner",
+          "composerAction",
+        ),
+      ).toEqual([]);
+
+      // composerAction must specify exactly one target (action / command / openWindow)
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "ambiguous-action",
+            label: "Both",
+            icon: "sparkles",
+            action: "roll",
+            command: "roll",
+          },
+          "owner",
+          "composerAction",
+        ).length,
+      ).toBeGreaterThan(0);
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "bookmark",
+            label: "Bookmark",
+            icon: "book-open",
+            action: "save-note",
+            roles: ["assistant"],
+            kinds: ["story"],
+          },
+          "owner",
+          "messageAction",
+        ),
+      ).toEqual([]);
+    });
+
+    it("enforces messageBelow display-only rules (no webview, no actions, no secrets)", () => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            roles: ["assistant"],
+            kinds: ["story"],
+            maxHeight: 160,
+            view: { component: "Text", props: { content: "Tag" } },
+          },
+          "owner",
+          "messageBelow",
+        ),
+      ).toEqual([]);
+
+      const badPaths = pluginUiSpecIssues(
+        {
+          webview: { html: "<p>no</p>" },
+          dataSource: { source: "secrets.own", namespace: "k" },
+          maxHeight: 20,
+          view: {
+            component: "Button",
+            on: { click: { action: "invokeCommand", params: {} } },
+          },
+        },
+        "owner",
+        "messageBelow",
+      ).map((issue) => issue.path);
+
+      expect(badPaths).toEqual(
+        expect.arrayContaining([
+          "webview",
+          "dataSource.source",
+          "maxHeight",
+          "view.component",
+          "view.on",
+        ]),
+      );
+    });
+
+    it("enforces window bounds and instance-scoped dataSource isolation", () => {
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "notes-win",
+            label: "Notes",
+            windowScope: "session",
+            defaultWidth: 420,
+            defaultHeight: 360,
+            view: { component: "Stack", children: [] },
+          },
+          "owner",
+          "window",
+        ),
+      ).toEqual([]);
+
+      expect(
+        pluginUiSpecIssues(
+          {
+            id: "bad-instance-win",
+            label: "Leak",
+            windowScope: "instance",
+            dataSource: { source: "session.characters", namespace: "chars" },
+            view: { component: "Stack", children: [] },
+          },
+          "owner",
+          "window",
+        ).map((issue) => issue.path),
+      ).toContain("dataSource.source");
+    });
+  });
 });

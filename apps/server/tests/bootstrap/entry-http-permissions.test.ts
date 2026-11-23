@@ -15,6 +15,10 @@ import { createMemoryStore } from "@covel/store/memory";
 import { ToolRegistry } from "@covel/tools";
 import type { BootstrapPluginEntriesParams } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { buildEntryApi } from "../../src/routes/api/bootstrap/plugin-entry-api.js";
+import {
+  createEntryHttp,
+  withWireEndpoint,
+} from "../../src/routes/api/bootstrap/entry-http.js";
 
 // No request leaves the test: the permission check runs before this stub.
 const sent = vi.hoisted(() => [] as string[]);
@@ -80,6 +84,51 @@ function fixture(source: "builtin" | "community", pluginId: string) {
 }
 
 describe("covel.http of a package's entry", () => {
+  it("checks the current HTTP grant and declared method for a provider source wire", async () => {
+    let allowed = true;
+    const url = "https://api.declared.example/v1";
+    const http = createEntryHttp("source-wire", DECLARED, {
+      canUseDeclaredHttp: () => allowed,
+    });
+    await withWireEndpoint(
+      "source-wire",
+      { baseUrl: url, credentialSource: { sourceId: "source-wire/model" } },
+      async () => {
+        await expect(http.fetchWithRetry(url)).resolves.toBeInstanceOf(
+          Response,
+        );
+        await expect(
+          http.fetchWithRetry(url, { method: "POST" }),
+        ).rejects.toThrow(/http permission denied/);
+        allowed = false;
+        await expect(http.fetchWithRetry(url)).rejects.toThrow(
+          /net.httpDeclared/,
+        );
+      },
+    );
+    const localUrl = "http://127.0.0.1:11434/v1/responses";
+    const localHttp = createEntryHttp("source-wire", DECLARED, {
+      canUseDeclaredHttp: () => false,
+      canUseLocalModels: () => true,
+    });
+    await withWireEndpoint(
+      "source-wire",
+      {
+        baseUrl: localUrl,
+        credentialSource: { sourceId: "source-wire/local" },
+      },
+      async () => {
+        await expect(
+          localHttp.fetchWithRetry(localUrl),
+        ).resolves.toBeInstanceOf(Response);
+        await expect(localHttp.fetchWithRetry(url)).rejects.toThrow(
+          /net\.httpDeclared/,
+        );
+      },
+    );
+    expect(sent).toEqual([url, localUrl]);
+  });
+
   it("lets a community entry reach only the origins its package declares", async () => {
     const { api } = fixture("community", "http-community");
     await expect(

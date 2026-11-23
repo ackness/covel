@@ -50,6 +50,7 @@ import {
   OUTPUT_MODALITIES,
   MODEL_FEATURES,
 } from "@covel/shared";
+import { parseQualifiedProviderSourceId } from "@covel/shared/platform";
 import { hostProfileOf } from "../host-profile.js";
 import {
   parseModelRelayChannel,
@@ -193,18 +194,30 @@ const slotOverrideEnvelopeSchema = z.strictObject({
   capabilityOverrides: z.unknown().optional(),
   customPresets: z
     .array(
-      z.object({
-        id: z.string().trim().pipe(publicModelId),
-        name: z.string().optional(),
-        provider: z.string().min(1),
-        model: z.string().min(1),
-        baseUrl: z.string().optional(),
-        protocol: providerProtocolSchema.optional(),
-        reasoningEffort: z
-          .enum(REASONING_EFFORT_VALUES)
-          .optional()
-          .catch(undefined),
-      }),
+      z
+        .object({
+          id: z.string().trim().pipe(publicModelId),
+          name: z.string().optional(),
+          provider: z.string().min(1).optional(),
+          source: z
+            .string()
+            .min(1)
+            .refine((value) => parseQualifiedProviderSourceId(value) !== null, {
+              message: "source must be <pluginId>/<sourceId>",
+            })
+            .optional(),
+          account: z.string().min(1).max(128).optional(),
+          model: z.string().min(1),
+          baseUrl: z.string().optional(),
+          protocol: providerProtocolSchema.optional(),
+          reasoningEffort: z
+            .enum(REASONING_EFFORT_VALUES)
+            .optional()
+            .catch(undefined),
+        })
+        .refine((preset) => Boolean(preset.provider || preset.source), {
+          message: "customPreset must provide either provider or source",
+        }),
     )
     .optional(),
 });
@@ -270,6 +283,7 @@ export function parseSlotOverrides(
       if (ids.size !== customPresets.length) return null;
       out.customPresets = customPresets.map((preset) => ({
         ...preset,
+        provider: preset.provider ?? preset.source!,
         name: preset.name ?? preset.id,
       }));
     }

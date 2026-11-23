@@ -35,6 +35,7 @@ import { packageStatSignature } from "./package-signature.js";
 interface VerifiedPackage extends PackageIntegrityResult {
   entry: PluginRegistryEntry;
   signature?: string;
+  contentDigest?: string;
   capabilities?: PluginCapabilities;
   hasServerCode?: boolean;
   assessment: PluginExecutionAssessment;
@@ -52,7 +53,8 @@ export function createTrustedSourceService({
   pluginsRoot: string;
 }) {
   const results = new Map<string, VerifiedPackage>();
-  const pending = new Map<string, Promise<void>>();
+  const running = new Map<string, Promise<void>>();
+  const queued = new Map<string, Promise<void>>();
   if (
     readEnvString("COVEL_TRUSTED_SOURCES") !== undefined &&
     trustedSourcesFromEnv() === undefined
@@ -122,6 +124,7 @@ export function createTrustedSourceService({
         ...result,
         entry,
         signature: stable && inventory ? after : undefined,
+        contentDigest: stable && inventory ? inventory.digest : undefined,
         hasServerCode,
         capabilities,
         assessment,
@@ -141,21 +144,39 @@ export function createTrustedSourceService({
       );
     }
   }
+  function runFreshOnce(pluginId: string): Promise<void> {
+    const active = running.get(pluginId);
+    if (!active) {
+      const work = refresh(pluginId).finally(() => {
+        if (running.get(pluginId) === work) running.delete(pluginId);
+      });
+      running.set(pluginId, work);
+      return work;
+    }
+    const existingQueued = queued.get(pluginId);
+    if (existingQueued) return existingQueued;
+    const next = active
+      .catch(() => {})
+      .then(() => {
+        if (queued.get(pluginId) === next) queued.delete(pluginId);
+        return runFreshOnce(pluginId);
+      });
+    queued.set(pluginId, next);
+    return next;
+  }
   async function ensureFresh(pluginId: string): Promise<void> {
     // Publication may replace an entry while another request inspects it.
-    // Join that inspection, then inspect the replacement instead of reusing it.
+    // Callers arriving while an older refresh is in flight must wait for a
+    // refresh started after their call instead of reusing a pre-mutation check.
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      let work = pending.get(pluginId);
-      if (!work) {
-        work = refresh(pluginId);
-        pending.set(pluginId, work);
-      }
-      try {
-        await work;
-      } finally {
-        if (pending.get(pluginId) === work) pending.delete(pluginId);
-      }
-      if (results.get(pluginId)?.entry === registry.getCurrent(pluginId))
+      await runFreshOnce(pluginId);
+      const entry = registry.getCurrent(pluginId);
+      if (
+        !entry ||
+        entry.source !== "community" ||
+        !entry.rootPath ||
+        results.get(pluginId)?.entry === entry
+      )
         return;
     }
   }
@@ -255,11 +276,29 @@ export function createTrustedSourceService({
         return;
     }
   }
+  function inspect(pluginId: string):
+    | {
+        readonly contentDigest?: string;
+        readonly capabilities?: PluginCapabilities;
+        readonly assessment: PluginExecutionAssessment;
+        readonly integrity: PackageIntegrityResult["status"];
+      }
+    | undefined {
+    const result = current(pluginId);
+    if (!result) return undefined;
+    return {
+      contentDigest: result.contentDigest,
+      capabilities: result.capabilities,
+      assessment: result.assessment,
+      integrity: result.status,
+    };
+  }
   return {
     policy,
     verifyAll,
     ensureFresh,
     implicitGrant,
+    inspect,
     executionMode,
     executionDiagnostics: (pluginId: string) =>
       current(pluginId)?.assessment.diagnostics ??

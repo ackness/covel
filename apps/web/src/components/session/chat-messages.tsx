@@ -31,6 +31,7 @@ import type {
   PluginSummary,
   SessionRecord,
   SessionPlugin,
+  UISlotEntry,
 } from "@/services/api.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -67,6 +68,8 @@ export interface ChatMessagesProps {
   ) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  messageActions?: readonly UISlotEntry[];
+  messageBelow?: readonly UISlotEntry[];
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -111,6 +114,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
   onRetryRuntime,
   onBeginAdventure,
   messagesEndRef,
+  messageActions,
+  messageBelow,
 }: ChatMessagesProps & {
   outputDrafts: SessionState["outputDrafts"];
   olderMessagesCursor: SessionState["olderMessagesCursor"];
@@ -218,6 +223,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
           generatingImage={generatingImage}
           onGenerateImage={onGenerateImage}
           t={t}
+          messageActions={messageActions}
+          messageBelow={messageBelow}
         />
       );
     },
@@ -236,6 +243,8 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
       generatingImage,
       onGenerateImage,
       t,
+      messageActions,
+      messageBelow,
     ],
   );
 

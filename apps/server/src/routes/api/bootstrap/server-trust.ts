@@ -9,6 +9,7 @@
  */
 
 import type { Hono } from "hono";
+import type { RpcApprovalGate } from "@covel/approval";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { readRuntimeEnv } from "@covel/shared";
@@ -17,15 +18,21 @@ import { installTraceRetentionSource } from "../../../lib/trace-retention-source
 import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { deriveHostProfile } from "../../../host-profile.js";
 import {
+  createPermissionService,
+  type PermissionService,
+} from "../../../trust/permission-service.js";
+import {
   createTrustedSourceService,
   type TrustedSourceService,
 } from "../../../trust/trusted-source-service.js";
+import { createPermissionsRoutes } from "../permissions.js";
 import { createServerSettingsRoutes } from "../server-settings.js";
 import type { ApiBootstrapConfig } from "./config.js";
 
-/** Late-bound trusted-source service, read at call time by earlier stages. */
+/** Late-bound trust & permission services, read at call time by earlier stages. */
 export interface TrustedSourcesRef {
   current: TrustedSourceService | undefined;
+  permissions?: PermissionService;
 }
 
 export async function loadServerTrust(args: {
@@ -35,16 +42,21 @@ export async function loadServerTrust(args: {
   readonly registry: PluginRegistry;
   readonly app: Hono;
   readonly trust: TrustedSourcesRef;
-}): Promise<TrustedSourceService> {
-  const { config, runtimeEnv, store, registry, app, trust } = args;
+  readonly rpcApprovalGate: RpcApprovalGate;
+}): Promise<{
+  readonly trustedSources: TrustedSourceService;
+  readonly permissionService: PermissionService;
+}> {
+  const { config, runtimeEnv, store, registry, app, trust, rpcApprovalGate } =
+    args;
   // The settings the server acts on. Loaded before the first sweep or commit
   // reads one, so a stored choice is in force from the start. Whether a
   // player's stored values count is the host profile's decision.
+  const hostProfile =
+    config.hostProfile ??
+    deriveHostProfile(runtimeEnv, { storeBackend: config.storeBackend });
   const serverSettings = createServerSettings(store, {
-    playerWritable: (
-      config.hostProfile ??
-      deriveHostProfile(runtimeEnv, { storeBackend: config.storeBackend })
-    ).retention.playerServerSettings,
+    playerWritable: hostProfile.retention.playerServerSettings,
   });
   await serverSettings.load();
   installTraceRetentionSource(serverSettings);
@@ -53,10 +65,21 @@ export async function loadServerTrust(args: {
     registry,
     pluginsRoot: resolveUserResourceDirs().plugins,
   });
+  const permissionService = createPermissionService({
+    hostProfile,
+    serverSettings,
+    store,
+    registry,
+    trustedSources,
+    rpcApprovalGate,
+  });
+  await permissionService.load();
   trust.current = trustedSources;
+  trust.permissions = permissionService;
   app.route(
     "/api/config/server-settings",
     createServerSettingsRoutes(serverSettings),
   );
-  return trustedSources;
+  app.route("/api/permissions", createPermissionsRoutes(permissionService));
+  return { trustedSources, permissionService };
 }

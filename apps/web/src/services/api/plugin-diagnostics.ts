@@ -109,6 +109,26 @@ const snapshotSchema = z.object({
     }),
   ),
   history: z.object({ scope: z.literal("process"), limit: z.number() }),
+  promptDiagnostics: z
+    .array(
+      z.union([
+        z.object({
+          kind: z.literal("truncated"),
+          pluginId: z.string(),
+          segmentId: z.string(),
+          budget: z.number(),
+          originalTokens: z.number(),
+          finalTokens: z.number(),
+        }),
+        z.object({
+          kind: z.literal("protected-suppress-ignored"),
+          pluginId: z.string(),
+          segmentId: z.string(),
+          targetId: z.string(),
+        }),
+      ]),
+    )
+    .optional(),
 }) satisfies z.ZodType<PluginDiagnosticsSnapshot>;
 
 export function getPluginDiagnostics(

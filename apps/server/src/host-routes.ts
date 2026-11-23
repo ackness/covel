@@ -15,7 +15,13 @@ import {
 } from "./model-relay/registry.js";
 
 export interface HostRouteDeps {
-  readonly api: Pick<ApiBootstrapResult, "app" | "registry">;
+  readonly api: Pick<ApiBootstrapResult, "app" | "registry"> &
+    Partial<
+      Pick<
+        ApiBootstrapResult,
+        "permissionService" | "trustedSources" | "providerSources"
+      >
+    >;
   readonly ai: AiStack;
   readonly store: DataStore;
   /** Mutable map shared with the gateway adapter. */
@@ -41,7 +47,11 @@ export function mountApiRoutes(app: Hono, deps: HostRouteDeps): void {
   app.route("/", createModelDbRoutes(deps.ai, deps.apiKeys));
   app.route(
     "/",
-    createMiscApiRoutes(deps.ai, deps.api.registry, deps.store, deps.apiKeys),
+    createMiscApiRoutes(deps.ai, deps.api.registry, deps.store, deps.apiKeys, {
+      permissionService: deps.api.permissionService,
+      trustedSources: deps.api.trustedSources,
+      providerSources: deps.api.providerSources,
+    }),
   );
   app.route(
     "/",

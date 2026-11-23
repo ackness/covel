@@ -10,6 +10,10 @@ import {
   getBuiltinProviderConnection,
   providerApiKeysFromEnv,
 } from "@covel/shared";
+import {
+  parseQualifiedProviderSourceId,
+  qualifiedProviderSourceId,
+} from "@covel/shared/platform";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
@@ -22,6 +26,12 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
+import type { PermissionService } from "../trust/permission-service.js";
+import type { TrustedSourceService } from "../trust/trusted-source-service.js";
+import {
+  ProviderSourceHostError,
+  type ProviderSourceHost,
+} from "./api/bootstrap/provider-sources.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { envOverriddenProviders } from "../lib/env-key-overrides.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
@@ -50,6 +60,11 @@ export function createMiscApiRoutes(
   registry: PluginRegistry,
   store: DataStore,
   apiKeys: Readonly<Record<string, string>> = providerApiKeysFromEnv(),
+  options?: {
+    readonly permissionService?: PermissionService;
+    readonly trustedSources?: TrustedSourceService;
+    readonly providerSources?: ProviderSourceHost;
+  },
 ): Hono {
   const app = new Hono();
   const visibleBaseUrl = (
@@ -64,6 +79,54 @@ export function createMiscApiRoutes(
       ? baseUrl
       : undefined;
   };
+  const inspectSourceForRequest = (
+    c: Parameters<typeof hostProfileOf>[0],
+    source: string | undefined,
+    account: string | undefined,
+  ) => {
+    if (!source) return undefined;
+    if (hostProfileOf(c).capabilities["plugin.providerSource"] === "disabled") {
+      return {
+        sourceId: source,
+        ...(account ? { accountId: account } : {}),
+        ready: false,
+        reason: "capability_denied",
+      };
+    }
+    return (
+      ai.getProviderSourceResolver?.()?.inspectSync(source, account) ?? {
+        sourceId: source,
+        ...(account ? { accountId: account } : {}),
+        ready: false,
+        reason: "uninitialized",
+      }
+    );
+  };
+  const projectCredentialSource = (
+    inspected: ReturnType<typeof inspectSourceForRequest>,
+  ) =>
+    inspected
+      ? {
+          sourceId: inspected.sourceId,
+          ...(inspected.accountId ? { accountId: inspected.accountId } : {}),
+          ready: inspected.ready,
+          ...(inspected.reason ? { reason: inspected.reason } : {}),
+        }
+      : undefined;
+
+  const diagnosticSourceFields = (
+    canReadDiagnostics: boolean,
+    source: string | undefined,
+    account: string | undefined,
+    credentialSource: ReturnType<typeof projectCredentialSource>,
+  ) =>
+    canReadDiagnostics
+      ? {
+          ...(source ? { source } : {}),
+          ...(account ? { account } : {}),
+          ...(credentialSource ? { credentialSource } : {}),
+        }
+      : {};
 
   // GET /api/presets — list configured model presets
   //
@@ -85,25 +148,34 @@ export function createMiscApiRoutes(
     }
 
     const presets = ai.presetRegistry.listPresets().map((p) => {
+      const inspected = inspectSourceForRequest(c, p.source, p.account);
+      const credentialSource = projectCredentialSource(inspected);
       // Fall back to the provider's registered default baseUrl/protocol
-      // when the preset itself doesn't override them. `resolve` never
-      // throws for a known provider; unknown providers return null here.
+      // when the preset itself doesn't override them.
       let providerBaseUrl: string | undefined;
       let providerProtocol: string | undefined;
       try {
-        const resolution = ai.providerRegistry.resolve({
-          provider: p.provider,
-        });
-        providerBaseUrl = resolution.config.baseUrl;
-        providerProtocol = resolution.protocol;
+        if (!p.source) {
+          const resolution = ai.providerRegistry.resolve({
+            provider: p.provider,
+          });
+          providerBaseUrl = resolution.config.baseUrl;
+          providerProtocol = resolution.protocol;
+        }
       } catch {
-        // Unknown provider — leave both undefined; the UI will show "-"
+        // Unknown provider.
       }
 
       return {
         id: p.id,
         name: p.name,
         provider: p.provider,
+        ...diagnosticSourceFields(
+          canReadDiagnostics,
+          p.source,
+          p.account,
+          credentialSource,
+        ),
         model: p.model,
         enabled: p.enabled,
         isDefault: p.isDefault ?? false,
@@ -111,9 +183,9 @@ export function createMiscApiRoutes(
         baseUrl: visibleBaseUrl(
           canReadDiagnostics,
           p.provider,
-          p.baseUrl ?? providerBaseUrl,
+          inspected?.baseUrl ?? p.baseUrl ?? providerBaseUrl,
         ),
-        protocol: p.protocol ?? providerProtocol,
+        protocol: inspected?.protocol ?? p.protocol ?? providerProtocol,
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
         ...(p.capability ? { capability: p.capability } : {}),
         parameterOverrides: modelParameters(p.providerRequestMetadata),
@@ -158,6 +230,8 @@ export function createMiscApiRoutes(
           session: initialSession,
           registry,
           store,
+          permissionService: options?.permissionService,
+          trustedSources: options?.trustedSources,
         }),
       );
     }
@@ -166,6 +240,8 @@ export function createMiscApiRoutes(
         sessionId,
         registry,
         store,
+        permissionService: options?.permissionService,
+        trustedSources: options?.trustedSources,
       }),
     );
   });
@@ -181,7 +257,15 @@ export function createMiscApiRoutes(
         .listPresets()
         .find((p) => p.id === slot.presetId);
       if (!preset) continue;
-      const resolved = ai.providerRegistry.resolve(preset);
+      const inspected = inspectSourceForRequest(
+        c,
+        preset.source,
+        preset.account,
+      );
+      const credentialSource = projectCredentialSource(inspected);
+      const resolved = preset.source
+        ? undefined
+        : ai.providerRegistry.resolve(preset);
       const fallbackPresetId = preset.fallbackPresetIds?.[0];
       const fallbackSlotId =
         typeof fallbackPresetId === "string"
@@ -193,17 +277,28 @@ export function createMiscApiRoutes(
         baseUrl: visibleBaseUrl(
           canReadDiagnostics,
           preset.provider,
-          resolved.config.baseUrl,
+          inspected?.baseUrl ?? resolved?.config.baseUrl ?? preset.baseUrl,
         ),
         provider: preset.provider,
-        model: preset.model,
-        protocol: resolved.protocol,
-        builtinDefault: ai.configSource?.kind === "builtin",
-        serverKeyConfigured: hasServerRuntimeJobCredentials(
-          ai.gateway,
-          slotId,
-          apiKeys,
+        ...diagnosticSourceFields(
+          canReadDiagnostics,
+          preset.source,
+          preset.account,
+          credentialSource,
         ),
+        model: preset.model,
+        protocol:
+          inspected?.protocol ??
+          resolved?.protocol ??
+          preset.protocol ??
+          "openai-responses-v1",
+        builtinDefault: ai.configSource?.kind === "builtin",
+        serverKeyConfigured: preset.source
+          ? Boolean(
+              hostProfileOf(c).capabilities["plugin.providerSource"] !==
+                "disabled" && inspected?.ready,
+            )
+          : hasServerRuntimeJobCredentials(ai.gateway, slotId, apiKeys),
         tag: slot.tag,
         ...(fallbackSlotId ? { fallback: fallbackSlotId } : {}),
         ...(preset.capability ? { capability: preset.capability } : {}),
@@ -271,25 +366,101 @@ export function createMiscApiRoutes(
     if (json instanceof Response) return json;
     const parsedBody = z
       .strictObject({
-        provider: z.string().trim().min(1).max(100),
+        provider: z.string().trim().min(1).max(100).optional(),
+        source: z.string().trim().min(1).max(128).optional(),
+        account: z.string().trim().min(1).max(128).optional(),
         baseUrl: z.string().trim().url().max(500).optional(),
         protocol: providerProtocolSchema.optional(),
+      })
+      .refine((data) => Boolean(data.provider || data.source), {
+        message: "provider or source is required",
       })
       .safeParse(json.body);
     if (!parsedBody.success) {
       return c.json(errorBody("Invalid model list request body"), 400);
     }
-    const { provider, baseUrl, protocol } = parsedBody.data;
+    const { provider, source, account, baseUrl, protocol } = parsedBody.data;
+    if (source) {
+      if (!parseQualifiedProviderSourceId(source)) {
+        return c.json(
+          {
+            ok: false,
+            models: [],
+            ...errorBody(`Invalid provider source "${source}"`, {
+              code: "invalid_provider_source",
+            }),
+          },
+          400,
+        );
+      }
+      if (
+        hostProfileOf(c).capabilities["plugin.providerSource"] === "disabled"
+      ) {
+        return c.json(
+          {
+            ok: false,
+            models: [],
+            ...errorBody("Provider sources are disabled in this host profile", {
+              code: "capability_denied",
+            }),
+          },
+          403,
+        );
+      }
+      if (!options?.providerSources) {
+        return c.json(
+          {
+            ok: false,
+            models: [],
+            ...errorBody("Provider source host is unavailable", {
+              code: "provider_source_unavailable",
+            }),
+          },
+          503,
+        );
+      }
+      try {
+        const models = await options.providerSources.listModels({
+          sourceId: source,
+          ...(account ? { accountId: account } : {}),
+          signal: c.req.raw.signal,
+          hostProfile: hostProfileOf(c),
+        });
+        return c.json({
+          ok: true,
+          models: models.slice(0, MODEL_LIST_LIMIT),
+        });
+      } catch (error) {
+        if (error instanceof ProviderSourceHostError) {
+          return c.json(
+            {
+              ok: false,
+              models: [],
+              ...errorBody(error.message, { code: error.code }),
+            },
+            error.status,
+          );
+        }
+        const failure = classifyProviderFailure(error, source);
+        return c.json({
+          ok: false,
+          models: [],
+          error: failure.message,
+          errorKind: failure.kind,
+        });
+      }
+    }
+    const targetProvider = provider!;
     try {
       const resolution = ai.providerRegistry.withApiKeys(
         ai.providerRegistry.resolve({
-          provider,
+          provider: targetProvider,
           ...(baseUrl ? { baseUrl } : {}),
           ...(protocol ? { protocol } : {}),
           requestScoped: true,
         }),
         parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {},
-        provider,
+        targetProvider,
         apiKeys,
       );
       // The browser relays a model list from the player's own machine.
@@ -297,7 +468,7 @@ export function createMiscApiRoutes(
       const models = await listProtocolModels(
         resolution.protocol,
         relay ? { ...resolution.config, relay } : resolution.config,
-        provider,
+        targetProvider,
         AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
       );
       return c.json({
@@ -308,10 +479,10 @@ export function createMiscApiRoutes(
       });
     } catch (error) {
       console.warn(
-        `[misc-api] POST /api/ai/models failed for provider "${provider}":`,
+        `[misc-api] POST /api/ai/models failed for provider "${targetProvider}":`,
         error,
       );
-      const failure = classifyProviderFailure(error, provider);
+      const failure = classifyProviderFailure(error, targetProvider);
       return c.json({
         ok: false,
         models: [],
@@ -431,24 +602,34 @@ export function createMiscApiRoutes(
     // Resolve the effective baseUrl/protocol once so error + success paths
     // both report the exact target. Unknown providers can still ping via
     // the preset's own baseUrl, so treat resolution failure as non-fatal.
-    let effectiveBaseUrl = preset.baseUrl;
-    let effectiveProtocol: string | undefined = preset.protocol;
+    const inspectedSource = inspectSourceForRequest(
+      c,
+      preset.source,
+      preset.account,
+    );
+    let effectiveBaseUrl = inspectedSource?.baseUrl ?? preset.baseUrl;
+    let effectiveProtocol: string | undefined =
+      inspectedSource?.protocol ?? preset.protocol;
     try {
-      const resolution = ai.providerRegistry.resolve({
-        provider: preset.provider,
-        baseUrl: preset.baseUrl,
-        protocol: preset.protocol,
-      });
-      effectiveBaseUrl = resolution.config.baseUrl ?? preset.baseUrl;
-      effectiveProtocol = resolution.protocol;
+      if (!preset.source) {
+        const resolution = ai.providerRegistry.resolve({
+          provider: preset.provider,
+          baseUrl: preset.baseUrl,
+          protocol: preset.protocol,
+        });
+        effectiveBaseUrl = resolution.config.baseUrl ?? effectiveBaseUrl;
+        effectiveProtocol = resolution.protocol ?? effectiveProtocol;
+      }
     } catch {
-      // Provider not registered — fall back to preset fields as-is.
+      // Provider not registered — fall back to preset/source fields as-is.
     }
 
     const testedTarget = {
       // Overlay presets carry internal scoped ids — echo the public form.
       presetId: publicPresetId(preset.id),
       provider: preset.provider,
+      ...(preset.source ? { source: preset.source } : {}),
+      ...(preset.account ? { account: preset.account } : {}),
       model: preset.model,
       baseUrl: effectiveBaseUrl,
       protocol: effectiveProtocol,
@@ -598,6 +779,70 @@ export function createMiscApiRoutes(
       testedTarget,
     });
   });
+
+  app.get("/api/provider-sources", accessGuard("host.config"), async (c) => {
+    if (!options?.providerSources) {
+      return c.json({ sources: [] });
+    }
+    const sources = await options.providerSources.listSummaries(
+      hostProfileOf(c),
+    );
+    return c.json({ sources });
+  });
+
+  app.get(
+    "/api/provider-sources/:pluginId/:sourceId/usage",
+    accessGuard("host.config"),
+    async (c) => {
+      const pluginId = c.req.param("pluginId");
+      const sourceId = c.req.param("sourceId");
+      const qualified = qualifiedProviderSourceId(pluginId, sourceId);
+      if (!parseQualifiedProviderSourceId(qualified)) {
+        return c.json(
+          errorBody(`Invalid provider source "${qualified}"`, {
+            code: "invalid_provider_source",
+          }),
+          400,
+        );
+      }
+      if (
+        hostProfileOf(c).capabilities["plugin.providerSource"] === "disabled"
+      ) {
+        return c.json(
+          errorBody("Provider sources are disabled in this host profile", {
+            code: "capability_denied",
+          }),
+          403,
+        );
+      }
+      if (!options?.providerSources) {
+        return c.json(
+          errorBody("Provider source host is unavailable", {
+            code: "provider_source_unavailable",
+          }),
+          503,
+        );
+      }
+      const account = c.req.query("account")?.trim() || undefined;
+      try {
+        const usage = await options.providerSources.getUsage({
+          sourceId: qualified,
+          ...(account ? { accountId: account } : {}),
+          signal: c.req.raw.signal,
+          hostProfile: hostProfileOf(c),
+        });
+        return c.json({ usage });
+      } catch (error) {
+        if (error instanceof ProviderSourceHostError) {
+          return c.json(
+            errorBody(error.message, { code: error.code }),
+            error.status,
+          );
+        }
+        throw error;
+      }
+    },
+  );
 
   return app;
 }

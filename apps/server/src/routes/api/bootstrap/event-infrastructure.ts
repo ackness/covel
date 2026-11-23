@@ -3,6 +3,7 @@
  * record of what a failed startup must release.
  */
 
+import { rm } from "node:fs/promises";
 import { readRuntimeEnv } from "@covel/shared";
 import {
   createEventBus,
@@ -21,7 +22,9 @@ export interface BootstrapOwned {
   eventTransport?: EventBusTransport;
   eventBus?: EventBus;
   pluginEntries?: BootstrapPluginEntries;
+  instancePlugins?: import("./instance-plugins.js").InstancePluginRegistry;
   closeTools?: () => Promise<void>;
+  ephemeralConfigDir?: string;
 }
 
 /**
@@ -76,5 +79,14 @@ export async function releaseAfterStartupFailure(
     console.warn(
       "[bootstrap] failed to close event infrastructure after startup failure",
     );
+  }
+  if (owned.ephemeralConfigDir) {
+    try {
+      await rm(owned.ephemeralConfigDir, { recursive: true, force: true });
+    } catch {
+      console.warn(
+        "[bootstrap] failed to remove ephemeral instance config directory after startup failure",
+      );
+    }
   }
 }

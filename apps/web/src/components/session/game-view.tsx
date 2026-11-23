@@ -15,6 +15,10 @@ import {
 } from "./plugin-view-consent.js";
 import { Button } from "@/components/ui/button.js";
 import { emitToast } from "@/lib/toast-channel.js";
+import {
+  clearActiveSessionPaletteCommands,
+  setActiveSessionPaletteCommands,
+} from "@/lib/platform-ui-events.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { exportChat } from "@/lib/chat-export.js";
 import { useSetting } from "@/settings/use-settings.js";
@@ -48,6 +52,8 @@ import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { ChatMessages } from "./chat-messages.js";
 import { StageView } from "./stage/StageView.js";
+import { FloatingWindowHost } from "@/components/platform/floating-window-host.js";
+import { useSessionPlatformSpecs } from "@/components/platform/use-session-platform-specs.js";
 import { hasSubmittedForm } from "./stage/stage-selectors.js";
 import { useStageMediaPreload } from "./stage/use-stage-media-preload.js";
 import { useSession } from "@/stores/session-store.js";
@@ -348,6 +354,16 @@ export function GameView({
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileRightOpen, setMobileRightOpen] = useState(false);
+  const sessionPlatformSpecs = useSessionPlatformSpecs(
+    session.id,
+    sessionPlugins,
+  );
+  useEffect(() => {
+    setActiveSessionPaletteCommands(session.id, sessionCommands);
+    return () => {
+      clearActiveSessionPaletteCommands(session.id);
+    };
+  }, [session.id, sessionCommands]);
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
@@ -503,6 +519,8 @@ export function GameView({
       onRetryRuntime={onRetryRuntime}
       onBeginAdventure={onBeginAdventure}
       messagesEndRef={messagesEndRef}
+      messageActions={sessionPlatformSpecs.messageAction}
+      messageBelow={sessionPlatformSpecs.messageBelow}
     />
   );
 
@@ -540,6 +558,7 @@ export function GameView({
       onCommandSelect={applyCommandCompletion}
       composerModes={composerModes}
       canSubmit={canSubmit}
+      composerActions={sessionPlatformSpecs.composerAction}
     />
   );
   const renderComposer = () => (
@@ -559,6 +578,10 @@ export function GameView({
 
   const content = (
     <div className="flex h-full w-full overflow-hidden border-t border-border">
+      <FloatingWindowHost
+        scope="session"
+        entries={sessionPlatformSpecs.window}
+      />
       <SettingsDialog
         open={settings.open}
         onOpenChange={settings.onOpenChange}

@@ -159,4 +159,80 @@ describe("the service registration contract", () => {
       ),
     ).toHaveBeenCalledOnce();
   });
+
+  it("enforces bidirectional declarations for registerAppAction and registerConfigFlow", () => {
+    const registerAppAction = vi.fn();
+    const registerConfigFlow = vi.fn();
+    const contract = enforcePluginRegistrationContract(
+      { registerAppAction, registerConfigFlow } as unknown as PluginAPI,
+      { appActions: ["sign-in"], flows: ["oauth-login"] },
+    );
+
+    expect(() =>
+      contract.api.registerAppAction("undeclared", async () => ({})),
+    ).toThrow(/Undeclared or duplicate registration: appAction:undeclared/);
+    expect(() =>
+      contract.api.registerConfigFlow("undeclared", {
+        start: () => ({ kind: "done", title: "ok" }),
+        step: () => ({ kind: "done", title: "ok" }),
+      }),
+    ).toThrow(/Undeclared or duplicate registration: flow:undeclared/);
+
+    registerAppAction.mockClear();
+    registerConfigFlow.mockClear();
+
+    expect(() => contract.validate()).toThrow(
+      /Missing registration: appAction:sign-in/,
+    );
+    contract.api.registerAppAction("sign-in", async () => ({ ok: true }));
+    expect(() => contract.validate()).toThrow(
+      /Missing registration: flow:oauth-login/,
+    );
+    contract.api.registerConfigFlow("oauth-login", {
+      start: () => ({ kind: "done", title: "ok" }),
+      step: () => ({ kind: "done", title: "ok" }),
+    });
+    contract.validate();
+    expect(registerAppAction).toHaveBeenCalledOnce();
+    expect(registerConfigFlow).toHaveBeenCalledOnce();
+  });
+
+  it("enforces bidirectional declarations for registerProviderSources", () => {
+    const registerProviderSources = vi.fn();
+    const contract = enforcePluginRegistrationContract(
+      { registerProviderSources } as unknown as PluginAPI,
+      {
+        scope: undefined as never,
+      } as never,
+    );
+    expect(() =>
+      contract.api.registerProviderSources([
+        { id: "undeclared-src", resolve: async () => ({ headers: {} }) },
+      ]),
+    ).toThrow(
+      /Undeclared or duplicate registration: providerSource:undeclared-src/,
+    );
+
+    const declaredContract = enforcePluginRegistrationContract(
+      { registerProviderSources } as unknown as PluginAPI,
+      {
+        providerSources: [
+          {
+            id: "fake-sub",
+            label: "Fake Subscription",
+            baseUrl: "https://sub.example.test/v1",
+          },
+        ],
+      },
+    );
+    registerProviderSources.mockClear();
+    expect(() => declaredContract.validate()).toThrow(
+      /Missing registration: providerSource:fake-sub/,
+    );
+    declaredContract.api.registerProviderSources([
+      { id: "fake-sub", resolve: async () => ({ headers: {} }) },
+    ]);
+    declaredContract.validate();
+    expect(registerProviderSources).toHaveBeenCalledOnce();
+  });
 });

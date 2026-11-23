@@ -7,6 +7,7 @@ import {
   getBuiltinProviderConnection,
   isProviderProtocolId,
 } from "@covel/shared";
+import { parseQualifiedProviderSourceId } from "@covel/shared/platform";
 import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
 import { strictToolCapabilitySchema } from "../capability/strict-tools.js";
 
@@ -65,8 +66,12 @@ const pricingSchema = z
  * ```
  */
 const slotFieldsSchema = z.object({
-  /** Provider identifier — maps to {PROVIDER}_API_KEY in .env.llm */
-  provider: z.string().min(1),
+  /** Provider identifier — maps to {PROVIDER}_API_KEY in .env.llm (optional when `source` is set). */
+  provider: z.string().min(1).optional(),
+  /** Qualified plugin provider source ID (`<pluginId>/<sourceId>`). */
+  source: z.string().min(1).optional(),
+  /** Optional account selector for multi-account provider sources. */
+  account: z.string().min(1).optional(),
   /** Model ID passed to the provider API */
   model: z.string().min(1),
   /** API endpoint URL. Optional for a built-in provider. */
@@ -148,8 +153,40 @@ const slotFieldsSchema = z.object({
     .optional(),
 });
 
-/** Every parsed slot states its endpoint and protocol. */
+/** Every parsed slot states its endpoint and protocol (or delegates them to `source`). */
 const slotDefinitionSchema = slotFieldsSchema.transform((def, ctx) => {
+  if (def.account && !def.source) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["account"],
+      message: "account requires `source` to be configured",
+    });
+    return z.NEVER;
+  }
+  if (def.source) {
+    if (!parseQualifiedProviderSourceId(def.source)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["source"],
+        message: `Invalid provider source "${def.source}": expected <pluginId>/<sourceId>`,
+      });
+      return z.NEVER;
+    }
+    return {
+      ...def,
+      provider: def.provider ?? def.source,
+      baseUrl: def.baseUrl,
+      protocol: def.protocol ?? ("openai-responses-v1" as const),
+    };
+  }
+  if (!def.provider) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["provider"],
+      message: "provider is required unless `source` is configured",
+    });
+    return z.NEVER;
+  }
   const known = getBuiltinProviderConnection(def.provider);
   const baseUrl = def.baseUrl ?? known?.baseUrl;
   if (!baseUrl) {
@@ -162,6 +199,7 @@ const slotDefinitionSchema = slotFieldsSchema.transform((def, ctx) => {
   }
   return {
     ...def,
+    provider: def.provider,
     baseUrl,
     protocol: def.protocol ?? known?.protocol ?? DEFAULT_PROVIDER_PROTOCOL,
   };

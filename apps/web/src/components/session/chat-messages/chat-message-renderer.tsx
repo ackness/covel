@@ -1,9 +1,11 @@
 import { projectStoryOperationFailures } from "@covel/shared";
 import { StoryOperationFailureNotice } from "./story-operation-failure-notice.js";
 import { memo } from "react";
+import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
+import type { UISlotEntry } from "@/services/api.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { PlayerMessageLabel } from "./player-message-label.js";
 import {
@@ -11,6 +13,10 @@ import {
   SystemMessageLine,
 } from "./message-primitives.js";
 import { StoryMessageBody } from "./story-segments-body.js";
+import {
+  MessageActionButtons,
+  MessageBelowMounts,
+} from "./message-micro-mounts.js";
 
 export interface ChatMessageRendererProps {
   readonly msg: StreamMessage;
@@ -21,6 +27,8 @@ export interface ChatMessageRendererProps {
   readonly generatingImage: boolean;
   readonly onGenerateImage: () => void;
   readonly t: TFunction;
+  readonly messageActions?: readonly UISlotEntry[];
+  readonly messageBelow?: readonly UISlotEntry[];
 }
 
 /**
@@ -41,7 +49,11 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
   generatingImage,
   onGenerateImage,
   t,
+  messageActions,
+  messageBelow,
 }: ChatMessageRendererProps) {
+  const { i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   // Raw mode: show everything as JSON, no filtering
   if (viewMode === "raw") {
     return (
@@ -158,24 +170,40 @@ export const ChatMessageRenderer = memo(function ChatMessageRenderer({
 
       <StoryOperationFailureNotice message={msg} />
 
-      {showImageButton && (
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 ui-eyebrow"
-            disabled={executing || generatingImage}
-            onClick={onGenerateImage}
-            title={t("coreImage.generateButton")}
-          >
-            <ImageIcon
-              className={`h-3 w-3 ${generatingImage ? "animate-pulse" : ""}`}
+      {(showImageButton || (messageActions && messageActions.length > 0)) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {showImageButton && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground gap-1 ui-eyebrow"
+              disabled={executing || generatingImage}
+              onClick={onGenerateImage}
+              title={t("coreImage.generateButton")}
+            >
+              <ImageIcon
+                className={`h-3 w-3 ${generatingImage ? "animate-pulse" : ""}`}
+              />
+              {generatingImage
+                ? t("session.stateStreaming")
+                : t("coreImage.generateButton")}
+            </Button>
+          )}
+          {messageActions && messageActions.length > 0 && (
+            <MessageActionButtons
+              msg={msg}
+              sessionId={sessionId}
+              entries={messageActions}
+              executing={executing}
+              locale={locale}
+              t={t}
             />
-            {generatingImage
-              ? t("session.stateStreaming")
-              : t("coreImage.generateButton")}
-          </Button>
+          )}
         </div>
+      )}
+
+      {messageBelow && messageBelow.length > 0 && (
+        <MessageBelowMounts msg={msg} entries={messageBelow} />
       )}
     </div>
   );

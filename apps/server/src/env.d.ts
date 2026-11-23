@@ -119,6 +119,7 @@ declare module "hono" {
     rpcRegistry: PluginRpcRegistry;
     rpcApprovalGate: RpcApprovalGate;
     trustedSources?: import("./trust/trusted-source-service.js").TrustedSourceService;
+    permissionService?: import("./trust/permission-service.js").PermissionService;
     /**
      * Per-session serializer. Injected by `bootstrapApi()`:
      *   - `STORE_BACKEND=pg` → `createPgAdvisorySessionLock(sql)` — mutual
@@ -209,6 +210,8 @@ declare module "hono" {
     pluginServices?: import("@covel/runtime").PluginServiceRegistry;
     uiSlots?: import("./ui-slots/host.js").UiSlotHost;
     pluginExtensions?: import("@covel/runtime").PluginExtensionHost;
+    appEvents?: import("./routes/api/bootstrap/app-events.js").AppEventDispatcher;
+    promptDiagnostics?: import("./routes/api/plugin-diagnostics.js").RecentPromptDiagnostics;
     /**
      * Session event directory (unified event emission layer, plan task 4/5).
      * Threaded into `TurnExecutorDeps.eventDirectory` at each `executeTurn`

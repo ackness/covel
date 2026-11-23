@@ -6,6 +6,7 @@ import {
 } from "@covel/approval";
 import type { SessionRecord } from "@covel/store";
 import { errorBody } from "../../api-error.js";
+import { capabilityDenialResponse } from "../../trust/permission-service.js";
 import { sessionApprovalScope } from "./session/session-guard.js";
 
 export function hasServerCodeGrant(
@@ -30,6 +31,9 @@ export function approvalVerdictResponse(
     readonly code: string;
   },
 ): Response | undefined {
+  if (verdict.status === "denied") {
+    return capabilityDenialResponse(c, verdict.reason, verdict.capability);
+  }
   if (verdict.status === "pending") {
     return c.json(
       {

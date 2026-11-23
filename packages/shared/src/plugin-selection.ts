@@ -123,6 +123,8 @@ export function resolveSessionPlugins(args: {
   readonly requiredDataContracts?: readonly string[];
   /** Limit core defaults and inferred world providers during a live selection update. */
   readonly automaticPluginIds?: readonly string[];
+  /** Global optional helper defaults requested across new sessions. */
+  readonly globalDefaults?: readonly string[];
   /**
    * Resolve a set the player already confirmed: add nothing (no `core`
    * package, world provider or dependency) and drop the members the
@@ -229,6 +231,54 @@ export function resolveSessionPlugins(args: {
     if (provided(contract)) continue;
     const { choice } = chooseProvider(contract, true);
     if (choice) add(choice.id, true);
+  }
+  const conflictsWithActive = (candidate: SessionPluginCandidate): boolean => {
+    const candidateContracts = contracts(candidate);
+    const candidateWritten = writtenConflicts(candidate);
+    for (const activeId of active) {
+      const held = registry.get(activeId)!;
+      const heldContracts = contracts(held);
+      const heldWritten = writtenConflicts(held);
+      if (
+        candidateWritten.some((c) => heldContracts.includes(c)) ||
+        heldWritten.some((c) => candidateContracts.includes(c))
+      ) {
+        return true;
+      }
+      if (
+        candidateContracts.some(
+          (contract) =>
+            isSingleProviderContract(contract) &&
+            heldContracts.includes(contract),
+        )
+      ) {
+        return true;
+      }
+      if (
+        candidate.extensions?.some(
+          (ext) =>
+            singlePoints.has(ext.point) &&
+            held.extensions?.some((other) => other.point === ext.point),
+        )
+      ) {
+        return true;
+      }
+      if (
+        candidate.eventTopics?.some((topic) =>
+          held.eventTopics?.includes(topic),
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const id of fixed ? [] : (args.globalDefaults ?? [])) {
+    if (active.has(id)) continue;
+    const candidate = registry.get(id);
+    if (!candidate || !eligible(candidate) || !allowedAutomatically(candidate))
+      continue;
+    if (!conflictsWithActive(candidate)) add(id, true);
   }
 
   // Data may enrich a selected setup flow, but cannot introduce one into a

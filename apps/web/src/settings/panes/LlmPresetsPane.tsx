@@ -3,14 +3,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, FileInput, FileOutput, Plus, Server } from "lucide-react";
 import {
+  fetchProviderSources,
   getSlotConfig,
   getProviderProfiles,
   setProviderProfiles,
   upsertProviderModel,
   type ProviderModelProfile,
   type ProviderModelEntry,
+  type ProviderSourceSummary,
   type ReasoningEffort,
 } from "@/services/api.js";
+import { usePlatformUiState } from "@/lib/platform-ui-events.js";
 import {
   DEFAULT_PROVIDER_PROTOCOL,
   getBuiltinProviderConnection,
@@ -60,6 +63,23 @@ export function LlmPresetsPane() {
   const [profiles, setProfilesLocal] = useState<ProviderModelProfile[]>(() =>
     normalizeProviderProfiles(getProviderProfiles()),
   );
+  const [providerSources, setProviderSources] = useState<
+    ProviderSourceSummary[]
+  >([]);
+  const { instanceDataVersion } = usePlatformUiState();
+  useEffect(() => {
+    let cancelled = false;
+    void fetchProviderSources()
+      .then((res) => {
+        if (!cancelled) setProviderSources(res.sources ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setProviderSources([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceDataVersion]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -149,7 +169,10 @@ export function LlmPresetsPane() {
   };
 
   const prepareModels = (
-    provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
+    provider: Pick<
+      ProviderCatalogEntry,
+      "id" | "baseUrl" | "protocol" | "source" | "account"
+    >,
     rawIds: string,
     reasoningDefaults: Record<string, ReasoningEffort | undefined> = {},
     modelProtocol?: string,
@@ -164,6 +187,8 @@ export function LlmPresetsPane() {
     for (const modelId of modelIds) {
       const result = upsertProviderModel(nextProfiles, {
         providerId,
+        ...(provider.source ? { source: provider.source } : {}),
+        ...(provider.account ? { account: provider.account } : {}),
         baseUrl: provider.baseUrl,
         protocol: provider.protocol,
         modelProtocol,
@@ -193,6 +218,8 @@ export function LlmPresetsPane() {
     const prepared = prepareModels(
       {
         id: providerId,
+        ...(providerDraft.source ? { source: providerDraft.source } : {}),
+        ...(providerDraft.account ? { account: providerDraft.account } : {}),
         baseUrl,
         protocol,
       },
@@ -280,6 +307,10 @@ export function LlmPresetsPane() {
     while (names.has(name)) name = `${stem} ${suffix++}`;
     const result = upsertProviderModel(profiles, {
       providerId: selectedProvider.id,
+      ...(selectedProvider.source ? { source: selectedProvider.source } : {}),
+      ...(selectedProvider.account
+        ? { account: selectedProvider.account }
+        : {}),
       baseUrl: selectedProvider.baseUrl,
       protocol: selectedProvider.protocol,
       modelId: model.modelId,
@@ -413,6 +444,7 @@ export function LlmPresetsPane() {
                         slot.builtinDefault,
                     )
               }
+              providerSources={providerSources}
               busy={saving || !writable}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
@@ -485,6 +517,7 @@ export function LlmPresetsPane() {
         busy={saving || !writable}
         error={saveError}
         draft={providerDraft}
+        providerSources={providerSources}
         onOpenChange={(open) => {
           if (pending.current === 0) setProviderDialogOpen(open);
         }}
@@ -498,6 +531,8 @@ export function LlmPresetsPane() {
           error={saveError}
           providerId={selectedProvider.id}
           provider={selectedProvider.provider}
+          source={selectedProvider.source}
+          account={selectedProvider.account}
           baseUrl={selectedProvider.baseUrl}
           protocol={selectedProvider.protocol}
           modelProtocol={modelProtocolDraft}

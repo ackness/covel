@@ -34,6 +34,8 @@ import { bootPgSchema, SCHEMA_META_TABLE } from "./pg-schema-boot.js";
 import { createPgVectorCapability } from "./pg-vector.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
 import { createPgServerSettingRecords } from "./pg-server-setting-records.js";
+import { createPgPluginGrants } from "./pg-plugin-grants.js";
+import { createPgInstanceData } from "./pg-instance-data.js";
 import * as schema from "./schema.js";
 
 export interface PgStoreOptions {
@@ -58,6 +60,8 @@ function buildPgData(
     ...createPgDataCrud(getDb),
     ...createPgWorldRecords(getDb),
     ...createPgServerSettingRecords(getDb),
+    ...createPgPluginGrants(getDb),
+    ...createPgInstanceData(getDb),
     ...createPgSessionJournalRecords(getDb),
     ...createPgSnapshotRecords(getDb),
     ...createPgLifecycleRecords(getDb),

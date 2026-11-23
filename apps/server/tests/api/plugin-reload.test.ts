@@ -26,6 +26,7 @@ function fixture(development = true) {
     isEntryPublished: () => true,
     isEntryRetryDeferred: () => false,
     ensurePluginEntry: async () => {},
+    ensureInstancePluginEntry: async () => {},
     withSnapshot: async (_id, fn) => fn(),
   };
   const app = createPluginReloadRoutes(entries, development);

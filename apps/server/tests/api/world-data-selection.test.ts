@@ -111,6 +111,7 @@ function declarationTrust(approved: ReadonlySet<string>): TrustedSourceService {
     verifyAll: async () => {},
     ensureFresh: async () => {},
     implicitGrant: () => false,
+    inspect: () => undefined,
     executionMode: (id) => (approved.has(id) ? "declarative" : "unknown"),
     executionDiagnostics: () => [],
     isDeclarative: (id) => approved.has(id),

@@ -40,6 +40,11 @@ export interface PluginServiceContext {
   readonly callerPluginId: string;
   readonly random: import("./handler.js").PluginRandom;
   readonly sessionId: string;
+  readonly scope?: "session" | "instance";
+  readonly hostId?: string;
+  readonly instanceData?: import("@covel/plugin-handlers-utils").PluginInstanceDataStore;
+  readonly secrets?: import("@covel/plugin-handlers-utils").PluginSecretStore;
+  readonly http?: import("@covel/plugin-handlers-utils").PluginHttp;
   readonly locale?: string;
   /** The provider's session translations and labels in every shipped language. */
   readonly messages?: import("@covel/plugin-handlers-utils").PluginMessages;
@@ -61,7 +66,7 @@ export interface PluginServiceContext {
  */
 export interface PluginWriteServiceContext extends Omit<
   PluginServiceContext,
-  "pluginData" | "gateway" | "utils"
+  "pluginData" | "gateway" | "utils" | "secrets" | "http" | "instanceData"
 > {
   /**
    * The provider's own data. Reads see what earlier calls of this caller

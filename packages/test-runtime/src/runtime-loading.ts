@@ -7,6 +7,12 @@ import {
   rpcActionNameSchema,
   type RuntimeManifest,
 } from "@covel/shared";
+import {
+  APP_EVENT_NAMES,
+  configFlowIdSchema,
+  providerSourceIdSchema,
+  scheduledTaskIdSchema,
+} from "@covel/shared/platform";
 import type { DataStore } from "@covel/store";
 import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
 import {
@@ -52,7 +58,17 @@ import {
 
 export interface UnsupportedDebugCapability {
   readonly pluginId: string;
-  readonly kind: "hook" | "rpc" | "form-validator" | "media-wire" | "extension";
+  readonly kind:
+    | "hook"
+    | "rpc"
+    | "app-action"
+    | "flow"
+    | "app-event"
+    | "schedule"
+    | "form-validator"
+    | "media-wire"
+    | "provider-source"
+    | "extension";
   readonly name: string;
 }
 
@@ -430,8 +446,13 @@ export async function loadEntryTools(
   let hookSeq = 0;
   const heldHooks = draftHoldingHooks(contributions);
   const registeredRpcActions = new Set<string>();
+  const registeredAppActions = new Set<string>();
+  const registeredConfigFlows = new Set<string>();
+  const registeredAppEvents = new Set<string>();
+  const registeredScheduledTasks = new Set<string>();
   const registeredFormValidators = new Set<string>();
   const registeredWires = new Set<string>();
+  const registeredProviderSources = new Set<string>();
   const scope = new PluginEntryScope();
   const registration = createExtensionRegistration(
     extensions,
@@ -606,6 +627,123 @@ export async function loadEntryTools(
         });
       });
     },
+    registerAppAction(action, handler) {
+      scope.stage(() => {
+        if (
+          typeof action !== "string" ||
+          !action.trim() ||
+          typeof handler !== "function"
+        ) {
+          throw new Error(
+            "registerAppAction: expected a non-empty action name and a handler function",
+          );
+        }
+        const parsedName = rpcActionNameSchema.safeParse(action);
+        if (!parsedName.success) {
+          throw new Error(
+            `registerAppAction: ${parsedName.error.issues
+              .map((issue) => issue.message)
+              .join("; ")}`,
+          );
+        }
+        if (registeredAppActions.has(action)) {
+          throw new Error(
+            `registerAppAction: action "${action}" is already registered in this plugin`,
+          );
+        }
+        registeredAppActions.add(action);
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "app-action",
+          name: action,
+        });
+      });
+    },
+    registerConfigFlow(flowId, definition) {
+      scope.stage(() => {
+        if (
+          typeof flowId !== "string" ||
+          !flowId.trim() ||
+          !definition ||
+          typeof definition.start !== "function" ||
+          typeof definition.step !== "function"
+        ) {
+          throw new Error(
+            "registerConfigFlow: expected a flowId and { start, step } handlers",
+          );
+        }
+        const parsedId = configFlowIdSchema.safeParse(flowId);
+        if (!parsedId.success) {
+          throw new Error(
+            `registerConfigFlow: ${parsedId.error.issues
+              .map((issue) => issue.message)
+              .join("; ")}`,
+          );
+        }
+        if (registeredConfigFlows.has(flowId)) {
+          throw new Error(
+            `registerConfigFlow: flow "${flowId}" is already registered in this plugin`,
+          );
+        }
+        registeredConfigFlows.add(flowId);
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "flow",
+          name: flowId,
+        });
+      });
+    },
+    onAppEvent(event, handler) {
+      scope.stage(() => {
+        if (
+          typeof event !== "string" ||
+          !(APP_EVENT_NAMES as readonly string[]).includes(event) ||
+          typeof handler !== "function"
+        ) {
+          throw new Error(
+            "onAppEvent: expected a valid AppEvent name and handler function",
+          );
+        }
+        registeredAppEvents.add(event);
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "app-event",
+          name: event,
+        });
+      });
+    },
+    registerScheduledTask(taskId, handler) {
+      scope.stage(() => {
+        if (
+          typeof taskId !== "string" ||
+          !taskId.trim() ||
+          typeof handler !== "function"
+        ) {
+          throw new Error(
+            "registerScheduledTask: expected a taskId and handler function",
+          );
+        }
+        const parsedId = scheduledTaskIdSchema.safeParse(taskId);
+        if (!parsedId.success) {
+          throw new Error(
+            `registerScheduledTask: ${parsedId.error.issues
+              .map((issue) => issue.message)
+              .join("; ")}`,
+          );
+        }
+        if (registeredScheduledTasks.has(taskId)) {
+          throw new Error(
+            `registerScheduledTask: task "${taskId}" is already registered in this plugin`,
+          );
+        }
+        registeredScheduledTasks.add(taskId);
+        unsupportedCapabilities.push({
+          pluginId: discovery.id,
+          kind: "schedule",
+          name: taskId,
+        });
+      });
+    },
     registerFormValidator(name, validator) {
       scope.stage(() => {
         if (
@@ -695,6 +833,45 @@ export async function loadEntryTools(
           kind: "media-wire",
           name: "media wires",
         });
+      });
+    },
+    registerProviderSources(sources) {
+      scope.stage(() => {
+        if (!Array.isArray(sources)) {
+          throw new Error("registerProviderSources: expected an array");
+        }
+        for (const source of sources) {
+          if (
+            !source ||
+            typeof source !== "object" ||
+            typeof source.id !== "string" ||
+            !source.id.trim() ||
+            typeof source.resolve !== "function"
+          ) {
+            throw new Error(
+              "registerProviderSources: expected { id: string, resolve: function }",
+            );
+          }
+          const parsedId = providerSourceIdSchema.safeParse(source.id);
+          if (!parsedId.success) {
+            throw new Error(
+              `registerProviderSources: ${parsedId.error.issues
+                .map((issue) => issue.message)
+                .join("; ")}`,
+            );
+          }
+          if (registeredProviderSources.has(source.id)) {
+            throw new Error(
+              `registerProviderSources: source "${source.id}" is already registered in this plugin`,
+            );
+          }
+          registeredProviderSources.add(source.id);
+          unsupportedCapabilities.push({
+            pluginId: discovery.id,
+            kind: "provider-source",
+            name: source.id,
+          });
+        }
       });
     },
   };

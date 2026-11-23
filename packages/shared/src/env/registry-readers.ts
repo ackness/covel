@@ -241,6 +241,7 @@ export function readRuntimeEnv(source: EnvSource = defaultSource()) {
       "COVEL_COMPACTOR_CONTEXT_WINDOW",
       source,
     ),
+    disabledCapabilities: readEnvCsv("COVEL_DISABLED_CAPABILITIES", source),
   };
 }
 

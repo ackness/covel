@@ -269,9 +269,10 @@ const BUILTIN_PROTOCOLS: Record<BuiltinProviderProtocol, ProtocolDefinition> = {
  */
 export function getProtocolDefinition(
   protocol: ProviderProtocol,
+  approvedInstanceOwner?: string,
 ): ProtocolDefinition | undefined {
   if (isBuiltinProviderProtocol(protocol)) return BUILTIN_PROTOCOLS[protocol];
-  const wire = getTextWire(protocol);
+  const wire = getTextWire(protocol, approvedInstanceOwner);
   if (!wire) return undefined;
   return {
     createAdapter: () => textWireAdapter(wire),

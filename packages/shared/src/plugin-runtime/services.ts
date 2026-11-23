@@ -1,10 +1,39 @@
 import type { LLMUsageSummary } from "../index.js";
 import type { LLMDiagnostics } from "../types/llm-diagnostics.js";
+import type { LLMProviderContinuation } from "../types/llm-adapter.js";
+import type { ProviderSourceCredentialStatus } from "../platform/index.js";
 import type {
   EvaluationParams,
   EvaluationQuestions,
   EvaluationResult,
 } from "../evaluation.js";
+
+export type PluginGatewayStreamEvent =
+  | {
+      readonly type: "tool-argument-delta";
+      readonly index?: number;
+      readonly id?: string;
+      readonly name?: string;
+      readonly argumentsDelta?: string;
+      readonly arguments?: string;
+    }
+  | { readonly type: "stream-reset" }
+  | { readonly type: "text-delta"; readonly textDelta: string }
+  | { readonly type: "reasoning-delta"; readonly reasoningDelta: string }
+  | {
+      readonly type: "tool-call";
+      readonly id: string;
+      readonly name: string;
+      readonly arguments: string;
+    }
+  | {
+      readonly type: "done";
+      readonly diagnostics?: LLMDiagnostics;
+      readonly finishReason: string;
+      readonly reasoningContent?: string;
+      readonly usage: LLMUsageSummary;
+      readonly providerContinuation?: LLMProviderContinuation;
+    };
 
 export type PluginEvaluationInput<
   Q extends EvaluationQuestions = EvaluationQuestions,
@@ -105,6 +134,29 @@ export interface PluginRuntimeGateway {
     readonly model?: string;
     readonly provider?: string;
   }>;
+
+  streamText?(input: {
+    readonly presetId?: string;
+    /** Host-selected instruction language, replaced for each runtime call. */
+    readonly instructionLocale?: "en" | "zh";
+    readonly prompt?: string;
+    readonly system?: string;
+    readonly messages?: readonly {
+      readonly role: "system" | "user" | "assistant";
+      readonly content: string;
+    }[];
+    readonly defaults?: import("../types/llm-adapter.js").LLMRequestDefaults;
+    readonly responseFormat?: import("../types/llm-adapter.js").LLMResponseFormat;
+    /** Output ceiling for this call; never raises the slot's configured budget. */
+    readonly maxOutputTokens?: number;
+    readonly providerRequestMetadata?: Readonly<Record<string, unknown>>;
+    readonly providerOptions?: Readonly<
+      Record<string, Readonly<Record<string, unknown>>>
+    >;
+    readonly signal?: AbortSignal;
+    /** Cache-routing key, set by the host for a function runtime's calls. */
+    readonly promptCacheKey?: string;
+  }): AsyncIterable<PluginGatewayStreamEvent>;
 
   /**
    * Resolve a slot/preset id into its public configuration view. Returns
@@ -226,6 +278,7 @@ export interface ResolvedSlotForPlugin {
   readonly headers?: Readonly<Record<string, string>>;
   readonly model: string;
   readonly tag: string;
+  readonly credentialSource?: ProviderSourceCredentialStatus;
   readonly metadata: Readonly<Record<string, unknown>>;
   /**
    * Effective token limits the gateway applies to this slot, present when the
@@ -277,6 +330,8 @@ export interface PluginRuntimeUtils {
     init?: RequestInit & {
       readonly maxRetries?: number;
       readonly signal?: AbortSignal;
+      readonly timeoutMs?: number;
+      readonly proxy?: "direct" | "instance-auth";
     },
   ): Promise<Response>;
 }

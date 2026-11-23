@@ -23,6 +23,7 @@ import type {
   ModelSlotConfig,
   ModelDatabase,
   ModelDbFile,
+  ProviderSourceResolver,
 } from "@covel/ai-provider";
 
 /**
@@ -186,10 +187,13 @@ export function createAiStack(): AiStack {
   const slotRegistry = createSlotRegistry();
   slotRegistry.configure({ slots: buildSlotMap(loaded.config) });
 
+  let providerSourceResolver: ProviderSourceResolver | undefined;
+
   const gateway = createGateway({
     providerRegistry,
     presetRegistry,
     slotRegistry,
+    getProviderSources: () => providerSourceResolver,
   });
 
   return {
@@ -202,6 +206,10 @@ export function createAiStack(): AiStack {
     presetRegistry,
     slotRegistry,
     gateway,
+    getProviderSourceResolver: () => providerSourceResolver,
+    setProviderSourceResolver: (resolver) => {
+      providerSourceResolver = resolver;
+    },
   };
 }
 
@@ -352,4 +360,8 @@ export interface AiStack {
   presetRegistry: ReturnType<typeof createPresetRegistry>;
   slotRegistry: SlotRegistry;
   gateway: ReturnType<typeof createGateway>;
+  getProviderSourceResolver?: () => ProviderSourceResolver | undefined;
+  setProviderSourceResolver?: (
+    resolver: ProviderSourceResolver | undefined,
+  ) => void;
 }

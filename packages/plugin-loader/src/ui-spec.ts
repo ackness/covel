@@ -123,9 +123,26 @@ export const PLUGIN_UI_SPEC_SLOTS = [
   "message",
   "view",
   "segment",
+  "settingsSection",
+  "appPage",
+  "topbarStatus",
+  "composerAction",
+  "messageAction",
+  "messageBelow",
+  "window",
 ] as const satisfies readonly PluginUiSpecSlot[];
 /** All static UI placements, including the separate restricted theme schema. */
 export const PLUGIN_UI_SLOTS = [...PLUGIN_UI_SPEC_SLOTS, "theme"] as const;
+
+export const ID_BEARING_UI_SLOTS: ReadonlySet<PluginUiSlot> = new Set([
+  "view",
+  "settingsSection",
+  "appPage",
+  "topbarStatus",
+  "composerAction",
+  "messageAction",
+  "window",
+]);
 
 /** One declared UI spec the host does not show. */
 export interface PluginUiSpecDiagnostic {
@@ -165,7 +182,7 @@ export async function loadPluginUiSpecs(
   > = {};
   const diagnostics: PluginUiSpecDiagnostic[] = [];
   const assets: PluginAssetRoot[] = [];
-  const viewIds = new Set<string>();
+  const seenIdsBySlot = new Map<PluginUiSlot, Set<string>>();
   const themes: ResolvedPluginTheme[] = [];
   for (const slot of PLUGIN_UI_SLOTS)
     for (const [specIndex, declaredPath] of (ui?.[slot] ?? []).entries()) {
@@ -224,13 +241,18 @@ export async function loadPluginUiSpecs(
           slot,
           specAssets,
         );
-        if (slot === "view" && typeof spec.id === "string") {
-          if (viewIds.has(spec.id))
+        if (ID_BEARING_UI_SLOTS.has(slot) && typeof spec.id === "string") {
+          let ids = seenIdsBySlot.get(slot);
+          if (!ids) {
+            ids = new Set<string>();
+            seenIdsBySlot.set(slot, ids);
+          }
+          if (ids.has(spec.id))
             throw new PluginUiSpecError(
-              [{ path: "id", message: `duplicate view id "${spec.id}"` }],
+              [{ path: "id", message: `duplicate ${slot} id "${spec.id}"` }],
               spec.id,
             );
-          viewIds.add(spec.id);
+          ids.add(spec.id);
         }
         (slots[slot] ??= []).push(spec);
         assets.push(...specAssets);

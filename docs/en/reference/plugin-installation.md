@@ -15,7 +15,7 @@ Player actions can also explicitly invoke event runtimes. Start-turn, cooldown a
 The host derives the required `executionMode` from actual files and declarations: `declarative`, `code` or `unknown`. Authors cannot set a mode flag. Static validation, archive previews, discovery and execution checks share the assessment. Incomplete reads, links and changing inventories yield `unknown`, which receives no exemption; the diagnostic names the package file that stopped the inspection. In a source checkout, bundled plugins are pnpm workspace members whose `node_modules` holds links, so they show `unknown`; desktop packages do not ship that directory. In-app validation and structured diagnostics retain execution classification, package-relative files, fields and reasons. `pnpm validate:plugin` prints only static validation results, omitting execution classification and inspection diagnostics. Passing validation does not establish declarative admission proof.
 
 - Agents, own datasets, settings, data receivers, static prompt segments, JSON UI, templates, views, composer modes and optional read/write service imports are allowed. Publishing an output contract does not register an executable service.
-- `entry` (including derived `server/index.js`), `function`, guards, nonempty HTTP permissions or executable hooks/tools/wires/services/actions/forms/extensions/worldProjections declarations make a package `code`. Raw declarations in disabled, invalid and localized runtimes still count.
+- `entry` (including derived `server/index.js`), `function`, guards, nonempty HTTP permissions, `scope: instance` / `scope: both`, `permissions` (`secrets`, `loopbackCallback`, `authProxy`, `scheduler`, `sandboxWorker`, `appEvents`), or executable hooks/tools/wires/services/actions/appActions/flows/appEvents/schedules/providerSources/forms/extensions/worldProjections declarations make a package `code`. Raw declarations in disabled, invalid and localized runtimes still count.
 - A `.js` file counts as a browser asset only when the exact path appears in a valid declared webview asset plan. A directory named `ui` is insufficient. Hidden/ignored files, tests/build scripts and unlisted JS/TS/JSX, native modules and Wasm remain code. Server references take precedence: naming the same file as an entry or guard removes the exception. Ship a clean distribution and keep tests outside it.
 - Declarative runtimes write only their own datasets and validated character records. Built-in `sync-characters` still passes proposal validation and commit. Other plugins' data can change only through their independently admitted write services. Tool allowlists, read-only sub-agents, resume/retry restrictions and commit boundaries remain enforced.
 
@@ -51,6 +51,7 @@ GitHub plugin previews always contain `capabilities` and `trustedSource`. Confir
 - `tools`: contributed tool names and runtime `tools.builtin`.
 - `actions`, `services` (contract IDs; a [write service](./plugin-extensions.md#write-services) is recorded as `<contract> (write)`), `wires`, `extensions` (`<point>/<id>`), and `forms`.
 - `datasets`: namespaces and allowed write operations from `contributes.datasets`, separate from installation collections.
+- Instance and platform capabilities: when declared, `instanceScope`, `secrets`, `authProxy`, `scheduler`, `sandboxWorker`, `loopbackCallback`, `appEvents`, `appActions`, `flows`, and `providerSources` are also recorded.
 
 All lists are sorted and deduplicated. Current capabilities must be subsets of the snapshot, including HTTP methods and dataset operations. Changing a hook's phase counts as growth, and so does turning a service into a write service (`access: write`): it can change its provider's data within a caller's turn, so the player confirms again. Being model-facing (`modelFacing`) is not in the snapshot. Updating a trusted-source plugin carries the previous snapshot forward unchanged; no previous snapshot means none is written. Updates therefore cannot silently widen consent. Untrusted sources receive no new snapshot, and worlds receive none.
 
@@ -362,6 +363,15 @@ Not provided at the moment:
 - Isolated execution of plugins.
 - Raising permissions based on catalogue tags.
 - Updating or uninstalling a collection as a whole. A collection takes effect only at installation time. Installed members are updated and uninstalled independently.
+
+## Permissions and the four-layer policy
+
+Every capability passes through a strict four-layer evaluation where lower layers can never widen upper bounds:
+
+- **L1 (Deployment ceiling)**: Defined per host profile under [Security boundaries · Capability ceilings](../internals/security.md#capability-ceilings-l1) (`enabled`, `operator-only`, or `disabled`). Hosted and `browser-private` deployments hard-disable `plugin.instanceScope`, `plugin.providerSource`, `secrets.own`, `net.loopbackCallback`, `net.authProxy`, `app.scheduler`, `channel.bridge`, `compute.sandboxWorker`, and `exec.localBridge`.
+- **L2 (Instance policy defaults)**: Configured in **Settings → Permissions** or via `PUT /api/permissions/policy` (`allow`, `ask`, `deny` per capability key). High-risk capabilities (`plugin.communityCode`, `plugin.instanceScope`, `plugin.providerSource`, `channel.bridge`, `secrets.own`, `net.authProxy`, `net.loopbackCallback`) disallow `"allow"` as an automatic instance default.
+- **L3 (Persistent per-plugin grants)**: Saved `allow` / `deny` / `unset` decisions per plugin for instance capabilities such as `covel.secrets` (host `SecretVault` package-private encrypted storage), `providerSources`, Config Flow callbacks, and instance schedulers; see [API · Permissions Governance](./api.md#permissions-governance).
+- **L4 (Session and per-action approvals)**: Session-scoped grants (`covel:plugin-server-code`, `runtime:*`) and explicit single-operation RPC approvals.
 
 ## Session selection and execution authorization
 

@@ -65,6 +65,7 @@ describe("API bootstrap resource ownership", () => {
       close,
       clearSession: () => {},
       ensurePluginEntry: async () => {},
+      ensureInstancePluginEntry: async () => {},
       hasPendingEntry: () => false,
       isEntryPublished: () => true,
       isEntryRetryDeferred: () => false,

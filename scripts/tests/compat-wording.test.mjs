@@ -48,6 +48,10 @@ const allowlist = new Map([
     "Types the AI SDK compatibility warning category.",
   ],
   [
+    "packages/plugin-handlers-utils/src/plugin-api.ts",
+    "Types the AI SDK compatibility warning category in the author SDK.",
+  ],
+  [
     "packages/shared/src/utils/provider-defaults.ts",
     "DashScope's external API URL contains compatible-mode.",
   ],

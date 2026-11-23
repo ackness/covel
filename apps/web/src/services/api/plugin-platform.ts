@@ -1,0 +1,149 @@
+import type {
+  ConfigFlowRunSnapshot,
+  ProviderSourceSummary,
+  ProviderSourceUsageSummary,
+} from "@covel/shared/platform";
+import { request } from "./request.js";
+
+export type {
+  ConfigFlowField,
+  ConfigFlowRunSnapshot,
+  ConfigFlowStep,
+  ConfigFlowStepKind,
+  ProviderSourceAccountSummary,
+  ProviderSourceCredentialStatus,
+  ProviderSourceSummary,
+  ProviderSourceUsageSummary,
+} from "@covel/shared/platform";
+
+export interface PluginInstanceDataEntry {
+  readonly key: string;
+  readonly value: unknown;
+  readonly updatedAt: string;
+}
+
+const PLATFORM_READ_OPTIONS = {
+  operatorAuth: true,
+  silentErrors: true,
+  retry: false,
+} as const;
+
+const PLATFORM_WRITE_OPTIONS = {
+  operatorAuth: true,
+  silentErrors: true,
+} as const;
+
+function flowBasePath(pluginId: string, flowId: string): string {
+  return `/api/plugins/${encodeURIComponent(pluginId)}/flows/${encodeURIComponent(flowId)}`;
+}
+
+function flowRunPath(pluginId: string, flowId: string, runId: string): string {
+  return `${flowBasePath(pluginId, flowId)}/runs/${encodeURIComponent(runId)}`;
+}
+
+export async function invokePluginAppAction<T = unknown>(
+  pluginId: string,
+  action: string,
+  input?: Record<string, unknown>,
+): Promise<{ ok: true; result: T }> {
+  return request<{ ok: true; result: T }>(
+    `/api/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(action)}`,
+    {
+      ...PLATFORM_WRITE_OPTIONS,
+      method: "POST",
+      body: JSON.stringify(input ?? {}),
+    },
+  );
+}
+
+export async function fetchPluginInstanceData(
+  pluginId: string,
+  namespace: string,
+): Promise<{ ok: true; entries: PluginInstanceDataEntry[] }> {
+  return request<{ ok: true; entries: PluginInstanceDataEntry[] }>(
+    `/api/plugins/${encodeURIComponent(pluginId)}/instance-data/${encodeURIComponent(namespace)}`,
+    PLATFORM_READ_OPTIONS,
+  );
+}
+
+export async function startPluginConfigFlow(
+  pluginId: string,
+  flowId: string,
+  initial?: Record<string, unknown>,
+): Promise<{ ok: true; run: ConfigFlowRunSnapshot }> {
+  return request<{ ok: true; run: ConfigFlowRunSnapshot }>(
+    `${flowBasePath(pluginId, flowId)}/start`,
+    {
+      ...PLATFORM_WRITE_OPTIONS,
+      method: "POST",
+      body: JSON.stringify(initial !== undefined ? { initial } : {}),
+    },
+  );
+}
+
+export async function getPluginConfigFlowRun(
+  pluginId: string,
+  flowId: string,
+  runId: string,
+): Promise<{ ok: true; run: ConfigFlowRunSnapshot }> {
+  return request<{ ok: true; run: ConfigFlowRunSnapshot }>(
+    flowRunPath(pluginId, flowId, runId),
+    PLATFORM_READ_OPTIONS,
+  );
+}
+
+export async function stepPluginConfigFlow(
+  pluginId: string,
+  flowId: string,
+  runId: string,
+  input: {
+    readonly stepId: string;
+    readonly data?: Record<string, unknown>;
+    readonly callbackUrl?: string;
+    readonly cancelled?: boolean;
+  },
+): Promise<{ ok: true; run: ConfigFlowRunSnapshot }> {
+  return request<{ ok: true; run: ConfigFlowRunSnapshot }>(
+    `${flowRunPath(pluginId, flowId, runId)}/step`,
+    {
+      ...PLATFORM_WRITE_OPTIONS,
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export async function cancelPluginConfigFlow(
+  pluginId: string,
+  flowId: string,
+  runId: string,
+): Promise<{ ok: true; run: ConfigFlowRunSnapshot }> {
+  return request<{ ok: true; run: ConfigFlowRunSnapshot }>(
+    flowRunPath(pluginId, flowId, runId),
+    {
+      ...PLATFORM_WRITE_OPTIONS,
+      method: "DELETE",
+    },
+  );
+}
+
+export async function fetchProviderSources(): Promise<{
+  sources: ProviderSourceSummary[];
+}> {
+  return request<{ sources: ProviderSourceSummary[] }>(
+    "/api/provider-sources",
+    PLATFORM_READ_OPTIONS,
+  );
+}
+
+export async function fetchProviderSourceUsage(
+  pluginId: string,
+  sourceId: string,
+  accountId?: string,
+): Promise<{ usage: ProviderSourceUsageSummary | null }> {
+  const qs = accountId ? `?account=${encodeURIComponent(accountId)}` : "";
+  return request<{ usage: ProviderSourceUsageSummary | null }>(
+    `/api/provider-sources/${encodeURIComponent(pluginId)}/${encodeURIComponent(sourceId)}/usage${qs}`,
+    PLATFORM_READ_OPTIONS,
+  );
+}

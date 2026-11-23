@@ -1,5 +1,6 @@
 /** Dependency-free identities shared by authoring schemas, hosts and activation. */
 export const kernelExtensionPoints = {
+  channelBridge: { id: "channel.bridge@1", mode: "collect" },
   historyCompact: { id: "history.compact@2", mode: "single" },
   mediaImageFlow: { id: "media.image-flow@1", mode: "single" },
   promptHistoryTransform: {

@@ -471,3 +471,36 @@ export async function getDesktopInfo(): Promise<{
     return null;
   }
 }
+
+/**
+ * Open an external HTTP(S) authorization or documentation URL safely.
+ * Prefers Electron's verified `covel:open-external` IPC handler when running
+ * inside desktop; falls back to a sandboxed browser tab otherwise.
+ */
+export async function openExternalUrl(url: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    return false;
+  }
+  const ipc = getCovelIpc();
+  if (ipc) {
+    try {
+      const result = await ipc.invoke<{ ok?: boolean }>("covel:open-external", {
+        url: parsed.toString(),
+      });
+      return result?.ok === true;
+    } catch {
+      return false;
+    }
+  }
+  if (typeof window !== "undefined" && typeof window.open === "function") {
+    window.open(parsed.toString(), "_blank", "noopener,noreferrer");
+    return true;
+  }
+  return false;
+}

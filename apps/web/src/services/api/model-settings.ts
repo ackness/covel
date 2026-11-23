@@ -103,10 +103,25 @@ export function rememberServerPresetProviders(
 function referencedProviderIds(
   extraBindings: readonly SlotConfigEntry[],
   extraProviders: readonly string[],
-): Set<string> | null {
-  const { slotProviders, presetProviders } = serverProviderDirectory;
-  if (!slotProviders || !presetProviders) return null;
+): { readonly include: Set<string> | null; readonly exclude: Set<string> } {
   const profiles = getProviderProfiles();
+  const manualProviderIds = new Set<string>();
+  const sourceProviderIds = new Set<string>();
+  for (const profile of profiles) {
+    if (profile.source) {
+      sourceProviderIds.add(profile.id);
+      if (profile.provider) sourceProviderIds.add(profile.provider);
+    } else {
+      manualProviderIds.add(profile.id);
+      if (profile.provider) manualProviderIds.add(profile.provider);
+    }
+  }
+  const exclude = new Set(
+    [...sourceProviderIds].filter((id) => !manualProviderIds.has(id)),
+  );
+
+  const { slotProviders, presetProviders } = serverProviderDirectory;
+  if (!slotProviders || !presetProviders) return { include: null, exclude };
   const customPresets = new Map(
     flattenProviderProfiles(profiles).map((preset) => [preset.id, preset]),
   );
@@ -120,6 +135,8 @@ function referencedProviderIds(
     if (binding.modelRef !== undefined) {
       const preset = customPresets.get(binding.modelRef);
       if (!preset) return false;
+      // Credentials for provider-source connections live on the server plugin host.
+      if (preset.source) return true;
       providers.add(preset.provider);
       const family = families.get(preset.provider);
       if (family) providers.add(family);
@@ -133,7 +150,9 @@ function referencedProviderIds(
     }
     return false;
   };
-  for (const binding of extraBindings) if (!addBinding(binding)) return null;
+  for (const binding of extraBindings) {
+    if (!addBinding(binding)) return { include: null, exclude };
+  }
   const slotConfig = getSlotConfig();
   for (const slotId of new Set([
     ...Object.keys(slotProviders),
@@ -144,7 +163,7 @@ function referencedProviderIds(
     const serverProvider = slotProviders[slotId];
     if (serverProvider) providers.add(serverProvider);
   }
-  return providers;
+  return { include: providers, exclude };
 }
 
 export interface ProviderKeysHeaderOptions {
@@ -167,7 +186,8 @@ export function buildProviderKeysHeader(
     Object.entries(providerKeysSnapshot()).filter(
       ([name]) =>
         providerKeyToId(name) === name &&
-        (referenced === null || referenced.has(name)),
+        !referenced.exclude.has(name) &&
+        (referenced.include === null || referenced.include.has(name)),
     ),
   );
   if (Object.keys(keys).length > 0) {
@@ -274,8 +294,20 @@ export function buildSlotConfigHeaderInternal(
   const customPresetDefs = customPresets
     .filter((p) => referencedCustomIds.has(p.id))
     .map(
-      ({ id, name, provider, baseUrl, model, protocol, reasoningEffort }) => ({
+      ({
+        id,
+        name,
+        provider,
+        source,
+        account,
+        baseUrl,
+        model,
+        protocol,
+        reasoningEffort,
+      }) => ({
         ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(source ? { source } : {}),
+        ...(account ? { account } : {}),
         id,
         name,
         provider,

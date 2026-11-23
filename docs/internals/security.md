@@ -91,10 +91,29 @@ browser-private 一列只对访客开放他们用自己的密钥和存档做的�
 - 托管档位没有 `COVEL_MEDIA_TOKEN_SECRET` 或 `COVEL_DESKTOP_REST_TOKEN`；`commercial` 没有列出 `CORS_ORIGIN`。
 - 托管档位或 browser-private 形态设了 `COVEL_ALLOWED_HOSTS`：Host 检查只在 personal 形态上运行，这个值不起作用。
 - `commercial` 设了 `COVEL_MEDIA_CLEANUP_ENABLED`：这个档位上清理接口始终关闭。
+- `COVEL_DISABLED_CAPABILITIES` 包含未知的能力键。
+
+### 能力天花板（L1）
+
+除了按路由检查的动作表，宿主配置还会解析一份全局能力天花板（`@covel/shared/permissions` 中的 `CAPABILITY_KEYS`），并通过 `/api/health` 的 `deployment.capabilities` 向客户端公开：
+
+- **personal**：除生产环境未开启安装开关时的 `host.installPackages` 外，其余能力默认处于 `enabled`。自部署运维人员可通过 `COVEL_DISABLED_CAPABILITIES` 在启动时把任意能力向下收紧为 `disabled`（例如在 `personal` 上关闭 `plugin.communityCode`、`network.localModels` 或 `plugin.providerSource`）。
+- **browser-private / hosted**：在公开与共享部署形态下，高风险的实例级与本地网络能力在 L1 硬关闭为 `disabled`，包括 `compute.sandboxWorker`、`plugin.instanceScope`、`plugin.providerSource`、`channel.bridge`、`plugin.globalAutoEnable`、`secrets.own`、`net.authProxy`、`net.loopbackCallback`、`network.localModels`、`app.scheduler` 与 `exec.localBridge`；`plugin.communityCode` 与 `net.httpDeclared` 为 `operator-only`（可由环境变量继续收紧为 `disabled`，但任何配置都不能把已被关闭的能力重新打开）。
 
 `apps/server/tests/bootstrap/route-access.test.ts` 列出服务端的每一条 API 路由和它要的动作。新加的路由在写进这张表之前，测试不会通过。测试还用一份把所有动作都关上的宿主配置去请求每条路由，自己读环境变量做判断的路由会被发现；除了 `host-profile.ts`，服务端和核心包里的代码都不能读这几个部署变量。
 
 校验端点 `POST /api/install/validate/plugin` 和 `POST /api/install/validate/world` 复用 `host.files`，不导入或执行包内代码。目录请求先解析真实路径，必须位于对应的允许根目录中，并拒绝符号链接包根。上传复用安装的 ZIP 路径和大小检查，临时文件在请求结束时清理。报告中的包内路径变为相对路径，临时目录、用户目录及其他主机路径被隐藏；CLI 的原始错误文本不进入 HTTP 响应。传入实时插件目录时，世界校验不修改进程的全局数据约定。
+
+### 实例策略与持久化授权
+
+在 L1 宿主能力天花板之下，服务端通过统一的 L1 → L2 → L3 → L4 决策链管理实例策略与按插件持久化授权：
+
+- **L2 实例策略（`permissions.policy`）**：由 `@covel/shared/permissions` 的默认目录策略、`permissions.policy` 服务端设置以及 `COVEL_PERMISSIONS_POLICY` 环境变量合并而成，生效优先级为 `env > stored > default`。Schema 禁止把 `allowAutoPolicy` 为 `false` 的高风险能力设为默认 `allow`，且 L2 只能保持默认或在 L1 允许范围内向下收紧为 `deny`，无法重新打开 L1 关闭的能力；写入仅在 personal 形态开放。
+- **L3 持久化插件授权（`plugin_grants`）**：社区插件按 `pluginId` 在数据库 `plugin_grants` 表中存储每项能力的 `allow` / `deny` 决策，并与写入时的 `version`、`contentDigest` 以及声明能力快照 `grantedCapabilities` 绑定：
+  - 若包文件发生修改（`stale-digest`）、升级后声明了超出授权快照的新能力（`capability-escalated`）或包清单/摘要不可读（`unreadable`），所有先前的 `allow` 决策自动失效，不再免审批放行。
+  - 显式记录的 `deny` 决策保持**粘性**：即使包摘要变化或发生能力升级，已有 `deny` 仍持续阻止该能力，并优先覆盖全局 `trust.sources` 的隐式放行，直到管理员显式更新或清除该插件的授权记录。
+  - 写入或清除 L3 授权（包含新增 `deny`、撤销既有 `allow` 或删除记录）时，会同步清除 `RpcApprovalGate` 中该插件已缓存的 L4 会话授权。
+- **门控前检查（`RpcApprovalGate`）**：评估需要权限的插件操作时先运行统一策略检查（`evaluateRpcApproval`）：先检查 L1 天花板（`ceiling`）、L2 实例策略（`policy`）与 L3 显式拒绝（`grant`），任一层拒绝即返回 `403`（`capability_disabled`、`capability_denied_by_policy`、`capability_denied_by_grant`）；若均未拒绝，再对服务端代码与 runtime 动作检查有效 L3 持久放行（`persistent-grant`）或可信来源策略（`trusted-source`）；仍未决议时才进入 L4 会话级 / 一次性审批队列（`202 approval-required`）。新鲜的 `declarative` 插件在非代码级 RPC 与事件上不触发 `plugin.communityCode` 检查，保留独立的 L4 审批语义。
 
 ## Outbound requests (SSRF guard)
 
@@ -233,7 +252,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 每个模型角色解析到的供应商（保存的绑定；没有绑定时是服务端自己为该角色配的供应商）；
 - 请求里直接点名的供应商，比如探测模型列表时。
 
-没有任何角色用到的供应商，它的密钥不会离开浏览器。服务端是别人的时候，这一点很重要。在客户端读到服务端的角色和预设之前，它会发送所有已保存的密钥。（`apps/web/src/services/api/model-settings.ts` 里的 `buildProviderKeysHeader`。）
+没有任何角色用到的供应商，它的密钥不会离开浏览器。服务端是别人的时候，这一点很重要。由插件 `provider.source@1` 托管凭据的供应商同样不会写入 `X-Provider-Keys`。在客户端读到服务端的角色和预设之前，它会发送所有已保存的密钥。（`apps/web/src/services/api/model-settings.ts` 里的 `buildProviderKeysHeader`。）
 
 这条规则防的是这种情况：请求级的自定义预设（`X-Slot-Config` 覆盖）把某个供应商改指向另一个源，如果不设防，它就会收到运营者的密钥。现在这样的预设拿不到环境密钥，也拿不到受信任的默认请求头，必须自带密钥。
 
@@ -263,6 +282,15 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 两处都不加密。渲染进程需要明文才能拼出 `X-Provider-Keys`，所以即使落盘加密，`covel:keys:load` 这条 IPC 通道（只接受受信任的发送方）也还是原样；而在未签名的构建上，Electron `safeStorage` 只会多出一个 macOS 钥匙串弹窗。
 
 文件权限和浏览器的同源策略能挡住其他系统用户和其他网站。它们挡不住以该用户身份运行的代码，其中就包括已批准的社区插件（见 [Community plugin code](#community-plugin-code)）。
+
+## SecretVault 与实例凭据
+
+面向实例级与 OAuth/多账号供应商源的能力受到更细粒度的宿主凭据边界保护，且在 `browser-private` 与托管形态通过 [L1 天花板](#能力天花板l1) 硬关闭（`plugin.instanceScope`、`plugin.providerSource`、`secrets.own`、`net.loopbackCallback`、`net.authProxy`、`app.scheduler`、`channel.bridge`、`compute.sandboxWorker`、`exec.localBridge`）：
+
+- **`SecretVault` 包私有凭据**：仅声明 `permissions.secrets: true` 且取得 L1–L3 `secrets.own` 授权的插件可以通过 `covel.secrets` 读写宿主加密存储的包私有凭据（`apps/server/src/trust/secret-vault.ts`）。凭据按 `pluginId` 严格隔离，摘要或权限变更不放宽跨包读取，值也绝不发送给浏览器或记录到日志与 trace。
+- **临时回环回调（`net.loopbackCallback`）**：配置流的 `browser` 步骤需声明 `permissions.loopbackCallback` 并获授权。把 `ctx.startLoopbackCallback()` 返回的 `session.state` 放进授权 URL 的 `state` 参数。回环监听与手工粘贴都检查该值，并在推进流程前重新检查权限。监听器在接收有效回调、取消或超时后关闭。
+- **受限认证代理（`net.authProxy`）**：声明 `permissions.authProxy: true` 且通过 `net.authProxy` 门控后，实例插件的登录/刷新请求方可使用配置好的出站代理通道。
+- **`provider.source@1` 来源锁定与零泄露**：供应商源解析返回的 `baseUrl` 在宿主端校验是否命中该插件 `permissions.http` 的声明允许源；解析得到的短期 Bearer token 与自定义请求头仅用于当次服务端模型调用，从不写入 `X-Provider-Keys`、Web 响应、错误详情或执行 trace。
 
 ## Local model relay
 

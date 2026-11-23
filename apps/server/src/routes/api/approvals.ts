@@ -78,7 +78,10 @@ sessionApprovalRoutes.get("/:id/approvals", async (c) => {
         sessionApprovalScope(session, pending.pluginId),
       ),
     );
-  return c.json(listBody(current));
+  const grants = gate.listSessionGrants(sessionId, (pluginId) =>
+    sessionApprovalScope(session, pluginId),
+  );
+  return c.json({ ...listBody(current), grants });
 });
 
 // Revoke cached grants for a session, optionally scoped to one plugin via

@@ -1,8 +1,10 @@
 import { Loader2, Send, Square } from "lucide-react";
 import { useEffect, useRef, type KeyboardEvent } from "react";
 import type { TFunction } from "i18next";
+import { useTranslation } from "react-i18next";
 import type { SessionSlashCommand } from "@covel/shared";
-import type { SessionRecord } from "@/services/api.js";
+import type { SessionRecord, UISlotEntry } from "@/services/api.js";
+import { ComposerActionButtons } from "./composer-action-buttons.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { slashCommandUsage } from "./slash-command.js";
 import type { CommandFeedback } from "./use-game-view-composer.js";
@@ -40,6 +42,8 @@ interface MessageComposerProps {
   composerModes?: ComposerModes;
   /** Whether the send button is on; derived from the text and mode if omitted. */
   canSubmit?: boolean;
+  /** Session-scoped composer toolbar buttons (`contributes.ui.composerAction`). */
+  composerActions?: readonly UISlotEntry[];
 }
 
 export function MessageComposer({
@@ -65,7 +69,10 @@ export function MessageComposer({
   onCommandSelect,
   composerModes,
   canSubmit,
+  composerActions = [],
 }: MessageComposerProps) {
+  const { i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const selectedCommandRef = useRef<HTMLButtonElement>(null);
   const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
@@ -183,6 +190,15 @@ export function MessageComposer({
               />
               <ComposerFields composerModes={composerModes} />
             </>
+          )}
+          {composerActions.length > 0 && (
+            <ComposerActionButtons
+              sessionId={session.id}
+              entries={composerActions}
+              disabled={composerDisabled || commandExecuting}
+              locale={locale}
+              t={t}
+            />
           )}
           <div className="ui-composer-input">
             {textless && mode ? (

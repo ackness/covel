@@ -152,6 +152,24 @@ export interface KernelServiceCaller extends Omit<Caller, "pluginId"> {
   ): ExtensionContextFields;
 }
 
+export interface InstanceServiceCaller extends Omit<
+  Caller,
+  "scope" | "sessionId" | "reads" | "operations"
+> {
+  readonly sessionId?: string;
+  readonly locale?: string;
+}
+
+export interface InstanceKernelServiceCaller extends Omit<
+  InstanceServiceCaller,
+  "pluginId"
+> {
+  extensionContext(
+    pluginId: string,
+    signal: AbortSignal,
+  ): ExtensionContextFields;
+}
+
 export interface ServiceCallOutcome {
   readonly providerPluginId: string;
   readonly callerRuntimeId?: string;
@@ -198,6 +216,7 @@ function ownSettingsOf(
 }
 
 interface Caller {
+  readonly scope?: "session" | "instance";
   readonly delegation?: DelegationBudget;
   /**
    * Kernel-only execution collector; inherited by nested service clients.
@@ -539,6 +558,23 @@ export class PluginServiceRegistry {
       paused?(sessionId: string): Promise<readonly string[]>;
       /** Host-owned observer; failures must never affect service execution. */
       onCallCompleted?(event: PluginServiceCallEvent): void | Promise<void>;
+      /** Optional instance-scope plugin admission list (`scope: "instance" | "both"`). */
+      instanceList?(contract?: string): Promise<readonly string[]>;
+      /** Optional instance-scope plugin activation/admission gate. */
+      instanceEnsure?(
+        pluginId: string,
+        contract?: string,
+      ): Promise<void | string>;
+      /** Optional instance-scope surface (hostId, instanceData, secrets, http) for read services. */
+      instanceContext?(
+        pluginId: string,
+        signal: AbortSignal,
+      ): {
+        readonly hostId?: PluginServiceContext["hostId"];
+        readonly instanceData?: PluginServiceContext["instanceData"];
+        readonly secrets?: PluginServiceContext["secrets"];
+        readonly http?: PluginServiceContext["http"];
+      };
     },
     private readonly messagesOf?: (
       pluginId: string,
@@ -632,6 +668,17 @@ export class PluginServiceRegistry {
     );
   }
 
+  /** Instance-scope kernel extension discovery (`channel.bridge@1`, `provider.source@1`, ...). */
+  async discoverInstanceExtensions(
+    point: string,
+  ): Promise<readonly ExtensionProviderDescriptor[]> {
+    if (!this.admission.instanceList) return [];
+    const active = new Set(await this.admission.instanceList(point));
+    return this.listExtensions().filter(
+      (entry) => entry.point === point && active.has(entry.pluginId),
+    );
+  }
+
   /** Only the host receives this client; plugin facades expose createClient. */
   createKernelClient(caller: KernelServiceCaller): PluginServiceClient {
     return this.createScopedClient(
@@ -640,6 +687,63 @@ export class PluginServiceRegistry {
       undefined,
       caller,
     );
+  }
+
+  private normalizeInstanceCaller<
+    T extends { readonly locale?: string; readonly sessionId?: string },
+  >(
+    caller: T,
+  ): Omit<T, "locale" | "sessionId"> & {
+    readonly scope: "instance";
+    readonly sessionId: string;
+    readonly reads?: { readonly locale: string };
+  } {
+    const { locale, sessionId, ...rest } = caller;
+    return {
+      ...rest,
+      scope: "instance",
+      sessionId: sessionId ?? "__instance__",
+      ...(locale ? { reads: { locale } } : {}),
+    };
+  }
+
+  /** Instance-scope plugin client (`scope: "instance"`, read services only). */
+  createInstanceClient(caller: InstanceServiceCaller): PluginServiceClient {
+    return this.createScopedClient(
+      this.normalizeInstanceCaller(caller),
+      [],
+      undefined,
+    );
+  }
+
+  /** Instance-scope kernel client for `scope: "instance"` extension points and host callers. */
+  createInstanceKernelClient(
+    caller: InstanceKernelServiceCaller,
+  ): PluginServiceClient {
+    return this.createKernelClient(this.normalizeInstanceCaller(caller));
+  }
+
+  private async ensureAdmitted(
+    caller: Pick<Caller, "scope" | "sessionId">,
+    pluginId: string,
+    contract: string,
+  ): Promise<unknown> {
+    if (caller.scope === "instance") {
+      if (!this.admission.instanceEnsure) {
+        throw new Error("Instance admission hook is unavailable");
+      }
+      return this.admission.instanceEnsure(pluginId, contract);
+    }
+    return this.admission.ensure(caller.sessionId, pluginId);
+  }
+
+  private async listAdmitted(
+    caller: Pick<Caller, "scope" | "sessionId">,
+    contract: string,
+  ): Promise<readonly string[]> {
+    return caller.scope === "instance"
+      ? (this.admission.instanceList?.(contract) ?? [])
+      : this.admission.list(caller.sessionId);
   }
 
   private registerDefinition<I, O>(
@@ -757,14 +861,16 @@ export class PluginServiceRegistry {
    * never silently bound to another one.
    */
   private async resolveSelection(
-    caller: Pick<Caller, "sessionId" | "pluginId" | "delegation">,
+    caller: Pick<Caller, "scope" | "sessionId" | "pluginId" | "delegation">,
     contract: string,
     model: boolean,
   ): Promise<Entry | Exclude<ServiceImportResolution, { status: "ready" }>> {
-    await this.admission.ensure(caller.sessionId, caller.pluginId);
-    const admitted = new Set(await this.admission.list(caller.sessionId));
+    await this.ensureAdmitted(caller, caller.pluginId, contract);
+    const admitted = new Set(await this.listAdmitted(caller, contract));
     const paused = new Set(
-      (await this.admission.paused?.(caller.sessionId)) ?? [],
+      caller.scope === "instance"
+        ? []
+        : ((await this.admission.paused?.(caller.sessionId)) ?? []),
     );
     const entries = [...this.readEntries().values()].filter(
       (entry) =>
@@ -856,9 +962,10 @@ export class PluginServiceRegistry {
     return {
       discover: async (contract) => {
         caller.signal.throwIfAborted();
-        if (!kernel)
-          await this.admission.ensure(caller.sessionId, caller.pluginId);
-        const ids = new Set(await this.admission.list(caller.sessionId));
+        if (!kernel) {
+          await this.ensureAdmitted(caller, caller.pluginId, contract);
+        }
+        const ids = new Set(await this.listAdmitted(caller, contract));
         caller.signal.throwIfAborted();
         return [...this.readEntries().values()]
           .filter(
@@ -961,19 +1068,17 @@ export class PluginServiceRegistry {
               errorCode = "admission-error";
               const diagnosticScope = kernel
                 ? undefined
-                : await this.admission.ensure(
-                    caller.sessionId,
-                    caller.pluginId,
-                  );
+                : await this.ensureAdmitted(caller, caller.pluginId, contract);
               state.diagnosticScope =
                 parentState?.diagnosticScope ??
                 (typeof diagnosticScope === "string"
                   ? diagnosticScope
                   : undefined);
               signal.throwIfAborted();
-              const providerScope = await this.admission.ensure(
-                caller.sessionId,
+              const providerScope = await this.ensureAdmitted(
+                caller,
                 pluginId,
+                contract,
               );
               if (
                 state.diagnosticScope === undefined &&
@@ -1027,6 +1132,11 @@ export class PluginServiceRegistry {
               }
               const stage = caller.operations;
               if (entry.access === "write") {
+                if (caller.scope === "instance")
+                  throw new ToolError(
+                    "unavailable",
+                    WRITE_SERVICE_MESSAGES.noStage,
+                  );
                 if (caller.nestedIn)
                   throw new ToolError(
                     "unavailable",
@@ -1237,7 +1347,26 @@ export class PluginServiceRegistry {
                   };
                 return result;
               }
+              const instanceSurface =
+                caller.scope === "instance"
+                  ? this.admission.instanceContext?.(entry.pluginId, signal)
+                  : undefined;
               const context: PluginServiceContext = {
+                ...(caller.scope === "instance"
+                  ? { scope: "instance" as const }
+                  : {}),
+                ...(instanceSurface?.hostId !== undefined
+                  ? { hostId: instanceSurface.hostId }
+                  : {}),
+                ...(instanceSurface?.instanceData !== undefined
+                  ? { instanceData: instanceSurface.instanceData }
+                  : {}),
+                ...(instanceSurface?.secrets !== undefined
+                  ? { secrets: instanceSurface.secrets }
+                  : {}),
+                ...(instanceSurface?.http !== undefined
+                  ? { http: instanceSurface.http }
+                  : {}),
                 random: createPluginRandom({
                   sessionId: caller.sessionId,
                   pluginId: entry.pluginId,
@@ -1250,13 +1379,25 @@ export class PluginServiceRegistry {
                   this.messagesOf?.(entry.pluginId),
                   caller.reads?.locale,
                 ),
-                pluginData: readProviderData({
-                  ...caller.reads,
-                  sessionId: caller.sessionId,
-                  pluginId: entry.pluginId,
-                  signal,
-                  ...(stagedWrites ? { staged: stagedWrites } : {}),
-                }),
+                pluginData:
+                  caller.scope === "instance"
+                    ? {
+                        get: async () => {
+                          signal.throwIfAborted();
+                          return null;
+                        },
+                        list: async () => {
+                          signal.throwIfAborted();
+                          return [];
+                        },
+                      }
+                    : readProviderData({
+                        ...caller.reads,
+                        sessionId: caller.sessionId,
+                        pluginId: entry.pluginId,
+                        signal,
+                        ...(stagedWrites ? { staged: stagedWrites } : {}),
+                      }),
                 get world() {
                   return world();
                 },

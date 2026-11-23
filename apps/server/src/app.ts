@@ -374,6 +374,7 @@ async function initializeServer(): Promise<void> {
       sessionLock,
       memoryIngestLock,
     }));
+    ai.setProviderSourceResolver?.(api.providerSources.resolver);
 
     await verifyTrustedSourcesAtBoot(api.trustedSources);
 

@@ -23,6 +23,8 @@ export type { WorldRecord } from "./records/world-records.js";
 export { normalizeWorldRecord } from "./records/world-records.js";
 
 export type { ServerSettingRecord } from "./records/server-setting-records.js";
+export type { PluginGrantRecord } from "./records/plugin-grant-records.js";
+export type { InstanceDataRecord } from "./records/instance-data-records.js";
 
 export type { SessionRecord } from "./records/session-records.js";
 export { mergeSessionPatch } from "./records/session-records.js";
@@ -91,6 +93,8 @@ export type {
 
 import type { WorldRecord } from "./records/world-records.js";
 import type { ServerSettingRecord } from "./records/server-setting-records.js";
+import type { PluginGrantRecord } from "./records/plugin-grant-records.js";
+import type { InstanceDataRecord } from "./records/instance-data-records.js";
 import type { SessionRecord } from "./records/session-records.js";
 import type {
   FailedRuntimeResult,
@@ -503,6 +507,41 @@ export interface ServerSettingStore {
   /** Insert the setting or replace its value. */
   setServerSetting(record: ServerSettingRecord): Promise<void>;
   deleteServerSetting(key: string): Promise<void>;
+}
+
+/**
+ * Persistent L3 per-plugin capability grants (`common/sql-plugin-grant-records.ts`),
+ * shared by every process that uses the database. Not session-scoped.
+ */
+export interface PluginGrantStore {
+  /** Every stored plugin grant, in pluginId order. */
+  listPluginGrants(): Promise<PluginGrantRecord[]>;
+  getPluginGrant(pluginId: string): Promise<PluginGrantRecord | null>;
+  upsertPluginGrant(record: PluginGrantRecord): Promise<void>;
+  deletePluginGrant(pluginId: string): Promise<void>;
+}
+
+/**
+ * Non-secret instance-scoped plugin KV (`common/sql-instance-data-records.ts`),
+ * shared by every process that uses the database. Not session-scoped.
+ */
+export interface InstanceDataStore {
+  getInstanceData(
+    pluginId: string,
+    namespace: string,
+    key: string,
+  ): Promise<InstanceDataRecord | null>;
+  listInstanceData(
+    pluginId: string,
+    namespace?: string,
+  ): Promise<InstanceDataRecord[]>;
+  upsertInstanceData(record: InstanceDataRecord): Promise<void>;
+  deleteInstanceData(
+    pluginId: string,
+    namespace: string,
+    key: string,
+  ): Promise<boolean>;
+  deletePluginInstanceData(pluginId: string): Promise<number>;
 }
 
 export interface TraceStore {
@@ -998,6 +1037,8 @@ export interface DataStore
     PluginDataStore,
     WorldStore,
     ServerSettingStore,
+    PluginGrantStore,
+    InstanceDataStore,
     TraceStore,
     TurnMessageStore,
     RecordChangeStore,

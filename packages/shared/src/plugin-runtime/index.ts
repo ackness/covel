@@ -17,6 +17,7 @@ export type {
 
 /** Execution contracts only; no discovery, filesystem or provider implementation. */
 export type {
+  PluginGatewayStreamEvent,
   PluginRuntimeGateway,
   PluginEvaluationInput,
   ResolvedSlotForPlugin,

@@ -1363,3 +1363,16 @@ agent runtime 调用 `suspend` 之后，会话工具条左侧出现状态标记�
 ## 独立的主题位置
 
 `contributes.ui.theme` 使用独立的严格主题 schema，不执行 view/webview，不读取会话或申请 bridge。位图根没有 HTML 入口，和页面资源清单分开；坏主题仅报告该项，合法面板和主题继续发现。玩家在“会话主题”明确选择后才挂载；正文文字和独立装饰平面可用受限配色，宿主栏、设置、审批、输入和恢复控件始终在这些节点之外。插件视图与主题分别选择；选择主题不改变内容授权或写入协议。已有沙箱快照只接收该会话的安全配色/身份及宿主字体、圆角，不接收 CSS、资源列表或设置条目。详见[插件主题](./theme-packages.md#插件提供的受限主题)。
+
+## 实例级 UI 槽位与会话微槽
+
+除了会话右侧面板与全宽视图之外，Platform v2 在 `contributes.ui` 增加两类严格 JSON-Render 挂载位置：
+
+- **实例级槽位**（仅限 `scope: instance` 或 `scope: both` 的包）：`settingsSection`（按 `sectionGroup` 嵌入设置页各分组，只读/公开实例数据与按钮动作，禁用 webview 与密钥绑定）、`appPage`（设置页独立应用页面）和 `topbarStatus`（顶栏状态徽标）。
+- **会话微槽与弹窗**：`composerAction`（输入框工具条动作）、`messageAction`（消息操作条）、`messageBelow`（消息下方附注区）以及 `window`（按命名声明的弹层视图），通过声明式 `action`、`command`、`openFlow` 或 `openWindow` 与宿主动作衔接。
+
+## 声明式配置流（Config Flows）
+
+需要外部账号授权、设备码轮询或导入配置的插件（如 `provider.source@1` 供应商源、外部服务同步等）在 `contributes.flows` 声明 Flow ID 并通过 `covel.registerConfigFlow` 注册步骤机。支持的步骤类型（`CONFIG_FLOW_STEP_KINDS`）为 `form`、`browser`（结合本地回环回调 `loopbackCallback`）、`device`、`import`、`confirm`、`done` 与 `error`。设置面板等宿主位置通过前端事件入口 `openPluginConfigFlow` 唤起通用向导对话框，并在流程结束后触发实例状态与供应商摘要刷新；密钥仍只保存在宿主端[秘钥库](./glossary.md#secret-vault)，不传给浏览器。
+
+`composerAction` 可以用 `openFlow` 指向同包的配置流，并用 `params` 提供初始值。关闭尚未启动完成的向导时，宿主收到启动响应后会取消该次运行。

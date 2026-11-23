@@ -6,8 +6,18 @@
  * resources are acquired, and a failure releases what was acquired so far.
  */
 
+import { mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import path from "node:path";
+import { readEnvString, readRuntimeEnv } from "@covel/shared";
+import { loadOrCreateHostId } from "../../trust/host-id.js";
+import { createSecretVault } from "../../trust/secret-vault.js";
 import { createUiSlotHost } from "../../ui-slots/host.js";
 import { mountApiRoutes } from "./bootstrap/api-routes.js";
+import { createInstancePluginRegistry } from "./bootstrap/instance-plugins.js";
+import { createPluginAppActionRoutes } from "./plugin-app-actions.js";
+import { createPluginFlowRoutes } from "./plugin-flows.js";
 import type {
   ApiBootstrapConfig,
   ApiBootstrapResult,
@@ -47,6 +57,20 @@ export async function bootstrapApi(
     const { store, sessionLock } = storage;
     const catalog = await discoverBootstrapPlugins(config, eventBus);
     const { registry } = catalog;
+    let configDir: string;
+    if (config.covelHome) {
+      configDir = config.covelHome;
+    } else if (config.storeBackend === "memory") {
+      configDir = mkdtempSync(path.join(tmpdir(), "covel-instance-"));
+      owned.ephemeralConfigDir = configDir;
+    } else {
+      configDir = readRuntimeEnv().covelHome ?? path.join(homedir(), ".covel");
+    }
+    const hostId = await loadOrCreateHostId(configDir);
+    const secretVault = createSecretVault({
+      configDir,
+      credentialsKey: readEnvString("COVEL_CREDENTIALS_KEY"),
+    });
     // Filled by the trust stage once server settings are loaded; read at
     // call time by everything built before it.
     const trust: TrustedSourcesRef = { current: undefined };
@@ -56,6 +80,8 @@ export async function bootstrapApi(
       catalog,
       trust,
       owned,
+      hostId,
+      secretVault,
     });
     const activation = await activatePluginEntries({
       storage,
@@ -63,6 +89,8 @@ export async function bootstrapApi(
       host,
       trust,
       owned,
+      hostId,
+      secretVault,
       uiSlots: () => uiSlots,
     });
     // From `watch()` above until the UI slot host exists, nothing awaits:
@@ -110,13 +138,70 @@ export async function bootstrapApi(
       uiSlots,
       trust,
     });
-    const trustedSources = await loadServerTrust({
+    const { trustedSources, permissionService } = await loadServerTrust({
       config,
       runtimeEnv: model.runtimeEnv,
       store,
       registry,
       app,
       trust,
+      rpcApprovalGate: host.rpc.rpcApprovalGate,
+    });
+    const instancePlugins = (owned.instancePlugins =
+      createInstancePluginRegistry({
+        registry,
+        pluginEntries: activation.pluginEntries,
+        permissionService,
+        trustedSources,
+      }));
+    app.route(
+      "/api/plugins",
+      createPluginAppActionRoutes({
+        registry,
+        store,
+        hostId,
+        secretVault,
+        appActions: host.appActions,
+        appScheduler: host.appScheduler,
+        instancePlugins,
+        permissionService,
+        trustedSources,
+        providerSources: host.providerSources,
+      }),
+    );
+    app.route(
+      "/api/plugins",
+      createPluginFlowRoutes({
+        registry,
+        store,
+        hostId,
+        secretVault,
+        configFlows: host.configFlows,
+        instancePlugins,
+        permissionService,
+        trustedSources,
+        providerSources: host.providerSources,
+      }),
+    );
+    await instancePlugins.activateForEvent("onStartup");
+    for (const plugin of instancePlugins.listInstancePlugins()) {
+      if (
+        plugin.allowed &&
+        !plugin.activated &&
+        plugin.activationEvents.some((ev) => ev.startsWith("onSchedule:"))
+      ) {
+        await instancePlugins.activate(plugin.pluginId).catch((error) => {
+          console.warn(
+            `[bootstrap] scheduled instance plugin "${plugin.pluginId}" failed to activate:`,
+            error,
+          );
+        });
+      }
+    }
+    await host.providerSources.warmStatus();
+    await host.appEvents.emit("AppStarted", {
+      hostId,
+      startedAt: new Date().toISOString(),
     });
     const startupMaintenance = startBootstrapMaintenance({
       storeBackend: config.storeBackend,
@@ -132,6 +217,11 @@ export async function bootstrapApi(
     return {
       memorySystem,
       trustedSources,
+      permissionService,
+      hostId,
+      secretVault,
+      instancePlugins,
+      providerSources: host.providerSources,
       app,
       applicationWork,
       registry,
@@ -143,8 +233,19 @@ export async function bootstrapApi(
       closeTools: () => toolExecutor.close(),
       closePluginEntries: async () => {
         jobs.runtimeJobCredentials.clear();
+        await host.appEvents
+          .emit("BeforeShutdown", { hostId, reason: "shutdown" })
+          .catch(() => {});
+        await host.appScheduler.close();
+        await host.configFlows.close();
         await uiSlots.close();
         await pluginEntries.close();
+        if (owned.ephemeralConfigDir) {
+          await rm(owned.ephemeralConfigDir, {
+            recursive: true,
+            force: true,
+          }).catch(() => {});
+        }
       },
       prepareToolsForSession,
     };

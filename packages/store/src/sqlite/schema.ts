@@ -48,6 +48,36 @@ export const serverSettings = sqliteTable("server_settings", {
   updatedAt: text("updated_at").notNull(),
 });
 
+// ── Plugin persistent grants (not session-scoped) ───────────────
+
+export const pluginGrants = sqliteTable("plugin_grants", {
+  pluginId: text("plugin_id").primaryKey(),
+  version: text("version").notNull(),
+  contentDigest: text("content_digest").notNull(),
+  grantedCapabilities: text("granted_capabilities").notNull(), // JSON text
+  decisions: text("decisions").notNull(), // JSON text
+  grantedAt: text("granted_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// ── Instance-scoped plugin KV (not session-scoped) ─────────────
+
+export const instanceData = sqliteTable(
+  "instance_data",
+  {
+    pluginId: text("plugin_id").notNull(),
+    namespace: text("namespace").notNull(),
+    key: text("key").notNull(),
+    value: text("value").notNull(), // JSON text, encoded by the query layer
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.pluginId, table.namespace, table.key] }),
+    index("instance_data_plugin_ns_idx").on(table.pluginId, table.namespace),
+  ],
+);
+
 // ── Sessions ────────────────────────────────────────────────────
 
 export const sessions = sqliteTable("sessions", {

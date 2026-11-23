@@ -1,3 +1,8 @@
+import {
+  CAPABILITY_KEYS,
+  type CapabilityCeiling,
+  type CapabilityKey,
+} from "@covel/shared/permissions";
 import { ApiError, requestResponse } from "./request.js";
 
 // -- Server Info -------------------------------------------------
@@ -14,6 +19,7 @@ export interface ServerHealth {
     form?: "personal" | "browser-private" | "hosted";
     /** Models on the player's computer or local network go through this browser. */
     modelRelay?: boolean;
+    capabilities?: Partial<Record<CapabilityKey, CapabilityCeiling>>;
     source?: { repository?: string; commit?: string };
   };
   storage?: {
@@ -41,6 +47,30 @@ export interface ServerHealth {
 let operatorTokenRequired: boolean | undefined;
 let sharedServer: SharedServerInfo | null = null;
 let modelRelay = false;
+let deploymentCapabilities: Partial<
+  Record<CapabilityKey, CapabilityCeiling>
+> | null = null;
+
+const VALID_CEILINGS: ReadonlySet<string> = new Set([
+  "enabled",
+  "operator-only",
+  "disabled",
+]);
+
+function sanitizeCapabilities(
+  raw: unknown,
+): Partial<Record<CapabilityKey, CapabilityCeiling>> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const out: Partial<Record<CapabilityKey, CapabilityCeiling>> = {};
+  for (const key of CAPABILITY_KEYS) {
+    const value = record[key];
+    if (typeof value === "string" && VALID_CEILINGS.has(value)) {
+      out[key] = value as CapabilityCeiling;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 
 /**
  * A shared server that keeps players' saves in their own browsers: the
@@ -117,6 +147,9 @@ export async function fetchServerHealth(): Promise<ServerHealth> {
   }
   sharedServer = sharedServerFrom(health);
   modelRelay = health.deployment?.modelRelay === true;
+  deploymentCapabilities = sanitizeCapabilities(
+    health.deployment?.capabilities,
+  );
   return health;
 }
 
@@ -143,4 +176,21 @@ export function getSharedServerInfo(): SharedServerInfo | null {
  */
 export function isOperatorTokenRequired(): boolean | undefined {
   return operatorTokenRequired;
+}
+
+/**
+ * L1 deployment ceiling reported by `/api/health`, or `undefined` when the
+ * server has not answered or did not advertise this capability.
+ */
+export function getDeploymentCapabilityCeiling(
+  key: CapabilityKey,
+): CapabilityCeiling | undefined {
+  return deploymentCapabilities?.[key];
+}
+
+/**
+ * True only when the server explicitly reported `key` as `"disabled"` at L1.
+ */
+export function isDeploymentCapabilityDisabled(key: CapabilityKey): boolean {
+  return deploymentCapabilities?.[key] === "disabled";
 }

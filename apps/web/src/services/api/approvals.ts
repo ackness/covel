@@ -1,8 +1,53 @@
+import type { RpcApprovalPending } from "@covel/shared";
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
 import { ApiError, request } from "./request.js";
 
 // -- Approvals (RPC approval gate) -------------------------------
+
+export interface SessionApprovalGrant {
+  readonly pluginId: string;
+  readonly action: string;
+}
+
+export interface SessionApprovalsSnapshot {
+  readonly items: readonly RpcApprovalPending[];
+  readonly grants: readonly SessionApprovalGrant[];
+}
+
+export async function getSessionApprovals(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<SessionApprovalsSnapshot> {
+  const res = await request<{
+    items?: RpcApprovalPending[];
+    grants?: SessionApprovalGrant[];
+  }>(`/api/sessions/${encodeURIComponent(sessionId)}/approvals`, {
+    sessionId,
+    signal,
+    silentErrors: true,
+    retry: false,
+  });
+  return {
+    items: res.items ?? [],
+    grants: res.grants ?? [],
+  };
+}
+
+export function revokeSessionApprovals(
+  sessionId: string,
+  pluginId?: string,
+): Promise<{ readonly ok: boolean; readonly cleared: number }> {
+  const query = pluginId ? `?pluginId=${encodeURIComponent(pluginId)}` : "";
+  return request<{ ok: boolean; cleared: number }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/approvals${query}`,
+    {
+      method: "DELETE",
+      sessionId,
+      operatorAuth: true,
+    },
+  );
+}
 
 export async function resolveApproval(
   approvalId: string,

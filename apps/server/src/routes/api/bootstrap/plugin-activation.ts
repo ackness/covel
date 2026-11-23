@@ -14,8 +14,10 @@ import {
   setWorldDataConventions,
 } from "../../../world-data/conventions.js";
 import type { UiSlotHost } from "../../../ui-slots/host.js";
+import type { SecretVault } from "../../../trust/secret-vault.js";
 import { createPluginDiagnostics } from "../plugin-diagnostics.js";
 import type { BootstrapOwned } from "./event-infrastructure.js";
+import { checkInstancePluginAllowed } from "./instance-plugins.js";
 import type { BootstrapPluginCatalog } from "./plugin-catalog.js";
 import {
   createBootstrapPluginEntries,
@@ -53,6 +55,8 @@ export async function activatePluginEntries(args: {
   readonly host: BootstrapPluginHost;
   readonly trust: TrustedSourcesRef;
   readonly owned: BootstrapOwned;
+  readonly hostId?: string;
+  readonly secretVault?: SecretVault;
   /**
    * The UI slot host, built after this stage. A reload invalidates its
    * session projections; reloads only start once `watch()` has run and the
@@ -105,10 +109,27 @@ export async function activatePluginEntries(args: {
       tools: host.tools.tools,
       hookPipeline: host.hookPipeline,
       rpcRegistry: host.rpc.rpcRegistry,
+      appActions: host.appActions,
+      configFlows: host.configFlows,
+      appEvents: host.appEvents,
+      appScheduler: host.appScheduler,
+      providerSources: host.providerSources,
       isCommunityServerCodeApproved,
       isDeclarativePackage: (pluginId) =>
         refreshDeclarativeEligibility(trust.current, pluginId),
       isCommunityHookApproved,
+      hostId: args.hostId,
+      secretVault: args.secretVault,
+      getPermissionService: () => trust.permissions,
+      isInstanceServerCodeApproved: (pluginId) =>
+        checkInstancePluginAllowed(
+          {
+            registry,
+            permissionService: trust.permissions,
+            trustedSources: trust.current,
+          },
+          pluginId,
+        ),
       runtimeLoader,
       prepareDeclarations: catalog.prepareEventDeclarations,
       onReload: async () => {
@@ -156,6 +177,7 @@ export async function activatePluginEntries(args: {
     services: host.services,
     extensions: host.extensions,
     calls: host.serviceCalls,
+    promptDiagnostics: host.promptDiagnostics,
     isEntryPublished: pluginEntries.isEntryPublished,
     isServerCodeApproved: (session, pluginId) =>
       hasServerCodeGrant(rpcApprovalGate, session, pluginId),

@@ -67,6 +67,22 @@ function isTimeout(error: unknown): boolean {
   return false;
 }
 
+const SOURCE_FAILURE_KINDS: ReadonlySet<ProviderFailureKind> = new Set([
+  "auth",
+  "quota",
+  "rate_limited",
+  "overloaded",
+  "not_found",
+  "timeout",
+  "unreachable",
+  "server",
+  "bad_request",
+  "refused",
+  "config",
+  "missing_key",
+  "unknown",
+]);
+
 export function classifyProviderFailure(
   error: unknown,
   provider = "unknown",
@@ -86,6 +102,14 @@ export function classifyProviderFailure(
   if (normalized.code === "REFUSAL") return failure("refused");
   if (normalized.code === "CONFIG_ERROR") return failure("config");
   if (normalized.code === "REQUEST_BUDGET_EXCEEDED") return failure("timeout");
+
+  const sourceKind = details?.providerFailureKind;
+  if (
+    typeof sourceKind === "string" &&
+    SOURCE_FAILURE_KINDS.has(sourceKind as ProviderFailureKind)
+  ) {
+    return failure(sourceKind as ProviderFailureKind);
+  }
 
   if (statusCode === undefined) {
     // "fetch failed" says nothing; the cause names the host and port.

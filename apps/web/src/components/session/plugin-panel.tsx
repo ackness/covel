@@ -73,6 +73,7 @@ export interface PluginPanelProps {
     (params: Record<string, unknown>) => Promise<unknown> | unknown
   >;
   stateOverride?: Record<string, unknown>;
+  sourcesOverride?: Record<string, Record<string, unknown>>;
   interactionLocked?: boolean;
   surfaceContext?: Readonly<Record<string, unknown>>;
   enableDevtools?: boolean;
@@ -254,7 +255,7 @@ function SnapshotPluginPanel(props: PluginPanelProps) {
     <PluginPanelView
       {...props}
       data={props.stateOverride!}
-      sources={EMPTY_SOURCES}
+      sources={props.sourcesOverride ?? EMPTY_SOURCES}
       jobs={EMPTY_JOBS}
       sessionId={sessionId}
     />

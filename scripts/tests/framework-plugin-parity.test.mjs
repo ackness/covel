@@ -38,6 +38,10 @@ const SOURCE_COMPARISON_ALLOWLIST = new Map([
     "trusted sources cover community packages",
   ],
   [
+    "apps/server/src/trust/permission-service.ts",
+    "persistent capability grants and approval gate cover community packages",
+  ],
+  [
     "apps/server/src/lib/plugin-descriptor.ts",
     "community packages report their trust summary",
   ],
@@ -56,6 +60,10 @@ const SOURCE_COMPARISON_ALLOWLIST = new Map([
   [
     "apps/web/src/components/session/plugin-list-panel/plugin-item.tsx",
     "source badge",
+  ],
+  [
+    "apps/web/src/settings/panes/PermissionsPluginList.tsx",
+    "source badge and community plugin grant actions",
   ],
   [
     "apps/web/src/settings/panes/PackagesPane.tsx",

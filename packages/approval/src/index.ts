@@ -21,5 +21,6 @@ export type {
 
 export type {
   ImplicitGrantQuery,
+  PolicyDecisionResult,
   RpcApprovalGateOptions,
 } from "./rpc-approval.js";

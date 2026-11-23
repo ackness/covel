@@ -19,6 +19,7 @@
 | Capability | 能力标签 | 一条模型路由的 `tag`（`text`、`image` 等）。找插件靠的是 **Contract**，不是能力标签。 |
 | Capability snapshot | 能力快照 | 安装记录里的声明能力上界；见[可信来源](./plugin-installation.md#可信来源)。 |
 | Collection | 合集 | 安装清单，把世界和插件作为一组发布；不同于游玩时选择插件的 Pack。 |
+| Config flow | 配置流 | 插件注册的多步骤配置或登录向导（`contributes.flows`）。 |
 | Contract | 契约 | 带版本号的 ID，例如 `narrative-engine@2`。 |
 | Credits | 作者信息 | 一个包的 `author`、`license` 和 `homepage` 字段。 |
 | Dataset | 数据集 | 插件声明的带类型数据（`contributes.datasets`）。不是安装用的 **Collection**。 |
@@ -31,6 +32,7 @@
 | Fault latch | 熔断 | 辅助插件在同一会话连续因自身故障失败后暂停，可由玩家重新启用；只在进程内存中保存。见[协议](./protocol.md#插件故障熔断)。 |
 | Finalizer step | 收尾步骤 | agent 到达界限时仅提供提交工具、请求最终输出的那一次请求。 |
 | Imported tool | 导入工具 | agent 用 `agent.tools.services` 从别的插件导入、给模型用的服务生成的工具；读服务的导入只读，写服务的导入暂存写入。 |
+| Instance scope | 实例作用域 | 在宿主实例层面激活的作用域（`scope: instance` 或 `both`），不依赖开启具体会话。 |
 | Kernel | 内核 | 负责调度、上下文、工具调用、提案校验和提交的框架核心。 |
 | Local model relay | 本地模型中继 | 共享形态的服务端经玩家浏览器访问玩家电脑或局域网上的模型。见[安全边界](../internals/security.md#local-model-relay)。 |
 | Official web app | 官方网页版 | 尚未支持的官方托管产品；已有的 browser-private 基础设施不等于完整产品。 |
@@ -44,12 +46,14 @@
 | Preset | 预设 | 内部的模型连接方案，含提供商、端点、协议和模型 ID。 |
 | Proposal | 提案 | runtime 提交给内核校验的一次写入请求，校验通过后才保存。 |
 | Provider | 提供商 | 通过模型槽位路由选中的具体模型服务。 |
+| Provider source | 供应商源 | 插件注册的凭据与连接解析器（`provider.source@1`），把短期凭据、刷新和多账号故障切换留在服务端。 |
 | Read / Stage | 阅读 / 舞台 | 会话界面里两种内置视图：“阅读”是一页页读的文字界面，“舞台”是带背景和立绘的画面。旧称“文本”“解析视图”“舞台视图”。 |
 | Recursive call | 嵌套调用 | 包内 runtime 调用，写入随父执行一起提交；不同于只交回输出的子 agent。 |
 | Roleplay notes | 扮演说明 | 世界作者写在角色记录的 `blueprint` 字段里、告诉叙事怎样演这个角色的内容；由“角色资料”插件读取。不是角色本身。 |
 | Runtime | runtime | 保留英文：它指清单里的一个运行单元，不是泛指“运行时”。 |
 | Runtime manifest | runtime 清单 | 加载器从作者清单编译出的内部执行结构，不是可直接复制的作者格式。 |
 | Seat | 座位 | 会话里“谁在玩、以什么身份、控制哪些角色”（`session.seats`）。 |
+| Secret vault | 秘钥库 | 宿主加密隔离的插件私有凭据存储，通过 `covel.secrets` 按插件隔离读写，不暴露给浏览器或日志。 |
 | Segment | 提示词段 | 组装好的提示词里的一段。故事里的段落是 **Story segment**。 |
 | Server-scoped setting | 服务端设置 | `scope: "server"` 的设置；其余的是本设备设置。 |
 | Session | 会话 | 用某个世界进行的一局游戏，拥有独立的角色、插件数据和进度。 |
@@ -173,6 +177,12 @@
 
 详见：[合集](../ship/collections.md)、[插件安装](./plugin-installation.md)。
 
+## Config flow
+
+插件通过 `contributes.flows` 声明、`covel.registerConfigFlow` 注册的多步骤声明式配置或授权向导，支持 `form`、`browser`（回环回调）、`device`、`import`、`confirm`、`done` 和 `error` 步骤。宿主设置面板或微槽动作通过通用对话框运行向导，并在完成后自动刷新供应商源状态。
+
+详见：[声明式配置流](./ui-panels.md#声明式配置流config-flows)、[HTTP API](./api.md#实例插件动作配置流与供应商源)。
+
 ## Contract
 
 一个带版本号的 ID，例如 `narrative-engine@2`，用来说明一个插件提供什么能力，或者需要什么能力。
@@ -242,6 +252,12 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 没有恰好一个活跃的提供方时，这个工具不出现，runtime 照常运行。它不在工具注册表里，也不能做完成工具。
 
 详见：[导入的服务工具](./tools.md#导入的服务工具)、[给模型用的服务](./plugin-extensions.md#给模型用的服务)。
+
+## Instance scope
+
+`scope` 为 `instance` 或 `both` 的插件作用域。与绑定单局游戏的 `session` 插件不同，实例作用域插件可在开局前激活并响应 `appActions`、`flows`、`appEvents`、`schedules`、`channel.bridge@1` 与 `provider.source@1` 等实例级扩展面，并受 L1–L3 能力授权约束。
+
+详见：[插件字段参考](./plugins.md#实例级作用域与生态扩展)、[权限与四层策略](./plugin-installation.md#权限与四层策略)。
 
 ## Kernel
 
@@ -324,6 +340,12 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 
 详见：`packages/ai-provider/`、[插件字段参考](./plugins.md)。
 
+## Provider source
+
+由 `scope: instance` / `both` 插件通过 `contributes.providerSources` 和 `covel.registerProviderSources` 注册的模型供应商连接与凭据源（契约 `provider.source@1`）。凭据留在宿主 `SecretVault` 内，支持基于 `permissions.http` 的来源锁定、`requestShape` 协议塑形、单飞 `401` 刷新以及多账号故障切换。
+
+详见：[模型分工 · 插件托管供应商源](./slots.md#插件托管供应商源-providersource1)、[HTTP API](./api.md#实例插件动作配置流与供应商源)。
+
 ## Recursive call
 
 通过 `ctx.recursiveCall` 调用本插件内的另一个 runtime。它可以产生领域写入；嵌套结果与父结果组成同一个提交单元，父调用失败时子调用写入也丢弃。它不同于子 agent：子 agent 只交回输出，而且可以按契约选择其他包的提供者。
@@ -357,6 +379,12 @@ agent runtime 在 `agent.tools.services` 里导入另一个插件给模型用的
 会话里的一个位置：谁坐在这里（人类或空置）、以什么身份（玩家、主持人、旁观者）、控制哪些角色、当前扮演哪一个。座位存放在会话记录的 `seats` 上。新会话有一个人类玩家座位，绑定所有 `type: player` 的角色。故事跟随主座位的当前角色。
 
 详见：[世界模型：座位](./world-model.md#座位)、[HTTP API](./api.md#会话座位)。
+
+## Secret vault
+
+宿主为每个插件提供按包隔离并加密保存的凭据存储。插件仅在取得 L1–L3 `secrets.own` 授权且声明 `permissions.secrets: true` 后，方可通过 `covel.secrets` 读写自有秘密；秘密值绝不会发往浏览器、写进日志或随 trace 返回。
+
+详见：[安全边界 · SecretVault 与实例凭据](../internals/security.md#secretvault-与实例凭据)、[权限与四层策略](./plugin-installation.md#权限与四层策略)。
 
 ## Segment
 

@@ -6,6 +6,7 @@ import {
   TRUSTED_SOURCES_SERVER_SETTING,
   WORLD_AUTHORING_IDLE_TIMEOUT_MS,
 } from "@covel/shared";
+import { PERMISSIONS_POLICY_SERVER_SETTING } from "@covel/shared/permissions";
 import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
 import { ALLOWED_IMAGE_HOSTS_SETTING } from "@/lib/external-images.js";
@@ -53,6 +54,16 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     label: "Trusted sources",
     description:
       "Skip server-code prompts for unchanged packages within their approved capabilities.",
+  });
+
+  store.register({
+    ...PERMISSIONS_POLICY_SERVER_SETTING,
+    scope: "server",
+    group: "general",
+    widget: "custom",
+    label: "Permissions policy",
+    description:
+      "Default instance capability policy for plugins and host actions.",
   });
 
   // Written by the "always load images from this host" choice on a held

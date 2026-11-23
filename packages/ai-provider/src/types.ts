@@ -13,6 +13,10 @@ import type {
   LLMRequestDefaults,
   LLMUsageSummary,
 } from "@covel/shared";
+import type {
+  ProviderSourceCredentialStatus,
+  ProviderSourceRequestShape,
+} from "@covel/shared/platform";
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
 import type { ProviderRelay } from "./adapters/http/model-relay.js";
@@ -160,6 +164,17 @@ export interface ProviderConfig {
    */
   transportRetry?: false;
   /**
+   * Declarative request shaping applied by a provider source (field omissions,
+   * forced fields, system-instruction routing, and optional final transform).
+   */
+  requestShape?: ProviderSourceRequestShape;
+  /** Non-sensitive metadata identifying the active provider source binding. */
+  credentialSource?: {
+    readonly sourceId: string;
+    readonly accountId?: string;
+    readonly credentialGeneration?: number;
+  };
+  /**
    * Prompt cache strategy for this provider.
    *
    * Filled in by the provider registry based on the resolved protocol;
@@ -188,7 +203,9 @@ export interface CustomPresetInput {
   reasoningEffort?: ReasoningEffort;
   id: string;
   name: string;
-  provider: string;
+  provider?: string;
+  source?: string;
+  account?: string;
   baseUrl?: string;
   model: string;
   protocol?: ProviderProtocol;
@@ -245,6 +262,8 @@ export interface PresetConfig {
   id: string;
   name: string;
   provider: string;
+  source?: string;
+  account?: string;
   protocol?: ProviderProtocol;
   model: string;
   tier: Exclude<ModelTier, "embed-default">;
@@ -587,6 +606,8 @@ export interface ResolvedSlotConfig {
   readonly model: string;
   /** Slot tag (text / image / embedding / speech / transcription). */
   readonly tag: string;
+  /** Non-sensitive status when this slot resolves through a plugin provider source. */
+  readonly credentialSource?: ProviderSourceCredentialStatus;
   /** Effective request-scoped capability; never mutates the base registry. */
   readonly capability?: ModelCapability;
   /** Free-form fields from the llm.toml preset, plugin-owned semantics. */

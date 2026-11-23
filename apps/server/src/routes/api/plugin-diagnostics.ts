@@ -19,6 +19,7 @@ import {
   type PluginDiagnosticsSnapshot,
   type PluginServiceCallDiagnostic,
 } from "@covel/shared";
+import type { PromptSegmentGovernanceDiagnostic } from "@covel/shared/platform";
 import type { SessionRecord } from "@covel/store";
 import type { ToolRegistry } from "@covel/tools";
 import { errorBody } from "../../api-error.js";
@@ -111,6 +112,53 @@ export class RecentPluginServiceCalls {
   }
 }
 
+export class RecentPromptDiagnostics {
+  private readonly entries: Array<{
+    readonly sessionId: string;
+    readonly value: PromptSegmentGovernanceDiagnostic;
+  }> = [];
+
+  record(
+    sessionId: string,
+    diagnostics: readonly PromptSegmentGovernanceDiagnostic[],
+  ): void {
+    for (const item of diagnostics) {
+      this.entries.push({
+        sessionId,
+        value:
+          item.kind === "truncated"
+            ? {
+                ...item,
+                pluginId: boundedField(item.pluginId),
+                segmentId: boundedField(item.segmentId),
+              }
+            : {
+                ...item,
+                pluginId: boundedField(item.pluginId),
+                segmentId: boundedField(item.segmentId),
+                targetId: boundedField(item.targetId),
+              },
+      });
+    }
+    while (this.entries.length > TOTAL_CALL_LIMIT) this.entries.shift();
+  }
+
+  list(
+    sessionId: string,
+    pluginId?: string,
+  ): PromptSegmentGovernanceDiagnostic[] {
+    return this.entries
+      .filter(
+        (entry) =>
+          entry.sessionId === sessionId &&
+          (!pluginId || entry.value.pluginId === pluginId),
+      )
+      .slice(-CALL_WINDOW)
+      .reverse()
+      .map(({ value }) => ({ ...value }));
+  }
+}
+
 interface PluginDiagnosticsDeps {
   readonly registry: PluginRegistry;
   readonly tools: ToolRegistry;
@@ -119,6 +167,7 @@ interface PluginDiagnosticsDeps {
   readonly services: PluginServiceRegistry;
   readonly extensions?: import("@covel/runtime").PluginExtensionHost;
   readonly calls: RecentPluginServiceCalls;
+  readonly promptDiagnostics?: RecentPromptDiagnostics;
   readonly getTrustedSources?: () =>
     | import("../../trust/trusted-source-service.js").TrustedSourceService
     | undefined;
@@ -231,11 +280,17 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
           commands:
             entry.status === "error"
               ? []
-              : mergePluginCommands(entry).map(({ name, action }) => ({
-                  name,
-                  action,
-                  registered: ownActions.includes(action),
-                })),
+              : mergePluginCommands(entry)
+                  .filter(
+                    (command): command is typeof command & { action: string } =>
+                      command.scope !== "instance" &&
+                      typeof command.action === "string",
+                  )
+                  .map(({ name, action }) => ({
+                    name,
+                    action,
+                    registered: ownActions.includes(action),
+                  })),
         };
       });
     const calls = deps.calls.list(session, pluginId);
@@ -267,6 +322,8 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
       counter[call.outcome]++;
       counters.set(key, counter);
     }
+    const recentPrompt =
+      deps.promptDiagnostics?.list(session.id, pluginId) ?? [];
     return {
       sessionId: session.id,
       capturedAt: new Date().toISOString(),
@@ -279,6 +336,7 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
         ),
       ),
       history: { scope: "process", limit: CALL_WINDOW },
+      ...(recentPrompt.length > 0 ? { promptDiagnostics: recentPrompt } : {}),
     };
   };
 

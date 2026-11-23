@@ -22,7 +22,7 @@ import {
   parseRetryDelayMs,
 } from "./adapters/http/retry.js";
 import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
-import { fetchWithDispatcher } from "./outbound-network.js";
+import { fetchWithDispatcher, outboundFetch } from "./outbound-network.js";
 import type { ImageWire } from "./image/types.js";
 import type { MusicWire } from "./music/types.js";
 import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
@@ -90,35 +90,30 @@ export interface FetchWithRetryOptions {
    * would outlast this deadline fails fast and returns the response immediately.
    */
   readonly timeoutMs?: number;
+  /**
+   * Outbound transport policy:
+   * - `"direct"` (default): pinned DNS direct fetch (`fetchWithRetry`).
+   * - `"instance-auth"`: bounded proxy path for `net.authProxy` in `personal`
+   *   deployments; rejected on direct `fetchWithRetry`.
+   */
+  readonly proxy?: "direct" | "instance-auth";
 }
 
-/**
- * fetch with exponential-backoff retry on 429 / 5xx. Honors `Retry-After` /
- * `Retry-After-Ms` up to `MAX_RETRY_AFTER_MS` (and never past `timeoutMs`).
- * Does NOT retry on thrown fetch errors (DNS / connection refused / network) —
- * those bubble up to the caller.
- *
- * Plugins should call this for their own wire requests instead of bare
- * `fetch` so retry policy stays consistent across the framework.
- *
- * Redirect contract (fail-closed by default):
- * - Undici is ALWAYS driven with `redirect: "manual"`, so a 3xx is never
- *   auto-followed to an unvalidated `Location` (SSRF/DNS-rebinding guard).
- * - `init.redirect === "manual"` is the caller's explicit opt-in to receive
- *   the raw 3xx `Response` (status + `Location` header intact) and to
- *   re-validate every hop itself. The framework's media ingest uses this:
- *   each `Location` goes through `validateBaseUrl` before the next request.
- * - Any other value (`"follow"`, `"error"`, or omitted) throws on a 3xx.
- *   Callers that need redirect following must therefore opt in per call;
- *   there is no permissive default.
- */
-export async function fetchWithRetry(
+async function runRetryingPluginFetch(
   input: string | URL,
-  init: RequestInit & FetchWithRetryOptions = {},
+  init: RequestInit & FetchWithRetryOptions,
+  options: { readonly useAuthProxy: boolean },
 ): Promise<Response> {
-  const { maxRetries = 3, signal, timeoutMs, redirect, ...rest } = init;
-  // Only an explicit `manual` hands 3xx responses back to the caller.
-  const returnRedirects = redirect === "manual";
+  const {
+    maxRetries = 3,
+    signal,
+    timeoutMs,
+    redirect,
+    proxy: _proxy,
+    ...rest
+  } = init;
+  // Direct fetch honors an explicit `manual` opt-in; proxy fetch refuses 3xx unconditionally.
+  const returnRedirects = !options.useAuthProxy && redirect === "manual";
 
   const url = new URL(input.toString());
   const verdict = validateBaseUrlForPlugin(url.toString());
@@ -149,22 +144,31 @@ export async function fetchWithRetry(
   }
 
   const doFetch = async (): Promise<Response> => {
+    const requestInit: RequestInit = {
+      ...rest,
+      redirect: "manual",
+      ...(effectiveSignal ? { signal: effectiveSignal } : {}),
+    };
+    if (options.useAuthProxy) {
+      // Proxy resolves destination DNS at the proxy hop; URL string SSRF checks
+      // and unconditional 3xx refusal still run in this process.
+      const response = await outboundFetch(input, requestInit);
+      if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel().catch(() => {});
+        throw new Error(
+          `baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,
+        );
+      }
+      return response;
+    }
+
     // A fresh resolution + dispatcher per attempt prevents a retry from
     // following changed DNS to an address that was never policy-checked.
     const dispatcher = await createPinnedDispatcher(url);
     try {
-      // Only the initial URL is SSRF-checked; a redirect Location is not, and
-      // undici skips the pinning lookup for an IP-literal host. Follow the core
-      // provider path: force manual redirect handling so a `302 Location:
-      // http://169.254.169.254/…` can't reach internal hosts, then fail closed
-      // on a 3xx unless the caller opted into validating hops itself.
       const response = await fetchWithDispatcher(
         input,
-        {
-          ...rest,
-          redirect: "manual",
-          ...(effectiveSignal ? { signal: effectiveSignal } : {}),
-        },
+        requestInit,
         dispatcher,
       );
       if (!returnRedirects && response.status >= 300 && response.status < 400) {
@@ -209,4 +213,26 @@ export async function fetchWithRetry(
   } finally {
     if (timeoutTimer !== undefined) clearTimeout(timeoutTimer);
   }
+}
+
+export async function fetchWithRetry(
+  input: string | URL,
+  init: RequestInit & FetchWithRetryOptions = {},
+): Promise<Response> {
+  if (init.proxy === "instance-auth") {
+    throw new Error("net.authProxy is not permitted on direct fetchWithRetry");
+  }
+  return runRetryingPluginFetch(input, init, { useAuthProxy: false });
+}
+
+/**
+ * Retrying fetch for bounded `net.authProxy` requests in `personal` mode:
+ * validates the target URL against SSRF policy, routes through the configured
+ * host proxy without local DNS pinning, and unconditionally rejects 3xx hops.
+ */
+export async function fetchWithAuthProxyRetry(
+  input: string | URL,
+  init: RequestInit & FetchWithRetryOptions = {},
+): Promise<Response> {
+  return runRetryingPluginFetch(input, init, { useAuthProxy: true });
 }

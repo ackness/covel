@@ -9,6 +9,8 @@ export function assertNoPrivateConfig(serverRoot) {
       name.startsWith("llm.toml.") ||
       name === "config.toml" ||
       name === "keys.env" ||
+      name === "secrets" ||
+      name === "instance-id" ||
       name === ".env" ||
       name.startsWith(".env."),
   );

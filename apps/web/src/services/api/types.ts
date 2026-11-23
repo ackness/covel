@@ -95,6 +95,9 @@ export interface PresetSummary {
   id: string;
   name: string;
   provider: string;
+  source?: string;
+  account?: string;
+  credentialSource?: import("@covel/shared/platform").ProviderSourceCredentialStatus;
   model: string;
   enabled: boolean;
   isDefault: boolean;

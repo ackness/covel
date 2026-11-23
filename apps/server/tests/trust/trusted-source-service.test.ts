@@ -16,6 +16,7 @@ import { createMemoryStore } from "@covel/store/memory";
 import { createServerSettings } from "../../src/lib/server-settings.js";
 import { createTrustedSourceService } from "../../src/trust/trusted-source-service.js";
 import * as files from "../../src/routes/api/install/package-files.js";
+import * as packageSignature from "../../src/trust/package-signature.js";
 import { id, packageFixture } from "./fixtures.js";
 vi.mock("node:fs/promises", async (original) => {
   const actual = await original<typeof import("node:fs/promises")>();
@@ -449,4 +450,27 @@ it("retries an incomplete inventory even when receipt verification succeeds with
     integrity: "verified",
     autoApproved: true,
   });
+});
+
+it("does not coalesce a post-mutation caller onto a stale pre-mutation inspection", async () => {
+  const { directory, trust } = await build();
+  const arrived = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const original = packageSignature.packageStatSignature;
+  vi.spyOn(packageSignature, "packageStatSignature").mockImplementationOnce(
+    async (targetDir) => {
+      const preWriteSignature = await original(targetDir);
+      arrived.resolve();
+      await release.promise;
+      return preWriteSignature;
+    },
+  );
+  const first = trust.ensureFresh(id);
+  await arrived.promise;
+  await writeFile(path.join(directory, "entry.js"), "export default () => {};");
+  const second = trust.ensureFresh(id);
+  release.resolve();
+  await Promise.all([first, second]);
+  expect(trust.isDeclarative(id)).toBe(false);
+  expect(trust.executionMode(id)).toBe("code");
 });

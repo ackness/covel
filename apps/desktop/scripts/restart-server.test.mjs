@@ -108,6 +108,7 @@ test("restart IPC navigates the native window only after the sidecar is ready", 
     export const getMainWindow = () => window;
     export const getMainWindowUrl = () => (window.destroyed ? undefined : window.url);
     export const navigateToApp = (win, port) => { navigation.push(port); };
+    export const openExternalUrl = (url) => { openedPaths.push(url); };
     export const buildAppMenu = () => {};
     export const writeLog = () => {};
     export const patchKeysEnv = () => {};

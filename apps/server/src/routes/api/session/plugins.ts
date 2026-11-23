@@ -68,14 +68,36 @@ export function authorizedSessionPluginIds(
   gate?: RpcApprovalGate,
   session?: SessionRecord,
   trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService,
+  permissionOptions?: {
+    readonly permissionService?: import("../../../trust/permission-service.js").PermissionService;
+    readonly allowCommunityCode?: boolean;
+  },
 ): string[] {
   return [...registry.getAll().values()]
-    .filter(
-      (entry) =>
-        getPluginTrustInfo(entry.id, entry.source).autoLoad ||
-        Boolean(trustedSources?.isDeclarative(entry.id)) ||
-        Boolean(session && gate && hasServerCodeGrant(gate, session, entry.id)),
-    )
+    .filter((entry) => {
+      if (getPluginTrustInfo(entry.id, entry.source).autoLoad) return true;
+      if (trustedSources?.isDeclarative(entry.id)) {
+        return permissionOptions?.permissionService
+          ? permissionOptions.permissionService.isCapabilityAllowedForPlugin(
+              "plugin.declarative",
+              entry.id,
+            )
+          : true;
+      }
+      if (session && gate && hasServerCodeGrant(gate, session, entry.id)) {
+        return true;
+      }
+      if (
+        !session &&
+        permissionOptions?.allowCommunityCode !== false &&
+        permissionOptions?.permissionService?.hasPersistentServerCodeGrant(
+          entry.id,
+        )
+      ) {
+        return true;
+      }
+      return false;
+    })
     .map((entry) => entry.id);
 }
 export function resolveSessionPluginPlan(
@@ -217,6 +239,7 @@ export function buildAvailablePluginList(
   options: {
     authorized?: readonly string[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
+    permissionService?: import("../../../trust/permission-service.js").PermissionService;
     isEntryPublished?: (pluginId: string) => boolean;
     isServerCodeApproved?: (pluginId: string) => boolean;
   } = {},
@@ -242,11 +265,14 @@ export function buildAvailablePluginList(
       serverCodeApproved: codeApproved,
       ...(codeApproved && entry.source !== "builtin"
         ? {
-            serverCodeApprovedBy: options.trustedSources?.implicitGrant({
-              pluginId: entry.id,
-            })
-              ? ("trusted-source" as const)
-              : ("session" as const),
+            serverCodeApprovedBy:
+              options.permissionService?.hasPersistentServerCodeGrant(entry.id)
+                ? ("persistent-grant" as const)
+                : options.trustedSources?.implicitGrant({
+                      pluginId: entry.id,
+                    })
+                  ? ("trusted-source" as const)
+                  : ("session" as const),
           }
         : {}),
       active: isActive,
@@ -278,6 +304,7 @@ export function buildSessionPluginView(
     authorized: readonly string[];
     paused?: readonly import("@covel/runtime").PluginFaultState[];
     trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService;
+    permissionService?: import("../../../trust/permission-service.js").PermissionService;
     isEntryPublished?: (pluginId: string) => boolean;
     isServerCodeApproved?: (pluginId: string) => boolean;
   },

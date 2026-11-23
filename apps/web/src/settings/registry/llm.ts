@@ -16,6 +16,8 @@ const providerModelProfileSchema = z.object({
     .pipe(z.string().min(1)),
   name: z.string(),
   provider: z.string().optional(),
+  source: z.string().min(1).optional(),
+  account: z.string().min(1).optional(),
   baseUrl: z.string(),
   protocol: z.string().optional(),
   models: z.array(

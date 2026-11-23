@@ -19,7 +19,7 @@ import {
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
 import { errorBody, listBody, okBody } from "../api-error.js";
-import { requireAccess } from "../host-profile.js";
+import { hostProfileOf, requireAccess } from "../host-profile.js";
 import { parseSlotOverrides } from "../middleware/per-request-llm.js";
 import { hasResolvedRuntimeJobCredentials } from "../runtime-job-readiness.js";
 
@@ -77,9 +77,14 @@ export function createModelDbRoutes(
         c.req.header("X-Slot-Config"),
       )?.customPresets;
       const target = presets?.length === 1 ? presets[0] : undefined;
+      const providerMatches =
+        target !== undefined &&
+        (provider === undefined
+          ? target.source !== undefined
+          : target.provider === provider || target.source === provider);
       if (
         !target ||
-        target.provider !== provider ||
+        !providerMatches ||
         target.model !== model ||
         target.protocol !== protocol
       ) {
@@ -91,24 +96,36 @@ export function createModelDbRoutes(
         );
       }
       serverCredentialsAvailable = false;
-      try {
-        const resolution = ai.providerRegistry.resolve({
-          provider: target.provider,
-          baseUrl: target.baseUrl,
-          protocol: target.protocol,
-          requestScoped: true,
-        });
-        const resolved = ai.providerRegistry.withApiKeys(
-          resolution,
-          {},
-          target.provider,
-          apiKeys,
-        );
-        serverCredentialsAvailable = hasResolvedRuntimeJobCredentials(
-          resolved.config,
-        );
-      } catch {
-        // A missing provider/wire is not evidence that a key can be used.
+      if (target.source) {
+        if (
+          hostProfileOf(c).capabilities["plugin.providerSource"] !== "disabled"
+        ) {
+          const inspected = ai
+            .getProviderSourceResolver?.()
+            ?.inspectSync(target.source, target.account);
+          serverCredentialsAvailable = Boolean(inspected?.ready);
+        }
+      } else if (target.provider) {
+        const targetProvider = target.provider;
+        try {
+          const resolution = ai.providerRegistry.resolve({
+            provider: targetProvider,
+            baseUrl: target.baseUrl,
+            protocol: target.protocol,
+            requestScoped: true,
+          });
+          const resolved = ai.providerRegistry.withApiKeys(
+            resolution,
+            {},
+            targetProvider,
+            apiKeys,
+          );
+          serverCredentialsAvailable = hasResolvedRuntimeJobCredentials(
+            resolved.config,
+          );
+        } catch {
+          // A missing provider/wire is not evidence that a key can be used.
+        }
       }
     }
     const result = resolveCapabilityDetails(

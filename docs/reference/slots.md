@@ -172,7 +172,8 @@ model    = "glm-5"
 
 - 请求追踪只记录白名单里的请求体字段（`packages/ai-provider/src/adapters/http/request-observation.ts` 的 `MODEL_FIELDS`）。新协议如果使用新的顶层字段名，要在那里加上，否则 trace 里看不到。
 - 插件 SDK 不能依赖 `@covel/shared`，自己保留一份内置协议 ID 类型（`PluginProviderProtocol`）。两份不一致时 `packages/shared/src/provider-protocols.ts` 编译失败。
-- **由插件提供一种协议**：不改框架。插件用 `covel.registerWires({ text: [...] })` 注册，模型的 `protocol` 写 `<pluginId>/<wireId>`。只有启用了该插件的会话能选用它，否则以配置错误失败。没有会话的请求（如连接测试）可以用内置插件的协议，`self` 部署下也可以用社区插件的。见 [plugin-extensions.md § 文本协议 wire](./plugin-extensions.md#文本协议-wire)。
+- 插件用 `covel.registerWires({ text: [...] })` 注册协议，模型的 `protocol` 写 `<pluginId>/<wireId>`。会话可通过启用插件或选择该插件获准的[实例供应商源](#插件托管供应商源-providersource1)来使用其协议。没有会话的请求（如连接测试）可以用内置插件的协议，`self` 部署下也可以用社区插件的。见[文本协议 wire](./plugin-extensions.md#文本协议-wire)。
+- **由插件托管一个供应商凭据源**：见下文[插件托管供应商源](#插件托管供应商源-providersource1)。
 
 ## API Key 流转
 
@@ -192,7 +193,7 @@ model    = "glm-5"
 - 只改同一来源下的路径时，默认凭据保留。
 - 解析请求不会修改已注册的配置。
 
-前端对自定义连接的服务端凭据就绪判断，使用[模型查询](./api.md#模型数据库model-db)返回的精确连接结果；不能仅凭它和某个服务端 preset 的地址相同就判定可用。协议中的认证 headers 也参与判断。连接、协议或配置刷新后，旧查询结果不会用于新配置。
+前端对自定义连接的服务端凭据就绪判断，使用[模型查询](./api.md#模型数据库model-db)返回的精确连接结果；不能仅凭它和某个服务端 preset 的地址相同就判定可用。协议中的认证 headers 也参与判断。连接、协议或配置刷新后，旧查询结果不会用于新配置。绑定了 `provider.source@1` 供应商源的预设通过 `source` 与可选 `account` 字段在服务端解析短期凭据，客户端不会将这类供应商写入 `X-Provider-Keys`。
 
 ## 配置分层与前端对应
 
@@ -207,10 +208,10 @@ model    = "glm-5"
 
 | 层次           | 前端位置                   | 持久化与生效范围                                                              |
 | -------------- | -------------------------- | ----------------------------------------------------------------------------- |
-| 连接与模型     | 服务商与密钥                 | TOML 提供基础模型；`llm.providers` 保存本地连接及模型，模型可以覆盖连接的协议 |
-| 分工与模型绑定 | AI 分工                      | `[covel.<name>]` 定义基础分工；`llm.slotConfig` 里的本地选择优先              |
-| 分工参数与能力 | 生成参数、编辑能力           | `llm.paramOverrides` / `llm.capabilityOverrides` 随请求覆盖                   |
-| 任务选择分工   | 开局准备页、会话的插件列表   | `runtimeModelOverrides` 只保存“任务 → 分工”的对应关系                         |
+| 连接与模型     | 服务商与密钥               | TOML 提供基础模型；`llm.providers` 保存本地连接及模型，模型可以覆盖连接的协议 |
+| 分工与模型绑定 | AI 分工                    | `[covel.<name>]` 定义基础分工；`llm.slotConfig` 里的本地选择优先              |
+| 分工参数与能力 | 生成参数、编辑能力         | `llm.paramOverrides` / `llm.capabilityOverrides` 随请求覆盖                   |
+| 任务选择分工   | 开局准备页、会话的插件列表 | `runtimeModelOverrides` 只保存“任务 → 分工”的对应关系                         |
 
 设置保存在哪里：
 
@@ -222,7 +223,7 @@ model    = "glm-5"
 
 - 模型按连接 ID 归组，同组共用 API Key 和价格倍率。
 - TOML 里的模型保留各自文件里的地址和协议。本地添加的模型使用本地连接的地址，以及模型自己的协议覆盖。修改本地连接不会改动同组的 TOML 模型。
-- 模型行和分工卡片显示生效的地址、协议和配置来源。
+- 模型行和分工卡片显示生效的地址、协议和配置来源。当某个供应商由插件源托管时，设置页提供来源与账号选择器及绑定该来源的 Config Flow 登录入口，地址显示为只读并隐藏手动密钥输入框，凭据就绪状态优先以服务端 `credentialSource` 为准。
 
 分工选择器的规则：
 
@@ -884,6 +885,17 @@ Gemini 上的默认形状只在一个模拟 Gemini 接口的本机中转上验�
 `gateway.generateText` 和 `gateway.streamText` 都接受 `responseFormat`，并把它传给每次实际调用的适配器，包括备用模型。流式输出仍然是文本增量：`responseFormat` 不提供增量的对象解析，也不能代替调用方对完整结果的校验。
 
 agent 完成使用工具参数里的 schema，不请求 `responseFormat`、`text.format` 或 JSON MIME 输出指令。提交和纠正的契约见[完成条件](./plugins.md#agent-output-submission)；目标能力和 strict 策略见[工具提交能力](#tool-submission-capabilities)。这不会为 `gateway.generateObject` 增加纠正模型调用。
+
+## 插件托管供应商源 provider.source@1
+
+需要 OAuth、多账号池、订阅凭据交换或周期刷新令牌的模型服务商，可通过实例化作用域插件（`apiVersion: 2`、`scope: instance` 或 `both`）以通用契约 `provider.source@1` 接入，无需修改框架代码：
+
+- **声明与权限**：在根 `PLUGIN.md` 的 `contributes.providerSources` 中声明来源、协议、模式和关联的认证流。认证流也要列在 `contributes.flows`。用 `covel.registerProviderSources` 注册凭据解析，并按需提供刷新、账号列表、模型列表、用量和错误分类。`browser-private` 与托管形态在 [L1 权限天花板](./plugin-installation.md#权限与四层策略) 禁用 `plugin.providerSource`。
+- **协议**：使用内置协议，或用 [`covel.registerWires`](./plugin-extensions.md#文本协议-wire) 注册本包的文本协议，并把 `protocol` 设为 `<pluginId>/<wireId>`。省略时使用 `openai-responses-v1`。设置中的模型预设通过 `source` 选择供应商源。获准的实例插件可用自己的协议处理该源的文本请求。
+- **休眠启动与热激活**：未在 `SecretVault` 写入任何账号凭据前，按 `onFlow:*` / `onAppAction:*` 声明延迟激活的插件启动后保持休眠；完成首次认证流或已保存凭据后，重启自动预热并可刷新状态与可用模型列表。
+- **凭据与地址**：有效 `baseUrl` 的源必须与清单一致。HTTPS 模型端点需要 `net.httpDeclared` 和 `permissions.http` 中相应的请求方法。内置协议的模型请求使用 `POST`。回环模型端点还需 `network.localModels`。解析后的密钥和私有请求头用于服务端出站请求。
+- **请求塑形**：Responses 协议支持 `requestShape.endpointPath`，例如把 `/responses` 追加到 `baseUrl` 路径。提供此字段时，适配器不自动插入 `/v1`。路径需以 `/` 开头，不含查询、片段或点路径段。供应商源也可设置 `systemAs`、`omit`、`force` 和 `transform`。
+- **刷新与切换**：模型请求收到 `401` 时，同一账号的并发请求共用一次刷新。多账号源的预设省略 `account` 时优先尝试默认账号，额度耗尽或认证失效时可切换到其他就绪账号。指定 `account` 时使用该账号及预设配置的备用目标。网关检查来源声明的 `modes`。
 
 ## Provider 流式响应
 

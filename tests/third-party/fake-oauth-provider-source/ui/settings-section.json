@@ -1,0 +1,45 @@
+{
+  "id": "fake-oauth-settings",
+  "label": "Fake Subscription Accounts",
+  "sectionGroup": "llm",
+  "dataSource": {
+    "source": "instance.data",
+    "namespace": "accounts"
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": "Manage authenticated accounts for Fake Subscription."
+        }
+      },
+      {
+        "component": "Button",
+        "props": { "label": "Sign in (OAuth)" },
+        "on": {
+          "click": {
+            "action": "openFlow",
+            "params": {
+              "flowId": "oauth-sign-in"
+            }
+          }
+        }
+      },
+      {
+        "component": "Button",
+        "props": { "label": "Import Token" },
+        "on": {
+          "click": {
+            "action": "openFlow",
+            "params": {
+              "flowId": "paste-import"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

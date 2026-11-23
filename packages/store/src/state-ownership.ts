@@ -51,6 +51,21 @@ export const KERNEL_TABLE_OWNERSHIP: Readonly<
     checkpoint: "not-applicable",
     fork: "not-applicable",
   },
+  plugin_grants: {
+    owner: "kernel",
+    scope: "global",
+    snapshot: "not-applicable",
+    checkpoint: "not-applicable",
+    fork: "not-applicable",
+  },
+  instance_data: {
+    owner: "plugin",
+    scope: "global",
+    snapshot: "not-applicable",
+    checkpoint: "not-applicable",
+    fork: "not-applicable",
+    note: "Non-secret instance-scoped plugin KV; secrets never live in the database.",
+  },
   sessions: {
     owner: "kernel",
     scope: "session",

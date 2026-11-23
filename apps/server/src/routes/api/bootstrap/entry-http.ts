@@ -1,7 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
+import {
+  fetchWithAuthProxyRetry,
+  fetchWithRetry,
+  validateBaseUrlForPlugin,
+} from "@covel/ai-provider";
 import { enforceHttpPermissions, type PluginAPI } from "@covel/runtime";
-import type { HttpPermissionDecl } from "@covel/shared";
+import { isLoopbackBaseUrl, type HttpPermissionDecl } from "@covel/shared";
 
 type PluginHttp = PluginAPI["http"];
 
@@ -13,6 +17,7 @@ type PluginHttp = PluginAPI["http"];
 const wireEndpoints = new AsyncLocalStorage<{
   readonly pluginId: string;
   readonly origin: string;
+  readonly sourceBacked: boolean;
 }>();
 
 function originOf(input: string | URL): string | undefined {
@@ -34,7 +39,18 @@ export function withWireEndpoint<T>(
       ? Reflect.get(config, "baseUrl")
       : undefined;
   const origin = typeof baseUrl === "string" ? originOf(baseUrl) : undefined;
-  return origin ? wireEndpoints.run({ pluginId, origin }, fn) : fn();
+  return origin
+    ? wireEndpoints.run(
+        {
+          pluginId,
+          origin,
+          sourceBacked: Boolean(
+            Reflect.get(config as object, "credentialSource"),
+          ),
+        },
+        fn,
+      )
+    : fn();
 }
 
 /**
@@ -46,6 +62,11 @@ export function withWireEndpoint<T>(
 export function createEntryHttp(
   pluginId: string,
   httpPermissions: readonly HttpPermissionDecl[],
+  options?: {
+    readonly canUseDeclaredHttp?: () => boolean;
+    readonly canUseAuthProxy?: () => boolean;
+    readonly canUseLocalModels?: () => boolean;
+  },
 ): PluginHttp {
   const raw: PluginHttp = {
     fetchWithRetry,
@@ -55,15 +76,44 @@ export function createEntryHttp(
     httpPermissions,
     runtimeId: pluginId,
   });
+  const proxyChecked = enforceHttpPermissions(
+    {
+      validateBaseUrl: raw.validateBaseUrl,
+      fetchWithRetry: fetchWithAuthProxyRetry,
+    },
+    {
+      httpPermissions,
+      runtimeId: pluginId,
+    },
+  );
   return {
     validateBaseUrl: raw.validateBaseUrl,
-    fetchWithRetry(input, init) {
+    async fetchWithRetry(input, init) {
       const endpoint = wireEndpoints.getStore();
       if (
+        init?.proxy !== "instance-auth" &&
         endpoint?.pluginId === pluginId &&
-        originOf(input) === endpoint.origin
-      )
+        originOf(input) === endpoint.origin &&
+        (!endpoint.sourceBacked ||
+          (isLoopbackBaseUrl(endpoint.origin) &&
+            options?.canUseLocalModels?.()))
+      ) {
         return raw.fetchWithRetry(input, init);
+      }
+      if (options?.canUseDeclaredHttp?.() === false) {
+        throw new Error(
+          `Capability "net.httpDeclared" is not allowed for plugin "${pluginId}"`,
+        );
+      }
+      if (init?.proxy === "instance-auth") {
+        if (!options?.canUseAuthProxy?.()) {
+          throw new Error(
+            `Capability "net.authProxy" is not allowed for plugin "${pluginId}"`,
+          );
+        }
+        const { proxy: _proxy, ...rest } = init;
+        return proxyChecked.fetchWithRetry(input, rest);
+      }
       return checked.fetchWithRetry(input, init);
     },
   };
