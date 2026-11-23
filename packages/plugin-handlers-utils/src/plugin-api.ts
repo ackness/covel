@@ -1482,6 +1482,7 @@ export interface PluginProviderSourceCredentialStatus {
 }
 
 export interface PluginProviderSourceRequestShape {
+  readonly endpointPath?: string;
   readonly omit?: readonly string[];
   readonly force?: Readonly<Record<string, unknown>>;
   readonly systemAs?: "instructions" | "input";

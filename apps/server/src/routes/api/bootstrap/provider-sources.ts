@@ -28,6 +28,7 @@ import {
 } from "@covel/shared";
 import {
   isAllowedProviderSourceBaseUrl,
+  isValidProviderSourceEndpointPath,
   parseQualifiedProviderSourceId,
   providerSourceIdSchema,
   providerSourceSupportsMode,
@@ -435,6 +436,19 @@ export function createProviderSourceHost(
         code: "CONFIG_ERROR",
         provider: declared.qualifiedId,
         message: `Provider source "${declared.qualifiedId}" baseUrl origin does not match manifest declared baseUrl`,
+        retriable: false,
+      });
+    }
+
+    const endpointPath = resolved.requestShape?.endpointPath;
+    if (
+      endpointPath !== undefined &&
+      !isValidProviderSourceEndpointPath(endpointPath)
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: declared.qualifiedId,
+        message: `Provider source "${declared.qualifiedId}" returned invalid requestShape.endpointPath`,
         retriable: false,
       });
     }

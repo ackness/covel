@@ -119,4 +119,35 @@ describe("startLoopbackCallbackSession", () => {
     await session.close();
     await session.close();
   });
+
+  it("accepts IPv6 ::1 callback connections when ::1 loopback is available and closes both listeners afterwards", async () => {
+    const session = await startLoopbackCallbackSession({
+      path: "/auth/callback",
+    });
+    sessions.push(session);
+
+    const waitPromise = session.waitForCallback();
+    let ipv6Delivered = false;
+    try {
+      const res = await fetch(
+        `http://[::1]:${session.port}/auth/callback?code=v6-code&state=s6`,
+      );
+      expect(res.status).toBe(200);
+      ipv6Delivered = true;
+    } catch {
+      // Environments without ::1 loopback fall back cleanly to 127.0.0.1.
+      const res = await fetch(`${session.callbackUrl}?code=v4-code&state=s4`);
+      expect(res.status).toBe(200);
+    }
+
+    const result = await waitPromise;
+    expect(result.query.code).toBe(ipv6Delivered ? "v6-code" : "v4-code");
+    await new Promise((r) => setTimeout(r, 25));
+    await expect(fetch(session.callbackUrl)).rejects.toThrow();
+    if (ipv6Delivered) {
+      await expect(
+        fetch(`http://[::1]:${session.port}/auth/callback`),
+      ).rejects.toThrow();
+    }
+  });
 });

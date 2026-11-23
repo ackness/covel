@@ -893,7 +893,7 @@ agent 完成使用工具参数里的 schema，不请求 `responseFormat`、`text
 - **声明与权限**：根 `PLUGIN.md` 在 `contributes.providerSources` 声明来源、`protocol`（必须是框架已知协议）、`modes` 与关联认证 `flows`（须在 `contributes.flows` 声明），并在 `entry` 通过 `covel.registerProviderSources` 注册解析、列表、用量查询与可选的错误分类回调。访问 `covel.secrets`、`permissions.http` 与实例级来源受 [L1–L3 权限策略](./plugin-installation.md#权限与四层策略) 约束；`browser-private` 与托管形态在 L1 永久禁用 `plugin.providerSource`。
 - **休眠启动与热激活**：未在 `SecretVault` 写入任何账号凭据前，按 `onFlow:*` / `onAppAction:*` 声明延迟激活的插件启动后保持休眠；完成首次认证流或已保存凭据后，重启自动预热并可刷新状态与可用模型列表。
 - **凭据隔离与来源锁定**：插件返回的有效 `baseUrl` 必须命中该包 `permissions.http` 声明的允许源，解析后的密钥与私有请求头只留在服务端内存和单次出站请求中，绝不写入 `X-Provider-Keys`、Web 响应、trace 或错误文本。
-- **协议塑形与故障切换**：供应商源可返回声明式 `requestShape`（例如在 `openai-responses` 协议上设置 `instructions`、`store: false`、`omitTemperature`、`omitMaxOutputTokens`，或开启 `forceStream` 让 `generateText` / `generateObject` 走服务端 SSE 聚合）；遇到 `401` 时按单飞互斥刷新一次并重试请求，多账号源遇到 `429` 或认证失效时按账号顺序自动切换，并强制校验来源允许的模式集合（`text`、`structured`、`stream`、`vision`、`tools`、`embed`、`image`、`audio`）。
+- **协议塑形与故障切换**：供应商源可返回声明式 `requestShape`（如 `endpointPath` 覆盖非 `/v1` 路径、`systemAs: "instructions"` 提升系统提示、`omit` 删除不受支持参数、`force` 强制 `store: false` / `stream: true` 以开启 `generateText` / `generateObject` 的服务端 SSE 聚合，以及可选 `transform`）；遇到 `401` 时按单飞互斥刷新一次并重试请求，多账号源遇到 `429` 或认证失效时按账号顺序自动切换，并强制校验来源允许的模式集合（`text`、`structured`、`stream`、`vision`、`tools`、`embed`、`image`、`audio`）。
 
 ## Provider 流式响应
 

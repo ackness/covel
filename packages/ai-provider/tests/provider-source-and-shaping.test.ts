@@ -526,4 +526,77 @@ describe("provider-source gateway and OpenAI Responses request shaping", () => {
       gateway.embed({ presetId: "story", values: ["embed me"] }),
     ).rejects.toMatchObject({ code: "CONFIG_ERROR" });
   });
+
+  it("uses requestShape.endpointPath verbatim without /v1 injection and rejects invalid endpointPath", async () => {
+    const adapter = createOpenAiResponsesAdapter();
+    const fetchedUrls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        fetchedUrls.push(url);
+        return Promise.resolve(
+          sseResponse([
+            {
+              type: "response.created",
+              response: { id: "resp_ep_1", model: "codex-model" },
+            },
+            { type: "response.output_text.delta", delta: "ok" },
+            {
+              type: "response.completed",
+              response: {
+                id: "resp_ep_1",
+                model: "codex-model",
+                status: "completed",
+                usage: { input_tokens: 2, output_tokens: 1 },
+              },
+            },
+          ]),
+        );
+      }),
+    );
+
+    const out = await adapter.generateText(
+      {
+        baseUrl: "https://chatgpt.com/backend-api/codex",
+        headers: { authorization: "Bearer sub-token" },
+        requestShape: {
+          endpointPath: "/responses",
+          force: { store: false, stream: true },
+          systemAs: "instructions",
+        },
+      },
+      {
+        model: "codex-model",
+        messages: [{ role: "user", content: "hi" }],
+      },
+    );
+    expect(out.text).toBe("ok");
+    expect(fetchedUrls).toEqual([
+      "https://chatgpt.com/backend-api/codex/responses",
+    ]);
+
+    for (const badPath of [
+      "responses",
+      "//evil.test/responses",
+      "/../secret",
+      "/responses?x=1",
+    ]) {
+      await expect(
+        adapter.generateText(
+          {
+            baseUrl: "https://chatgpt.com/backend-api/codex",
+            headers: { authorization: "Bearer sub-token" },
+            requestShape: {
+              endpointPath: badPath,
+              force: { store: false, stream: true },
+            },
+          },
+          {
+            model: "codex-model",
+            messages: [{ role: "user", content: "hi" }],
+          },
+        ),
+      ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
+    }
+  });
 });

@@ -69,6 +69,7 @@ function listenOn(
   server: http.Server,
   host: string,
   port: number,
+  options?: { readonly ipv6Only?: boolean },
 ): Promise<number> {
   return new Promise((resolve, reject) => {
     const onError = (error: unknown) => {
@@ -91,7 +92,22 @@ function listenOn(
     };
     server.once("error", onError);
     server.once("listening", onListening);
-    server.listen(port, host);
+    server.listen({
+      host,
+      port,
+      ...(options?.ipv6Only ? { ipv6Only: true } : {}),
+    });
+  });
+}
+
+function closeHttpServer(target: http.Server | undefined): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!target || !target.listening) {
+      resolve();
+      return;
+    }
+    target.closeAllConnections?.();
+    target.close(() => resolve());
   });
 }
 
@@ -153,6 +169,8 @@ export async function startLoopbackCallbackSession(
     }
   };
 
+  let ipv6Server: http.Server | undefined;
+
   const closeServer = (): Promise<void> => {
     if (closePromise) return closePromise;
     cleanupHooks();
@@ -162,20 +180,19 @@ export async function startLoopbackCallbackSession(
         new LoopbackCallbackError("closed", "Loopback callback session closed"),
       );
     }
-    closePromise = new Promise<void>((resolve) => {
-      if (!server.listening) {
-        resolve();
-        return;
-      }
-      server.closeAllConnections?.();
-      server.close(() => resolve());
-    });
+    closePromise = Promise.all([
+      closeHttpServer(server),
+      closeHttpServer(ipv6Server),
+    ]).then(() => {});
     return closePromise;
   };
 
   let boundPort = 0;
 
-  const server = http.createServer((req, res) => {
+  const handleRequest = (
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+  ): void => {
     if (settled) {
       res.writeHead(410, {
         "Content-Type": "text/plain; charset=utf-8",
@@ -239,7 +256,9 @@ export async function startLoopbackCallbackSession(
       resolveWait({ callbackUrl, query });
       void closeServer();
     });
-  });
+  };
+
+  const server = http.createServer(handleRequest);
 
   const onAbort = (): void => {
     if (!settled) {
@@ -282,6 +301,16 @@ export async function startLoopbackCallbackSession(
   } catch (error) {
     await closeServer();
     throw error;
+  }
+
+  // Best-effort companion listener on ::1 so `localhost` OAuth redirects work
+  // even when the OS resolves `localhost` to IPv6 first.
+  const candidateIpv6Server = http.createServer(handleRequest);
+  try {
+    await listenOn(candidateIpv6Server, "::1", boundPort, { ipv6Only: true });
+    ipv6Server = candidateIpv6Server;
+  } catch {
+    await closeHttpServer(candidateIpv6Server);
   }
 
   options.signal?.addEventListener("abort", onAbort, { once: true });

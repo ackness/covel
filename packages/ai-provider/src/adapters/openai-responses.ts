@@ -14,6 +14,7 @@ import type {
 } from "../types.js";
 import { AiProviderError } from "../errors.js";
 import type { ProviderSourceRequestShape } from "../provider-source.js";
+import { isValidProviderSourceEndpointPath } from "@covel/shared/platform";
 import {
   readResponsesReasoning,
   ResponsesReasoningAccumulator,
@@ -467,6 +468,22 @@ function refusesEncryptedReasoning(text: string): boolean {
   }
 }
 
+function responsesTargetPath(
+  config: ProviderConfig,
+): string | { append: string } {
+  const endpointPath = config.requestShape?.endpointPath;
+  if (endpointPath === undefined) return "/responses";
+  if (!isValidProviderSourceEndpointPath(endpointPath)) {
+    throw new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: `Invalid provider source requestShape.endpointPath "${String(endpointPath)}".`,
+      provider: "openai-responses",
+      retriable: false,
+    });
+  }
+  return { append: endpointPath };
+}
+
 /**
  * Send a Responses request. A model without reasoning rejects the request for
  * encrypted reasoning; the request is then sent once more without it, and the
@@ -476,7 +493,8 @@ async function postResponses(
   config: ProviderConfig,
   body: Record<string, unknown>,
 ): Promise<Response> {
-  const response = await postJson(config, "/responses", body);
+  const targetPath = responsesTargetPath(config);
+  const response = await postJson(config, targetPath, body);
   const include = Array.isArray(body.include) ? body.include : [];
   if (!include.includes(ENCRYPTED_REASONING) || response.status !== 400)
     return response;
@@ -494,7 +512,7 @@ async function postResponses(
   }
   const { include: _include, ...rest } = body;
   const kept = include.filter((entry) => entry !== ENCRYPTED_REASONING);
-  const retried = await postJson(config, "/responses", {
+  const retried = await postJson(config, targetPath, {
     ...rest,
     ...(kept.length ? { include: kept } : {}),
   });

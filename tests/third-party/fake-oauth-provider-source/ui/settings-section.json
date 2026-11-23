@@ -20,10 +20,9 @@
         "component": "Button",
         "props": { "label": "Sign in (OAuth)" },
         "on": {
-          "press": {
-            "action": "startFlow",
+          "click": {
+            "action": "openFlow",
             "params": {
-              "pluginId": "fake-oauth-provider-source",
               "flowId": "oauth-sign-in"
             }
           }
@@ -33,10 +32,9 @@
         "component": "Button",
         "props": { "label": "Import Token" },
         "on": {
-          "press": {
-            "action": "startFlow",
+          "click": {
+            "action": "openFlow",
             "params": {
-              "pluginId": "fake-oauth-provider-source",
               "flowId": "paste-import"
             }
           }

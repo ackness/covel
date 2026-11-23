@@ -75,6 +75,20 @@ export function isAllowedProviderSourceBaseUrl(url: string): boolean {
   }
 }
 
+const MAX_ENDPOINT_PATH_LENGTH = 256;
+
+/**
+ * Validates a relative endpoint path appended verbatim to a provider source's
+ * declared `baseUrl` (rejects query/fragment/backslash/traversal/protocol-relative paths).
+ */
+export function isValidProviderSourceEndpointPath(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  if (value.length < 1 || value.length > MAX_ENDPOINT_PATH_LENGTH) return false;
+  if (!value.startsWith("/") || value.startsWith("//")) return false;
+  if (/[?#\\\s]/.test(value)) return false;
+  return !value.split("/").includes("..");
+}
+
 const authFlowRefSchema = createPlatformIdSchema("Auth flow ID");
 
 export const providerSourceContributionSchema = z.strictObject({
@@ -173,6 +187,11 @@ export interface ProviderSourceUsageSummary {
 }
 
 export interface ProviderSourceRequestShape {
+  /**
+   * Relative path appended verbatim to `baseUrl` (e.g. `"/responses"` for
+   * non-`/v1` backends). When omitted, the adapter's default path logic applies.
+   */
+  readonly endpointPath?: string;
   readonly omit?: readonly string[];
   readonly force?: Readonly<Record<string, unknown>>;
   readonly systemAs?: "instructions" | "input";
