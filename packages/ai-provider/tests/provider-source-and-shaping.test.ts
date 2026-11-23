@@ -5,6 +5,7 @@ import type { ModelProviderAdapter } from "../src/adapters/adapter.js";
 import type { ProviderSourceResolver } from "../src/provider-source.js";
 import {
   AiProviderError,
+  attachSourceWireErrorContext,
   createGateway,
   createPresetRegistry,
   createProviderRegistry,
@@ -602,5 +603,124 @@ describe("provider-source gateway and OpenAI Responses request shaping", () => {
       ).rejects.toMatchObject({ code: "CONFIG_ERROR", retriable: false });
     }
     expect(fetchedUrls).toHaveLength(1);
+  });
+
+  it("expands multi-account presets asynchronously and passes internal wire error context to classifyError", async () => {
+    const providerRegistry = createProviderRegistry();
+    const presetRegistry = createPresetRegistry({ profiles: [], presets: [] });
+    presetRegistry.reconfigure({
+      profiles: [],
+      presets: [
+        {
+          id: "pool",
+          name: "Account Pool",
+          tier: "large",
+          provider: "custom-wire-provider",
+          source: "plug/src",
+          model: "wire-model",
+          protocol: "plug/custom-wire",
+          supportedModes: ["text"],
+          enabled: true,
+        },
+      ],
+    });
+    const slotRegistry = createSlotRegistry();
+    slotRegistry.configure({
+      slots: { story: { slotId: "story", presetId: "pool", tag: "text" } },
+    });
+
+    const seenClassificationInputs: Array<{
+      readonly statusCode?: number;
+      readonly body?: unknown;
+      readonly message: string;
+    }> = [];
+    const triedAccounts: string[] = [];
+
+    const resolver: ProviderSourceResolver = {
+      async listReadyAccounts() {
+        return ["acct-1", "acct-2"];
+      },
+      inspectSync() {
+        return {
+          sourceId: "plug/src",
+          ready: true,
+          protocol: "plug/custom-wire",
+        };
+      },
+      async resolve(req) {
+        return {
+          sourceId: req.sourceId,
+          accountId: req.accountId,
+          declaredBaseUrl: "https://sub.example.test/v1",
+          declaredProtocol: "plug/custom-wire",
+          baseUrl: "https://sub.example.test/v1",
+          protocol: "plug/custom-wire",
+          headers: { authorization: `Bearer tok-${req.accountId}` },
+          classifyError(err) {
+            seenClassificationInputs.push(err);
+            if (
+              typeof err.body === "object" &&
+              err.body !== null &&
+              Reflect.get(err.body, "code") === "insufficient_quota"
+            ) {
+              return { kind: "quota", message: "Friendly quota limit" };
+            }
+            return null;
+          },
+        };
+      },
+    };
+
+    const { registerTextWire } = await import("../src/index.js");
+    const unregister = registerTextWire(
+      {
+        id: "plug/custom-wire",
+        async generateText(config) {
+          const auth = config.headers?.authorization ?? "";
+          triedAccounts.push(auth);
+          if (auth === "Bearer tok-acct-1") {
+            const wrapped = new Error(
+              'Provider wire "plug/custom-wire" failed',
+            );
+            attachSourceWireErrorContext(wrapped, {
+              body: { code: "insufficient_quota" },
+              message: "RAW_SECRET_INTERNAL_BODY",
+            });
+            throw wrapped;
+          }
+          return {
+            text: `served:${auth}`,
+            finishReason: "stop",
+            usage: { inputTokens: 1, outputTokens: 1 },
+          };
+        },
+        async *streamText() {},
+      },
+      { pluginId: "plug", builtin: false },
+    );
+
+    try {
+      const gateway = createGateway({
+        providerRegistry,
+        presetRegistry,
+        slotRegistry,
+        getProviderSources: () => resolver,
+      });
+      const out = await gateway.generateText({
+        presetId: "story",
+        messages: [{ role: "user", content: "failover" }],
+      });
+      expect(out.text).toBe("served:Bearer tok-acct-2");
+      expect(triedAccounts).toEqual(["Bearer tok-acct-1", "Bearer tok-acct-2"]);
+      expect(seenClassificationInputs).toEqual([
+        {
+          statusCode: undefined,
+          body: { code: "insufficient_quota" },
+          message: "RAW_SECRET_INTERNAL_BODY",
+        },
+      ]);
+    } finally {
+      unregister();
+    }
   });
 });

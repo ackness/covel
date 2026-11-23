@@ -488,9 +488,10 @@ export function createGateway(deps: GatewayDependencies) {
     let lastError: AiProviderError | null = null;
     const failedAccounts = createFailedAccountTracker();
     const providerSources = activeProviderSources(deps);
-    const targets = withProviderSourceAccounts(
+    const targets = await withProviderSourceAccounts(
       resolvedTargets,
       providerSources,
+      options.signal,
     );
     const sharedState: {
       metadataTarget: string | undefined;

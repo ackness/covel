@@ -371,3 +371,35 @@ export function matchesLoopbackState(url: URL, state: string): boolean {
   const states = url.searchParams.getAll("state");
   return states.length === 1 && states[0] === state;
 }
+
+const SCHEMELESS_LOOPBACK_RE =
+  /^(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|\?|$)/i;
+
+/**
+ * Parse a user-pasted or browser-delivered OAuth callback input for loopback
+ * state verification (accepts full `http:`/`https:` URLs, quoted/`<...>`
+ * wrappers, `/path?...`, `?code=...`, and schemeless `localhost:...` pastes).
+ */
+export function parseLoopbackCallbackInput(raw: string): URL | null {
+  let cleaned = raw.trim();
+  if (
+    (cleaned.startsWith("<") && cleaned.endsWith(">")) ||
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (!cleaned) return null;
+
+  const direct = URL.parse(cleaned);
+  if (direct && (direct.protocol === "http:" || direct.protocol === "https:")) {
+    return direct;
+  }
+  if (cleaned.startsWith("/") || cleaned.startsWith("?")) {
+    return URL.parse(cleaned, "http://127.0.0.1");
+  }
+  if (SCHEMELESS_LOOPBACK_RE.test(cleaned)) {
+    return URL.parse(`http://${cleaned}`);
+  }
+  return null;
+}

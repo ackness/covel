@@ -27,6 +27,7 @@ import {
 } from "@covel/shared/platform";
 import {
   matchesLoopbackState,
+  parseLoopbackCallbackInput,
   type LoopbackCallbackSession,
 } from "../../../trust/loopback-callback.js";
 
@@ -57,6 +58,7 @@ export type ConfigFlowContextFactory = (args: {
   readonly runId: string;
   readonly signal: AbortSignal;
   readonly onLoopbackStarted: (session: LoopbackCallbackSession) => void;
+  readonly onLoopbackClosed: (session: LoopbackCallbackSession) => void;
 }) => PluginConfigFlowContext;
 
 export interface ConfigFlowEngine {
@@ -162,10 +164,14 @@ export function createConfigFlowEngine(options?: {
   readonly ttlMs?: number;
   readonly maxConcurrentRuns?: number;
   readonly now?: () => number;
+  readonly onRunCompleted?: (
+    snapshot: ConfigFlowRunSnapshot,
+  ) => Promise<void> | void;
 }): ConfigFlowEngine {
   const ttlMs = options?.ttlMs ?? DEFAULT_TTL_MS;
   const maxConcurrentRuns = options?.maxConcurrentRuns ?? MAX_CONCURRENT_RUNS;
   const now = options?.now ?? Date.now;
+  const onRunCompleted = options?.onRunCompleted;
 
   const definitions = new Map<string, ConfigFlowDefinitionEntry>();
   const runs = new Map<string, InternalFlowRun>();
@@ -277,6 +283,11 @@ export function createConfigFlowEngine(options?: {
         }
         run.loopbackSession = session;
       },
+      onLoopbackClosed: (session) => {
+        if (run.loopbackSession === session) {
+          run.loopbackSession = undefined;
+        }
+      },
     });
 
   const attachLoopbackAutoAdvance = (
@@ -300,7 +311,7 @@ export function createConfigFlowEngine(options?: {
             return;
           }
           try {
-            await applyStepLocked(
+            const snapshot = await applyStepLocked(
               run,
               {
                 stepId: run.step.stepId,
@@ -309,6 +320,14 @@ export function createConfigFlowEngine(options?: {
               },
               buildContext,
             );
+            if (snapshot.status === "completed" && onRunCompleted) {
+              await Promise.resolve(onRunCompleted(snapshot)).catch((error) => {
+                console.warn(
+                  "[config-flows] onRunCompleted hook failed:",
+                  error,
+                );
+              });
+            }
           } catch (error) {
             run.status = "failed";
             run.updatedAt = new Date(now()).toISOString();
@@ -338,9 +357,13 @@ export function createConfigFlowEngine(options?: {
     run.status = nextStatusForStep(nextStep);
     run.updatedAt = new Date(now()).toISOString();
 
-    if (run.status !== "active") {
+    if (
+      run.status !== "active" ||
+      nextStep.kind !== "browser" ||
+      nextStep.completion === "paste"
+    ) {
       await closeLoopback(run);
-    } else if (nextStep.kind === "browser" && run.loopbackSession) {
+    } else if (run.loopbackSession) {
       attachLoopbackAutoAdvance(run, buildContext);
     }
     return toSnapshot(run);
@@ -407,7 +430,9 @@ export function createConfigFlowEngine(options?: {
       run.step.kind === "browser" &&
       !payload.cancelled;
     if (completingCallback) {
-      const parsed = callbackUrl ? URL.parse(callbackUrl) : null;
+      const parsed = callbackUrl
+        ? parseLoopbackCallbackInput(callbackUrl)
+        : null;
       if (!parsed || !matchesLoopbackState(parsed, loopback.state)) {
         throw new ConfigFlowError(
           400,
@@ -416,6 +441,7 @@ export function createConfigFlowEngine(options?: {
         );
       }
     }
+    if (run.loopbackSession === loopback) run.loopbackSession = undefined;
     await loopback?.close().catch(() => {});
     if (completingCallback && !loopback.canAccept()) {
       throw new ConfigFlowError(
@@ -437,7 +463,6 @@ export function createConfigFlowEngine(options?: {
       ctx,
     );
     const nextStep = validateStep(rawStep);
-    if (run.loopbackSession === loopback) run.loopbackSession = undefined;
     return applyValidatedStep(run, nextStep, buildContext);
   };
 

@@ -1,5 +1,6 @@
 import {
   AiProviderError,
+  attachSourceWireErrorContext,
   registerImageWire,
   registerMusicWire,
   registerSpeechWire,
@@ -174,7 +175,7 @@ function namespacedTextWire(
         reportedStatus <= 599
           ? reportedStatus
           : undefined;
-      throw new AiProviderError({
+      const wrapped = new AiProviderError({
         code: statusCode === 429 ? "RATE_LIMITED" : "PROVIDER_ERROR",
         message: statusCode
           ? `Provider wire "${id}" returned HTTP ${statusCode}`
@@ -184,6 +185,20 @@ function namespacedTextWire(
           statusCode === 429 || (statusCode !== undefined && statusCode >= 500),
         ...(statusCode !== undefined ? { statusCode } : {}),
       });
+      if (error instanceof Error) {
+        const body =
+          error instanceof AiProviderError
+            ? error.details
+            : (Reflect.get(error, "body") ?? Reflect.get(error, "details"));
+        const rawMessage = error.message || undefined;
+        if (body !== undefined || rawMessage !== undefined) {
+          attachSourceWireErrorContext(wrapped, {
+            ...(body !== undefined ? { body } : {}),
+            ...(rawMessage !== undefined ? { message: rawMessage } : {}),
+          });
+        }
+      }
+      throw wrapped;
     }
   };
   return {

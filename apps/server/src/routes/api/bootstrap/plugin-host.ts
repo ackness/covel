@@ -31,6 +31,7 @@ import {
   RecentPluginServiceCalls,
   RecentPromptDiagnostics,
 } from "../plugin-diagnostics.js";
+import { invalidateAndRefreshProviderSources } from "../instance-plugin-route-helpers.js";
 import type { BootstrapOwned } from "./event-infrastructure.js";
 import type { BootstrapPluginCatalog } from "./plugin-catalog.js";
 import {
@@ -129,7 +130,17 @@ export async function createPluginHost(args: {
           : { decision: "ask" },
   });
   const appActions = createAppActionRegistry();
-  const configFlows = createConfigFlowEngine();
+  let providerSourcesRef: ProviderSourceHost | undefined;
+  const configFlows = createConfigFlowEngine({
+    onRunCompleted: (snapshot) =>
+      invalidateAndRefreshProviderSources(
+        providerSourcesRef,
+        registry.getCurrent(snapshot.pluginId),
+        snapshot.pluginId,
+        "config-flows",
+        `flow for "${snapshot.pluginId}"`,
+      ),
+  });
   const appEvents = createAppEventDispatcher({
     registry,
     store,
@@ -158,6 +169,7 @@ export async function createPluginHost(args: {
     getTrustedSources: () => trust.current,
     getInstancePlugins: () => owned.instancePlugins,
   });
+  providerSourcesRef = providerSources;
 
   const pluginFaultHost = createHostPluginFaults({ store, eventBus, registry });
   const pluginFaults = pluginFaultHost.latch;

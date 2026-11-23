@@ -106,7 +106,27 @@ describe("covel.http of a package's entry", () => {
         );
       },
     );
-    expect(sent).toEqual([url]);
+    const localUrl = "http://127.0.0.1:11434/v1/responses";
+    const localHttp = createEntryHttp("source-wire", DECLARED, {
+      canUseDeclaredHttp: () => false,
+      canUseLocalModels: () => true,
+    });
+    await withWireEndpoint(
+      "source-wire",
+      {
+        baseUrl: localUrl,
+        credentialSource: { sourceId: "source-wire/local" },
+      },
+      async () => {
+        await expect(
+          localHttp.fetchWithRetry(localUrl),
+        ).resolves.toBeInstanceOf(Response);
+        await expect(localHttp.fetchWithRetry(url)).rejects.toThrow(
+          /net\.httpDeclared/,
+        );
+      },
+    );
+    expect(sent).toEqual([url, localUrl]);
   });
 
   it("lets a community entry reach only the origins its package declares", async () => {

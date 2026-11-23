@@ -316,9 +316,10 @@ export function createRunOperation(
           ),
         );
       const resolveUsage = spec.resolveUsage ?? (() => null);
-      const targets = withProviderSourceAccounts(
+      const targets = await withProviderSourceAccounts(
         resolvedTargets,
         providerSources,
+        options?.signal,
       );
       let lastError: AiProviderError | null = null;
       const failedAccounts = createFailedAccountTracker();

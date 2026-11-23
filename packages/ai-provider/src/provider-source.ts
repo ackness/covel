@@ -17,6 +17,31 @@ export interface ProviderSourceErrorClassification {
   readonly message?: string;
 }
 
+export interface SourceWireErrorContext {
+  readonly body?: unknown;
+  readonly message?: string;
+}
+
+const sourceWireErrorContexts = new WeakMap<Error, SourceWireErrorContext>();
+
+/**
+ * Attach raw internal error details/message from a source-backed custom wire to
+ * its sanitized `AiProviderError` so same-package `classifyError()` can inspect
+ * them without exposing raw upstream text outside the package boundary.
+ */
+export function attachSourceWireErrorContext(
+  error: Error,
+  context: SourceWireErrorContext,
+): void {
+  sourceWireErrorContexts.set(error, context);
+}
+
+export function readSourceWireErrorContext(
+  error: Error,
+): SourceWireErrorContext | undefined {
+  return sourceWireErrorContexts.get(error);
+}
+
 export interface ProviderSourceAttemptContext {
   readonly sourceId: string;
   readonly approvedInstanceOwner?: string;
@@ -46,7 +71,10 @@ export interface ProviderSourceInspectResult {
 }
 
 export interface ProviderSourceResolver {
-  listReadyAccounts?(sourceId: string): readonly string[];
+  listReadyAccounts?(
+    sourceId: string,
+    signal?: AbortSignal,
+  ): readonly string[] | Promise<readonly string[]>;
   inspectSync(
     sourceId: string,
     accountId?: string,

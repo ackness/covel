@@ -150,8 +150,13 @@ async function startFakeOAuthAndResponsesServer(): Promise<FakeServerState> {
     }
 
     if (req.method === "POST" && reqUrl.pathname === "/backend-api/converse") {
+      const account =
+        typeof req.headers["x-fake-account"] === "string"
+          ? req.headers["x-fake-account"]
+          : undefined;
       state.capturedRequests.push({
         auth: req.headers.authorization,
+        ...(account ? { account } : {}),
         body: jsonBody,
       });
       if (
@@ -159,6 +164,18 @@ async function startFakeOAuthAndResponsesServer(): Promise<FakeServerState> {
       ) {
         res.writeHead(401);
         res.end();
+        return;
+      }
+      if (account && state.quotaAccounts.has(account)) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: {
+              code: "insufficient_quota",
+              message: "converse upstream secret error",
+            },
+          }),
+        );
         return;
       }
       res.writeHead(200, { "content-type": "application/json" });
@@ -507,6 +524,7 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     expect(fakeServer.capturedRequests).toEqual(
       Array.from({ length: 3 }, () => ({
         auth: "Bearer custom-wire-token",
+        account: "acct-main",
         body: { deployment: "sub-pro-1" },
       })),
     );
@@ -518,6 +536,65 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     expect(fakeServer.capturedRequests.at(-1)?.auth).toBe(
       "Bearer tok-acct-main-gen-2",
     );
+
+    // Custom wire preserves error body/message internally for same-package classifyError
+    fakeServer.quotaAccounts.add("acct-main");
+    await expect(ai.gateway.generateText(params)).rejects.toMatchObject({
+      message: expect.stringContaining(
+        "Subscription account quota temporarily exhausted",
+      ),
+    });
+    fakeServer.quotaAccounts.delete("acct-main");
+  });
+
+  it("permits loopback provider sources with network.localModels when net.httpDeclared is denied", async () => {
+    const { booted, hostApp, ai } = await bootApp();
+    await grantSourcePlugin(booted, "fake-oauth-provider-source", {
+      "net.httpDeclared": "deny",
+      "network.localModels": "allow",
+    });
+    const flowPath =
+      "/api/plugins/fake-oauth-provider-source/flows/paste-import";
+    const startRes = await hostApp.request(`${flowPath}/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    const { run } = (await startRes.json()) as {
+      run: { runId: string; step: { stepId: string } };
+    };
+    const stepRes = await hostApp.request(
+      `${flowPath}/runs/${run.runId}/step`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          stepId: run.step.stepId,
+          data: {
+            accountId: "acct-main",
+            accessToken: "local-loopback-tok",
+          },
+        }),
+      },
+    );
+    expect(stepRes.status).toBe(200);
+    const sourcesRes = await hostApp.request("/api/provider-sources");
+    expect(await sourcesRes.json()).toMatchObject({
+      sources: [
+        {
+          id: "fake-oauth-provider-source/fake-sub",
+          ready: true,
+        },
+      ],
+    });
+    await expect(
+      ai.gateway.generateText({
+        presetId: "story",
+        messages: [
+          { role: "user", content: "loopback model without public http" },
+        ],
+      }),
+    ).resolves.toMatchObject({ text: "hello from sub sse" });
   });
 
   it("handles dormant startup, OAuth & import flows, warm restart, live SSE gateway, 5-way single-flight 401 refresh, multi-account failover, origin-lock, zero leaks, and L1 ceilings", async () => {
@@ -585,6 +662,23 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
 
     const cbHttpRes = await ORIGINAL_FETCH(callbackUrl.href);
     expect(cbHttpRes.status).toBe(200);
+
+    // Auto-advance via loopback callback refreshes provider source cache immediately without GET polling
+    for (let i = 0; i < 20; i++) {
+      if (
+        dormantBoot.booted.providerSources.resolver.inspectSync(
+          "fake-oauth-provider-source/fake-sub",
+        )?.ready
+      ) {
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    expect(
+      dormantBoot.booted.providerSources.resolver.inspectSync(
+        "fake-oauth-provider-source/fake-sub",
+      ),
+    ).toMatchObject({ ready: true });
 
     let oauthPoll:
       { run: { status: string; step: { kind: string } } } | undefined;
@@ -778,6 +872,21 @@ baseUrl = "http://127.0.0.1:${port}/backend-api"
     const poolAttempts = fakeServer.capturedRequests.slice(poolStart);
     expect(poolAttempts[0]?.account).toBe("acct-main");
     expect(poolAttempts.at(-1)?.account).not.toBe("acct-main");
+    // Cold-cache multi-account failover works even immediately after invalidatePlugin()
+    liveBoot.booted.providerSources.invalidatePlugin(
+      "fake-oauth-provider-source",
+    );
+    expect(
+      liveBoot.booted.providerSources.resolver.inspectSync(
+        "fake-oauth-provider-source/fake-sub",
+      ),
+    ).toMatchObject({ ready: false, reason: "uninitialized" });
+    await expect(
+      liveBoot.ai.gateway.generateText({
+        presetId: "pool",
+        messages: [{ role: "user", content: "cold cache failover" }],
+      }),
+    ).resolves.toMatchObject({ text: "hello from sub sse" });
     fakeServer.quotaAccounts.delete("acct-main");
 
     // 7. Embed on text-only source fails fast with CONFIG_ERROR

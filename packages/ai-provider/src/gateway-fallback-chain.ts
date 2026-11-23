@@ -18,6 +18,7 @@ import { classifyProviderFailure } from "./provider-failure.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import {
   hasSameOrigin,
+  readSourceWireErrorContext,
   type ProviderSourceAttemptContext,
   type ProviderSourceResolver,
 } from "./provider-source.js";
@@ -143,21 +144,39 @@ export interface PreparedTarget {
   readonly sourceAttempt?: ProviderSourceAttemptContext;
 }
 
-export function withProviderSourceAccounts(
+export async function withProviderSourceAccounts(
   targets: readonly ResolvedTarget[],
   providerSources: ProviderSourceResolver | undefined,
-): ResolvedTarget[] {
-  return targets.flatMap((target) => {
+  signal?: AbortSignal,
+): Promise<ResolvedTarget[]> {
+  if (!providerSources?.listReadyAccounts) return [...targets];
+  const expanded: ResolvedTarget[] = [];
+  const accountCache = new Map<string, readonly string[]>();
+  for (const target of targets) {
     const preset = target.preset;
-    if (!preset?.source || preset.account) return [target];
-    const accounts = providerSources?.listReadyAccounts?.(preset.source) ?? [];
-    return accounts.length
-      ? [...new Set(accounts)].map((account) => ({
-          ...target,
-          preset: { ...preset, account },
-        }))
-      : [target];
-  });
+    if (!preset?.source || preset.account) {
+      expanded.push(target);
+      continue;
+    }
+    let accounts = accountCache.get(preset.source);
+    if (!accounts) {
+      accounts = await awaitLlmRequest(
+        Promise.resolve(
+          providerSources.listReadyAccounts(preset.source, signal),
+        ),
+        signal,
+      );
+      accountCache.set(preset.source, accounts);
+    }
+    if (accounts.length > 0) {
+      for (const account of new Set(accounts)) {
+        expanded.push({ ...target, preset: { ...preset, account } });
+      }
+    } else {
+      expanded.push(target);
+    }
+  }
+  return expanded;
 }
 
 export function preparationFailure(
@@ -421,10 +440,12 @@ function applySourceErrorClassification(
 ): unknown {
   if (!sourceAttempt?.classifyError) return error;
   const normalized = normalizeError(error, provider);
+  const wireContext =
+    error instanceof Error ? readSourceWireErrorContext(error) : undefined;
   const classified = sourceAttempt.classifyError({
     statusCode: normalized.statusCode,
-    body: normalized.details,
-    message: normalized.message,
+    body: wireContext?.body ?? normalized.details,
+    message: wireContext?.message ?? normalized.message,
   });
   if (!classified) return error;
   const code = SOURCE_ERROR_CODES[classified.kind] ?? "PROVIDER_ERROR";

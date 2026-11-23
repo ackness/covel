@@ -487,6 +487,90 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
     });
     await new Promise((r) => setTimeout(r, 25));
     await expect(fetch(runC.step.callbackUrl)).rejects.toThrow();
+
+    // (d) Closing the loopback listener and returning `completion: "paste"` detaches the host state check
+    await writePluginDir(
+      userDir,
+      "paste-fallback-plugin",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        activationEvents: ["onFlow:oauth-paste"],
+        permissions: { secrets: true, loopbackCallback: { path: "/oauth/cb" } },
+        contributes: { flows: ["oauth-paste"] },
+        entry: "./server.mjs",
+      },
+      {
+        "server.mjs": `
+          export default function (covel) {
+            const expectedState = new Map();
+            covel.registerConfigFlow("oauth-paste", {
+              requiredCapabilities: ["secrets.own"],
+              async start(_input, ctx) {
+                const loopback = await ctx.startLoopbackCallback();
+                await loopback.close();
+                const pluginState = "plugin-own-state-" + ctx.runId;
+                expectedState.set(ctx.runId, pluginState);
+                return {
+                  kind: "browser",
+                  stepId: "await-paste",
+                  title: "Paste callback",
+                  authorizeUrl: "https://auth.example/authorize?state=" + pluginState,
+                  completion: "paste",
+                  callbackUrl: "http://127.0.0.1:1455/oauth/cb",
+                };
+              },
+              async step(input, ctx) {
+                const raw = String(input.callbackUrl ?? "");
+                const url = new URL(raw.startsWith("http") ? raw : "http://" + raw);
+                if (url.searchParams.get("state") !== expectedState.get(ctx.runId)) {
+                  return { kind: "error", code: "state_mismatch", title: "Mismatch", message: "Bad state", retryable: true };
+                }
+                await ctx.secrets.set("oauth", { token: "tok-" + url.searchParams.get("code") });
+                return { kind: "done", title: "Authorized" };
+              },
+            });
+          }
+        `,
+      },
+    );
+    const bootedPaste = await bootServer();
+    await grantPlugin(bootedPaste, "paste-fallback-plugin", {
+      "plugin.communityCode": "allow",
+      "plugin.instanceScope": "allow",
+      "secrets.own": "allow",
+      "net.loopbackCallback": "allow",
+    });
+    const pasteOnlyStart = (
+      await (
+        await postJson(
+          "/api/plugins/paste-fallback-plugin/flows/oauth-paste/start",
+        )
+      ).json()
+    ).run as {
+      runId: string;
+      step: { stepId: string; authorizeUrl: string; completion: string };
+    };
+    expect(pasteOnlyStart.step.completion).toBe("paste");
+    const pluginOwnState = new URL(
+      pasteOnlyStart.step.authorizeUrl,
+    ).searchParams.get("state");
+    const pasteOnlyDone = await postJson(
+      `/api/plugins/paste-fallback-plugin/flows/oauth-paste/runs/${pasteOnlyStart.runId}/step`,
+      {
+        stepId: pasteOnlyStart.step.stepId,
+        callbackUrl: `localhost:1455/oauth/cb?code=manual77&state=${pluginOwnState}`,
+      },
+    );
+    expect(pasteOnlyDone.status).toBe(200);
+    expect(await pasteOnlyDone.json()).toMatchObject({
+      ok: true,
+      run: { status: "completed", step: { kind: "done" } },
+    });
+    expect(
+      (await bootedPaste.secretVault.get("paste-fallback-plugin", "oauth"))
+        ?.value,
+    ).toEqual({ token: "tok-manual77" });
   });
 
   it("supports device polling, import maxBytes enforcement, and confirm steps", async () => {

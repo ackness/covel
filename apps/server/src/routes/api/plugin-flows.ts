@@ -12,7 +12,10 @@ import { isCapabilityKey } from "@covel/shared/permissions";
 import { z } from "zod";
 import { errorBody } from "../../api-error.js";
 import { accessGuard } from "../../host-profile.js";
-import { startLoopbackCallbackSession } from "../../trust/loopback-callback.js";
+import {
+  startLoopbackCallbackSession,
+  type LoopbackCallbackSession,
+} from "../../trust/loopback-callback.js";
 import type { PermissionService } from "../../trust/permission-service.js";
 import type { SecretVault } from "../../trust/secret-vault.js";
 import type { TrustedSourceService } from "../../trust/trusted-source-service.js";
@@ -200,7 +203,14 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
       );
     };
 
-    return ({ pluginId: pId, flowId, runId, signal, onLoopbackStarted }) => {
+    return ({
+      pluginId: pId,
+      flowId,
+      runId,
+      signal,
+      onLoopbackStarted,
+      onLoopbackClosed,
+    }) => {
       const surface = buildPluginInstanceSurface({
         pluginId: pId,
         pluginRegistry: registry,
@@ -234,8 +244,15 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
                   signal,
                   canAccept: () => canAcceptLoopback(flowId),
                 });
-                onLoopbackStarted(session);
-                return session;
+                const managedSession: LoopbackCallbackSession = {
+                  ...session,
+                  async close() {
+                    onLoopbackClosed(managedSession);
+                    await session.close();
+                  },
+                };
+                onLoopbackStarted(managedSession);
+                return managedSession;
               },
             }
           : {}),

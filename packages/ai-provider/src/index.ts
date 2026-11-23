@@ -165,11 +165,13 @@ export {
 // Gateway
 export { createGateway, type GatewayOptions } from "./gateway.js";
 export {
+  attachSourceWireErrorContext,
   hasSameOrigin,
   type ProviderSourceAttemptContext,
   type ProviderSourceErrorClassification,
   type ProviderSourceInspectResult,
   type ProviderSourceResolver,
+  type SourceWireErrorContext,
 } from "./provider-source.js";
 
 // Image generation (pluggable wires — plugins register custom formats)

@@ -89,6 +89,17 @@ export function createEntryHttp(
   return {
     validateBaseUrl: raw.validateBaseUrl,
     async fetchWithRetry(input, init) {
+      const endpoint = wireEndpoints.getStore();
+      if (
+        init?.proxy !== "instance-auth" &&
+        endpoint?.pluginId === pluginId &&
+        originOf(input) === endpoint.origin &&
+        (!endpoint.sourceBacked ||
+          (isLoopbackBaseUrl(endpoint.origin) &&
+            options?.canUseLocalModels?.()))
+      ) {
+        return raw.fetchWithRetry(input, init);
+      }
       if (options?.canUseDeclaredHttp?.() === false) {
         throw new Error(
           `Capability "net.httpDeclared" is not allowed for plugin "${pluginId}"`,
@@ -103,15 +114,6 @@ export function createEntryHttp(
         const { proxy: _proxy, ...rest } = init;
         return proxyChecked.fetchWithRetry(input, rest);
       }
-      const endpoint = wireEndpoints.getStore();
-      if (
-        endpoint?.pluginId === pluginId &&
-        originOf(input) === endpoint.origin &&
-        (!endpoint.sourceBacked ||
-          (isLoopbackBaseUrl(endpoint.origin) &&
-            options?.canUseLocalModels?.()))
-      )
-        return raw.fetchWithRetry(input, init);
       return checked.fetchWithRetry(input, init);
     },
   };

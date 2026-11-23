@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   LoopbackCallbackError,
+  parseLoopbackCallbackInput,
   startLoopbackCallbackSession,
   type LoopbackCallbackSession,
 } from "../../src/trust/loopback-callback.js";
@@ -166,5 +167,44 @@ describe("startLoopbackCallbackSession", () => {
     await new Promise((r) => setTimeout(r, 25));
     await expect(fetch(session.callbackUrl)).rejects.toThrow();
     await expect(fetch(ipv6Url)).rejects.toThrow();
+  });
+
+  it("normalizes full, wrapped, relative, and schemeless loopback callback pastes and rejects foreign inputs", () => {
+    expect(
+      parseLoopbackCallbackInput(
+        '  "http://localhost:1455/auth/callback?code=c1&state=s1"  ',
+      )?.searchParams.get("state"),
+    ).toBe("s1");
+    expect(
+      parseLoopbackCallbackInput(
+        "<https://127.0.0.1:1455/auth/callback?code=c2&state=s2>",
+      )?.searchParams.get("code"),
+    ).toBe("c2");
+    expect(
+      parseLoopbackCallbackInput(
+        "localhost:1455/auth/callback?code=c3&state=s3",
+      )?.searchParams.get("state"),
+    ).toBe("s3");
+    expect(
+      parseLoopbackCallbackInput("[::1]:1455/auth/callback?code=c4&state=s4")
+        ?.hostname,
+    ).toBe("[::1]");
+    expect(
+      parseLoopbackCallbackInput("/auth/callback?code=c5&state=s5")?.pathname,
+    ).toBe("/auth/callback");
+    expect(
+      parseLoopbackCallbackInput("?code=c6&state=s6")?.searchParams.get(
+        "state",
+      ),
+    ).toBe("s6");
+
+    for (const bad of [
+      "",
+      "   ",
+      "evil.example/auth/callback?code=c&state=s",
+      "javascript:alert(1)?state=s",
+    ]) {
+      expect(parseLoopbackCallbackInput(bad)).toBeNull();
+    }
   });
 });

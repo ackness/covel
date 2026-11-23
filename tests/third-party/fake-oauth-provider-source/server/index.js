@@ -61,10 +61,14 @@ export default function registerFakeOauthProviderSource(covel) {
       },
     );
     if (!response.ok) {
-      await response.body?.cancel();
-      throw Object.assign(new Error("Fake Converse request failed"), {
-        statusCode: response.status,
-      });
+      const errorBody = await response.json().catch(() => null);
+      throw Object.assign(
+        new Error(errorBody?.error?.message ?? "Fake Converse request failed"),
+        {
+          statusCode: response.status,
+          ...(errorBody ? { body: errorBody } : {}),
+        },
+      );
     }
     const { answer, tokens } = await response.json();
     return { text: answer, finishReason: "stop", usage: tokens };
@@ -397,12 +401,17 @@ export default function registerFakeOauthProviderSource(covel) {
         };
       },
       classifyError(error) {
+        const bodyCode =
+          error.body && typeof error.body === "object"
+            ? error.body?.error?.code
+            : undefined;
         if (
+          bodyCode === "insufficient_quota" ||
           error.statusCode === 429 ||
           /rate_limit|quota_exceeded/i.test(error.message)
         ) {
           return {
-            kind: "rate_limited",
+            kind: bodyCode === "insufficient_quota" ? "quota" : "rate_limited",
             message: "Subscription account quota temporarily exhausted",
           };
         }

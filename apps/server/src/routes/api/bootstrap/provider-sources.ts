@@ -267,23 +267,30 @@ export function createProviderSourceHost(
 
   const hasSourceCapability = (
     permissionService: PermissionService,
-    pluginId: string,
+    declared: DeclaredSourceLookup,
   ): boolean =>
     isPluginCapabilityEffectivelyAllowed(
       permissionService,
       registry,
       "plugin.providerSource",
-      pluginId,
+      declared.pluginId,
     ) &&
-    isPluginCapabilityEffectivelyAllowed(
-      permissionService,
-      registry,
-      "net.httpDeclared",
-      pluginId,
-    );
+    (isLoopbackBaseUrl(declared.decl.baseUrl)
+      ? isPluginCapabilityEffectivelyAllowed(
+          permissionService,
+          registry,
+          "network.localModels",
+          declared.pluginId,
+        )
+      : isPluginCapabilityEffectivelyAllowed(
+          permissionService,
+          registry,
+          "net.httpDeclared",
+          declared.pluginId,
+        ));
 
   const evaluateGateSync = (
-    pluginId: string,
+    declared: DeclaredSourceLookup,
     hostProfile?: HostProfile,
   ): { readonly allowed: boolean; readonly reason?: string } => {
     const permissionService = deps.getPermissionService();
@@ -297,9 +304,9 @@ export function createProviderSourceHost(
           permissionService,
           trustedSources: deps.getTrustedSources(),
         },
-        pluginId,
+        declared.pluginId,
       ) ||
-      !hasSourceCapability(permissionService, pluginId)
+      !hasSourceCapability(permissionService, declared)
     ) {
       return { allowed: false, reason: "capability_denied" };
     }
@@ -307,7 +314,7 @@ export function createProviderSourceHost(
   };
 
   const evaluateGateAsync = async (
-    pluginId: string,
+    declared: DeclaredSourceLookup,
     hostProfile?: HostProfile,
   ): Promise<{ readonly allowed: boolean; readonly reason?: string }> => {
     const permissionService = deps.getPermissionService();
@@ -320,9 +327,9 @@ export function createProviderSourceHost(
         permissionService,
         trustedSources: deps.getTrustedSources(),
       },
-      pluginId,
+      declared.pluginId,
     );
-    if (!instanceAllowed || !hasSourceCapability(permissionService, pluginId)) {
+    if (!instanceAllowed || !hasSourceCapability(permissionService, declared)) {
       return { allowed: false, reason: "capability_denied" };
     }
     return { allowed: true };
@@ -422,7 +429,7 @@ export function createProviderSourceHost(
     const protocol = resolved.protocol ?? declaredProtocol;
 
     if (
-      !evaluateGateSync(declared.pluginId).allowed ||
+      !evaluateGateSync(declared).allowed ||
       entries.get(registryKey(declared.pluginId, declared.sourceId)) !==
         registered
     ) {
@@ -471,7 +478,13 @@ export function createProviderSourceHost(
           "network.localModels",
           declared.pluginId,
         )
-      : packageHttpPermissions(declared.entry).some(
+      : isPluginCapabilityEffectivelyAllowed(
+          deps.getPermissionService(),
+          registry,
+          "net.httpDeclared",
+          declared.pluginId,
+        ) &&
+        packageHttpPermissions(declared.entry).some(
           ({ origin, methods }) =>
             hasSameOrigin(origin, resolvedBaseUrl) &&
             (!isBuiltinProviderProtocol(protocol) || methods?.includes("POST")),
@@ -568,7 +581,7 @@ export function createProviderSourceHost(
       readonly hostProfile?: HostProfile;
     },
   ): Promise<CachedSourceStatus> => {
-    const gate = await evaluateGateAsync(declared.pluginId, opts?.hostProfile);
+    const gate = await evaluateGateAsync(declared, opts?.hostProfile);
     if (!gate.allowed) {
       const denied: CachedSourceStatus = {
         ready: false,
@@ -718,7 +731,7 @@ export function createProviderSourceHost(
         modes: declared.decl.modes ?? (["text"] as const),
       };
 
-      const gate = evaluateGateSync(declared.pluginId);
+      const gate = evaluateGateSync(declared);
       if (!gate.allowed) {
         return {
           ...baseInfo,
@@ -752,9 +765,17 @@ export function createProviderSourceHost(
       };
     },
 
-    listReadyAccounts(qualifiedId) {
-      if (lookupDeclared(qualifiedId)?.decl.accounts !== "many") return [];
-      const ready = (statusCache.get(qualifiedId)?.accounts ?? []).filter(
+    async listReadyAccounts(qualifiedId, signal) {
+      const declared = lookupDeclared(qualifiedId);
+      if (declared?.decl.accounts !== "many") return [];
+      let cached = statusCache.get(qualifiedId);
+      if (!cached) {
+        cached = await inspectDeclaredStatus(declared, {
+          allowActivation: true,
+          signal,
+        });
+      }
+      const ready = cached.accounts.filter(
         (account) => account.status === "ready",
       );
       return [
@@ -793,7 +814,7 @@ export function createProviderSourceHost(
         );
       }
 
-      const gate = await evaluateGateAsync(declared.pluginId);
+      const gate = await evaluateGateAsync(declared);
       if (!gate.allowed) {
         throw configError(
           `Provider source "${request.sourceId}" is denied by instance permissions`,
@@ -882,7 +903,7 @@ export function createProviderSourceHost(
             REFRESH_TIMEOUT_MS,
           );
           try {
-            const gate = await evaluateGateAsync(declared.pluginId);
+            const gate = await evaluateGateAsync(declared);
             if (!gate.allowed) return null;
 
             const registered = await awaitLlmRequest(
@@ -967,7 +988,7 @@ export function createProviderSourceHost(
         `Provider source "${args.sourceId}" not found`,
       );
     }
-    const gate = await evaluateGateAsync(declared.pluginId, args.hostProfile);
+    const gate = await evaluateGateAsync(declared, args.hostProfile);
     if (!gate.allowed) {
       throw new ProviderSourceHostError(
         403,
