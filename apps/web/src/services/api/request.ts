@@ -79,6 +79,8 @@ export interface RequestOptions extends RequestInit {
   retry?: boolean;
   /** Recheck the caller's lease after credentials, immediately before fetch. */
   canDispatch?: () => boolean;
+  /** Opt out of automatic `buildAiHeaders()` injection on `/api/ai/` probes that supply their own scoped headers. */
+  aiHeaders?: "default" | "none";
 }
 
 export interface ResponseSchema<T> {
@@ -212,6 +214,7 @@ async function mergeRequestHeaders(
   fetchInit: RequestInit,
   sessionId: string | undefined,
   operatorAuth: boolean | undefined,
+  aiHeaders: "default" | "none" = "default",
 ): Promise<Headers> {
   const headers = new Headers();
   const explicit = new Headers(fetchInit.headers);
@@ -219,7 +222,7 @@ async function mergeRequestHeaders(
     headers.set("Content-Type", "application/json");
   }
   for (const [name, value] of Object.entries(
-    needsProviderKeys(url) ? buildAiHeaders() : {},
+    aiHeaders !== "none" && needsProviderKeys(url) ? buildAiHeaders() : {},
   )) {
     headers.set(name, value);
   }
@@ -259,6 +262,7 @@ export async function requestResponse(
     operatorAuth,
     retry,
     canDispatch,
+    aiHeaders,
     ...fetchInit
   } = init ?? {};
   // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
@@ -270,7 +274,7 @@ export async function requestResponse(
   let headers: Headers;
   try {
     headers = await waitForHeaders(
-      mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth),
+      mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth, aiHeaders),
       fetchInit.signal,
     );
   } catch (error) {

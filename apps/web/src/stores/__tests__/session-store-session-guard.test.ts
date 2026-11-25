@@ -110,6 +110,7 @@ describe("finalizeActionExecution — stale stream", () => {
 
     expect(dispatch.mock.calls.map(([a]) => a.type)).toEqual([
       "SET_EXECUTING",
+      "SET_ADVANCE",
       "FINALIZE_HANGING_RUNTIMES",
       "CLEAR_OUTPUT_DRAFTS",
     ]);

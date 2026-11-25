@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Minimize2, Maximize2, X } from "lucide-react";
 import { PluginPanel } from "@/components/session/plugin-panel.js";
@@ -41,6 +41,10 @@ function FloatingWindowItem({
     origX: number;
     origY: number;
   } | null>(null);
+
+  const stopDrag = () => {
+    dragStartRef.current = null;
+  };
 
   const title =
     resolveDisplayText(spec.label, locale) || spec.id || win.pluginId;
@@ -90,9 +94,9 @@ function FloatingWindowItem({
             y: Math.min(Math.max(8, drag.origY + dy), maxY),
           });
         }}
-        onPointerUp={() => {
-          dragStartRef.current = null;
-        }}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={stopDrag}
         className="flex cursor-move items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2 select-none"
       >
         <span className="truncate text-xs font-medium">{title}</span>
@@ -123,25 +127,28 @@ function FloatingWindowItem({
           </button>
         </div>
       </header>
-      {!win.minimized && (
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {scope === "instance" ? (
-            <InstancePluginPanel
-              pluginId={win.pluginId}
-              panelId={spec.id}
-              spec={spec}
-              fill
-            />
-          ) : (
-            <PluginPanel
-              pluginId={win.pluginId}
-              panelId={spec.id}
-              spec={spec as unknown as Record<string, unknown>}
-              fill
-            />
-          )}
-        </div>
-      )}
+      <div
+        hidden={win.minimized}
+        className={
+          win.minimized ? "hidden" : "min-h-0 flex-1 overflow-y-auto p-3"
+        }
+      >
+        {scope === "instance" ? (
+          <InstancePluginPanel
+            pluginId={win.pluginId}
+            panelId={spec.id}
+            spec={spec}
+            fill
+          />
+        ) : (
+          <PluginPanel
+            pluginId={win.pluginId}
+            panelId={spec.id}
+            spec={spec as unknown as Record<string, unknown>}
+            fill
+          />
+        )}
+      </div>
     </section>
   );
 }
@@ -149,23 +156,39 @@ function FloatingWindowItem({
 export function FloatingWindowHost({
   scope,
   entries,
+  sessionId,
 }: {
   readonly scope: "instance" | "session";
   readonly entries: readonly UISlotEntry[];
+  readonly sessionId?: string;
 }) {
   const { openWindows } = usePlatformUiState();
-  if (openWindows.length === 0 || entries.length === 0) return null;
+  const matched =
+    openWindows.length === 0 || entries.length === 0
+      ? []
+      : openWindows.flatMap((win, index) => {
+          const entry = entries.find((item) => item.pluginId === win.pluginId);
+          const spec = entry?.specs.find((item) => {
+            if (item.id !== win.windowId) return false;
+            const specScope =
+              item.windowScope === "instance" ? "instance" : "session";
+            return specScope === scope;
+          });
+          return spec ? [{ win, index, spec }] : [];
+        });
 
-  const matched = openWindows.flatMap((win, index) => {
-    const entry = entries.find((item) => item.pluginId === win.pluginId);
-    const spec = entry?.specs.find((item) => {
-      if (item.id !== win.windowId) return false;
-      const specScope =
-        item.windowScope === "instance" ? "instance" : "session";
-      return specScope === scope;
-    });
-    return spec ? [{ win, index, spec }] : [];
-  });
+  const sessionWindowKeysRef = useRef<string[]>([]);
+  sessionWindowKeysRef.current =
+    scope === "session" ? matched.map(({ win }) => win.key) : [];
+
+  useEffect(() => {
+    if (scope !== "session") return;
+    return () => {
+      for (const key of sessionWindowKeysRef.current) {
+        closePluginWindow(key);
+      }
+    };
+  }, [scope, sessionId]);
 
   if (matched.length === 0) return null;
 

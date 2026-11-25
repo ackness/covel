@@ -309,3 +309,15 @@ it("reimports the current catalog after deleting the vault and closes old tab co
     (await new LocalDataService(vault).listWorlds()).map(({ id }) => id),
   ).toEqual(["replacement-world"]);
 });
+
+it("awaits catalog initialization before locking during updateWorld and deleteWorld", async () => {
+  const freshService = new LocalDataService(vault);
+  const updated = await freshService.updateWorld("last-train", {
+    description: "Updated directly before listing",
+  });
+  expect(updated.description).toBe("Updated directly before listing");
+
+  const deleteService = new LocalDataService(secondVault);
+  await deleteService.deleteWorld("haruka-academy");
+  expect(await vault.getWorld("haruka-academy")).toBeNull();
+});

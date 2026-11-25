@@ -82,8 +82,11 @@ export function ExecutionRecoveryNotice({
   const status = recovery?.status;
   // The server could not tell whether a turn runs; `stalled` once it gave up.
   const unavailable = status?.state === "unknown";
-  const stalled = unavailable && !!recovery?.stalled;
-  const unknown = !!recovery?.error || !status || unavailable;
+  const stalled =
+    !!recovery?.stalled && (unavailable || !!recovery?.error || !status);
+  const hydrating =
+    !!recovery?.hydrating && !status && !recovery?.error && !stalled;
+  const unknown = !hydrating && (!!recovery?.error || !status || unavailable);
   const running = status?.state === "running";
   const interrupted = status?.state === "interrupted";
   const failed = status?.state === "failed";
@@ -104,19 +107,21 @@ export function ExecutionRecoveryNotice({
           : t("session.recoveryRetry");
   const phase = stalled
     ? "stalled"
-    : unavailable
-      ? "unavailable"
-      : unknown
-        ? "unknown"
-        : running
-          ? "running"
-          : interrupted
-            ? "interrupted"
-            : stopped
-              ? "stopped"
-              : failed
-                ? "failed"
-                : "hydrating";
+    : hydrating
+      ? "hydrating"
+      : unavailable
+        ? "unavailable"
+        : unknown
+          ? "unknown"
+          : running
+            ? "running"
+            : interrupted
+              ? "interrupted"
+              : stopped
+                ? "stopped"
+                : failed
+                  ? "failed"
+                  : "hydrating";
   const { title, detail } = RECOVERY_MESSAGES[phase];
   const failedStep =
     (phase === "failed" || phase === "interrupted") && status?.turnId

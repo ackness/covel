@@ -414,4 +414,46 @@ describe("provider keys follow the bindings in use", () => {
       "unused",
     ]);
   });
+
+  it("keeps manual vendor keys when a provider-source profile shares the same vendor name", async () => {
+    rememberServerSlotProviders({
+      story: { provider: "openai" },
+    });
+    rememberServerPresetProviders([]);
+    await setProviderProfiles([
+      {
+        id: "plugin-oauth-openai",
+        name: "Plugin OAuth OpenAI",
+        provider: "openai",
+        baseUrl: "",
+        source: "oauth-plugin:openai",
+        models: [{ ref: "oauth-model", modelId: "gpt-4.1" }],
+      },
+    ]);
+    await getSettings().set("keys.plugin-oauth-openai", "should-not-leak");
+    // The provider.source profile's own id is excluded, while manual keys.openai stays intact.
+    expect(sentKeys()).toEqual(["openai"]);
+  });
+
+  it("sends only explicitly targeted providers and fails closed on unknown targets when explicitOnly is set", async () => {
+    rememberServerSlotProviders({
+      story: { provider: "deepseek" },
+    });
+    rememberServerPresetProviders([{ id: "oa", provider: "openai" }]);
+    expect(sentKeys({ explicitOnly: true, providers: ["openai"] })).toEqual([
+      "openai",
+    ]);
+    expect(sentKeys({ explicitOnly: true, slots: ["story"] })).toEqual([
+      "deepseek",
+    ]);
+    expect(
+      sentKeys({ explicitOnly: true, bindings: [{ presetId: "oa" }] }),
+    ).toEqual(["openai"]);
+    expect(
+      sentKeys({ explicitOnly: true, bindings: [{ modelRef: "mine-model" }] }),
+    ).toEqual(["mine"]);
+    expect(
+      sentKeys({ explicitOnly: true, bindings: [{ presetId: "unknown" }] }),
+    ).toEqual([]);
+  });
 });

@@ -97,7 +97,7 @@ export function LlmSlotCard({
     isRoleModelCompatible(
       {
         ...preset,
-        ...(capOverride?.output
+        ...(capOverride?.output && candidateKey(preset) === selectedKey
           ? { capability: { output: capOverride.output } }
           : {}),
       },

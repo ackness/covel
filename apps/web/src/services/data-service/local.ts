@@ -25,7 +25,7 @@ import type {
   WorldSummary,
 } from "../api.js";
 import * as api from "../api.js";
-import { isNotFound } from "../api/request.js";
+import { ApiError, isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
 import { BrowserVault } from "../storage/index.js";
 import {
@@ -102,9 +102,9 @@ function worldSnapshotJson(
   return JSON.stringify(world, (_key, value: unknown) =>
     value !== null && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(
-          Object.entries(value).sort(([left], [right]) =>
-            left.localeCompare(right),
-          ),
+          Object.entries(value)
+            .filter(([, entryValue]) => entryValue !== undefined)
+            .sort(([left], [right]) => left.localeCompare(right)),
         )
       : value,
   );
@@ -412,7 +412,8 @@ export class LocalDataService implements DataService {
   }
 
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
-    return this.vault.withWorldLock(id, "exclusive", () =>
+    const vault = await this.ready();
+    return vault.withWorldLock(id, "exclusive", () =>
       this.updateWorldNow(id, patch),
     );
   }
@@ -452,7 +453,8 @@ export class LocalDataService implements DataService {
   }
 
   async deleteWorld(id: string): Promise<void> {
-    return this.vault.withWorldLock(id, "exclusive", async () => {
+    const vault = await this.ready();
+    return vault.withWorldLock(id, "exclusive", async () => {
       const sessions = await this.listSessions(id);
       // Only clean up mirrors owned by these browser sessions. The server's
       // shared world may still be used by another browser or player.
@@ -460,18 +462,19 @@ export class LocalDataService implements DataService {
         // The exclusive world lock already excludes all session work and new
         // creation. Do not request a shared world lock recursively here.
         sessions.map((session) =>
-          this.vault.withSessionLock(session.id, () =>
+          vault.withSessionLock(session.id, () =>
             this.deleteSessionNow(session.id),
           ),
         ),
       );
-      await (await this.ready()).deleteWorld(id);
+      await vault.deleteWorld(id);
     });
   }
 
   async prepareWorldForServer(worldId: string): Promise<void> {
-    return this.vault.withWorldLock(worldId, "shared", async () => {
-      const world = await (await this.ready()).getWorld(worldId);
+    const vault = await this.ready();
+    return vault.withWorldLock(worldId, "shared", async () => {
+      const world = await vault.getWorld(worldId);
       if (!world) throw new Error(`World not found: ${worldId}`);
       await syncWorldToServer(world);
     });
@@ -755,9 +758,14 @@ export class LocalDataService implements DataService {
       try {
         await this.commitFromServerNow(sessionId, pendingActionId);
       } catch (error) {
-        // After a MemoryStore restart the pending result is gone; rebuild
-        // from the durable browser checkpoint only when the session is missing.
-        if (!isNotFound(error)) throw error;
+        // After a MemoryStore restart or unhydrated workspace the pending
+        // result is gone; rebuild from the durable browser checkpoint when the
+        // session is missing or requires a fresh checkpoint upload.
+        const checkpointReset =
+          error instanceof ApiError &&
+          error.status === 409 &&
+          error.code === "browser_checkpoint_required";
+        if (!isNotFound(error) && !checkpointReset) throw error;
         await vault.clearPendingCommit(sessionId, pendingActionId);
       }
     }

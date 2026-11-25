@@ -79,6 +79,17 @@ function areStateValuesEqual(
   return true;
 }
 
+const PLUGIN_ASSETS_PREFIX = "/plugin-assets/";
+
+function isSafePluginAssetSrc(raw: string): boolean {
+  if (!raw.startsWith(PLUGIN_ASSETS_PREFIX)) return false;
+  if (raw.includes("//") || raw.includes("\\")) return false;
+  if (/[\x00-\x1f\x7f]/.test(raw)) return false;
+  const pathOnly = raw.split(/[?#]/, 1)[0] ?? "";
+  if (/(^|\/)\.\.(\/|$)/.test(pathOnly)) return false;
+  return true;
+}
+
 export function PluginWebview(props: {
   themeSessionId?: string;
   title: string;
@@ -99,8 +110,9 @@ export function PluginWebview(props: {
 }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
+  const unsafeSrc = props.src !== undefined && !isSafePluginAssetSrc(props.src);
   const [pageStatus, setPageStatus] = useState<"loading" | "ready" | "failed">(
-    "loading",
+    unsafeSrc ? "failed" : "loading",
   );
   const [updated, setUpdated] = useState(false);
   const pageReady = useRef(false);
@@ -110,7 +122,9 @@ export function PluginWebview(props: {
   const src =
     props.src === undefined
       ? FRAME_URL
-      : `${import.meta.env.BASE_URL.replace(/\/$/, "")}${props.src}`;
+      : unsafeSrc
+        ? "about:blank"
+        : `${import.meta.env.BASE_URL.replace(/\/$/, "")}${props.src}`;
   const frameKey = JSON.stringify([src, props.html, attempt]);
   const owner = useMemo(() => ({ active: true, failed: false }), [frameKey]);
   const heartbeatTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -227,8 +241,12 @@ export function PluginWebview(props: {
 
   useEffect(() => {
     pageReady.current = false;
-    setPageStatus("loading");
     setUpdated(false);
+    if (unsafeSrc) {
+      fail();
+      return;
+    }
+    setPageStatus("loading");
     if (props.src === undefined && !props.onPageFailure) return;
     const controller = new AbortController();
     readyTimer.current = setTimeout(() => {
@@ -264,7 +282,7 @@ export function PluginWebview(props: {
       clearTimeout(readyTimer.current);
       controller.abort();
     };
-  }, [frameKey, props.src, src]);
+  }, [frameKey, props.src, src, unsafeSrc]);
 
   useEffect(() => {
     if (!props.onPageFailure) return;
@@ -281,6 +299,7 @@ export function PluginWebview(props: {
 
   // One connection per frame element; navigation retires replacement pages.
   const connect = () => {
+    if (unsafeSrc) return;
     const element = frame.current;
     const target = element?.contentWindow;
     if (!isCurrent() || !target) return;

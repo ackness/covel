@@ -14,6 +14,7 @@ import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
+import { clearUiSlots } from "@/stores/ui-slot-store.js";
 import { invalidateWorldRecord } from "@/services/world-records.js";
 import { sessionCharacters } from "@/lib/session-characters.js";
 import { bootSessionStore } from "./boot.js";
@@ -243,6 +244,7 @@ export function useBuildSessionActions({
     async (sessionId: string) => {
       await ds.deleteSession(sessionId);
       dropPluginDataSession(sessionId);
+      clearUiSlots(sessionId);
       dispatch({ type: "REMOVE_SESSION", sessionId });
     },
     [ds, dispatch],

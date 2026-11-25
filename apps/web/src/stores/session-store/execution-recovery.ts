@@ -22,6 +22,8 @@ const POLL_INTERVAL_MS = 3000;
 const MAX_FAILURE_BACKOFF_MS = 30_000;
 /** `unknown` answers in a row before automatic checks stop (about 45s). */
 export const MAX_UNKNOWN_CHECKS = 5;
+/** Consecutive transport/poll failures before automatic checks stop (~3.5m with backoff). */
+export const MAX_ERROR_CHECKS = 10;
 
 interface RecoveryOptions {
   state: SessionState;
@@ -106,6 +108,7 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
     let inFlight = false;
     let failureBackoffMs = POLL_INTERVAL_MS;
     let unknownChecks = 0;
+    let errorChecks = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const isCurrent = () =>
       !cancelled &&
@@ -141,6 +144,7 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
           );
         }
         if (!isCurrent()) return;
+        errorChecks = 0;
         unknownChecks = status.state === "unknown" ? unknownChecks + 1 : 0;
         // The server could not check: ask again, less often each time, and
         // stop after a few answers so the notice asks the player instead.
@@ -165,11 +169,18 @@ export function useExecutionRecovery(options: RecoveryOptions): void {
         }
       } catch (error) {
         if (!isCurrent()) return;
+        errorChecks += 1;
+        const stalled = errorChecks >= MAX_ERROR_CHECKS;
         dispatch({
           type: "OBSERVE_EXECUTION_STATUS",
           sessionId,
           error: error instanceof Error ? error.message : String(error),
+          ...(stalled ? { stalled: true } : {}),
         });
+        if (stalled) {
+          polling = false;
+          return;
+        }
         schedule(failureBackoffMs);
         failureBackoffMs = Math.min(
           failureBackoffMs * 2,

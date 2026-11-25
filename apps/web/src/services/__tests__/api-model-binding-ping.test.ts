@@ -73,4 +73,51 @@ describe("explicit ping bindings", () => {
     ]);
     expect(overlays[2].customPresets).toBeUndefined();
   });
+
+  it("sends only the targeted provider key on pingPreset and zero keys on provider-source model discovery", async () => {
+    const { getSettings } = await import("@/settings/store.js");
+    await api.setProviderProfiles([
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.invalid",
+        models: [{ ref: "fixture-model", modelId: "local-model" }],
+      },
+      {
+        id: "other",
+        name: "Other",
+        baseUrl: "https://other.invalid",
+        models: [{ ref: "other-model", modelId: "other-model" }],
+      },
+    ]);
+    await getSettings().set("keys.fixture", "sk-fixture");
+    await getSettings().set("keys.other", "sk-other");
+
+    const fetchMock = vi.fn<typeof fetch>(
+      async () =>
+        new Response(JSON.stringify({ ok: true, latencyMs: 1, models: [] }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.pingPreset({ modelRef: "fixture-model" });
+    await api.listProviderModels({
+      provider: "openai",
+      source: "oauth-plugin:openai",
+    });
+
+    const pingKeysHeader = new Headers(
+      (fetchMock.mock.calls[0]![1] as RequestInit).headers,
+    ).get("X-Provider-Keys");
+    expect(pingKeysHeader).toBeTruthy();
+    expect(JSON.parse(atob(pingKeysHeader!))).toEqual({
+      fixture: "sk-fixture",
+    });
+
+    const sourceModelsKeysHeader = new Headers(
+      (fetchMock.mock.calls[1]![1] as RequestInit).headers,
+    ).get("X-Provider-Keys");
+    expect(sourceModelsKeysHeader).toBeNull();
+  });
 });

@@ -48,6 +48,12 @@ vi.mock("@/stores/session-store.js", () => ({
       gameState: mocks.gameState,
     },
   }),
+  useSessionStructure: () => ({
+    session: { id: "session-1" },
+    gameState: mocks.gameState,
+    world: null,
+    sessionPlugins: [],
+  }),
 }));
 
 vi.mock("@/stores/plugin-data-store.js", () => ({

@@ -386,4 +386,54 @@ describe("PermissionsPane", () => {
       ),
     );
   });
+
+  it("keeps the Danger Zone confirmation checked when saving persistent grants fails", async () => {
+    apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
+    apiMocks.listPermissionPlugins.mockResolvedValue([COMMUNITY_CODE_PLUGIN]);
+    apiMocks.setPluginGrants.mockRejectedValueOnce(new Error("digest mismatch"));
+
+    render(<PermissionsPane />);
+
+    const scriptHeading = await screen.findByText("Community Script");
+    const scriptCard = scriptHeading.closest("article")!;
+    const confirmCheckbox = within(scriptCard).getByRole(
+      "checkbox",
+    ) as HTMLInputElement;
+    fireEvent.click(confirmCheckbox);
+    expect(confirmCheckbox.checked).toBe(true);
+
+    fireEvent.click(
+      within(scriptCard).getByRole("button", { name: "Grant server code" }),
+    );
+    expect(await screen.findByText("digest mismatch")).toBeTruthy();
+    expect(confirmCheckbox.checked).toBe(true);
+  });
+
+  it("groups multiple cached session grants for the same plugin under one plugin-level Revoke button", async () => {
+    apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
+    apiMocks.getSessionApprovals.mockResolvedValue({
+      items: [],
+      grants: [
+        { pluginId: "community-script", action: "covel:plugin-server-code" },
+        { pluginId: "community-script", action: "covel:event:custom" },
+      ],
+    });
+
+    render(<PermissionsPane sessionId="sess-1" />);
+
+    expect(
+      await screen.findByText(
+        "covel:plugin-server-code, covel:event:custom",
+      ),
+    ).toBeTruthy();
+    const revokeButtons = screen.getAllByRole("button", { name: "Revoke" });
+    expect(revokeButtons).toHaveLength(1);
+    fireEvent.click(revokeButtons[0]!);
+    await waitFor(() =>
+      expect(apiMocks.revokeSessionApprovals).toHaveBeenCalledWith(
+        "sess-1",
+        "community-script",
+      ),
+    );
+  });
 });

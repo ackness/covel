@@ -9,8 +9,10 @@ import { useBuildSessionActions } from "./session-store/actions.js";
 import {
   SessionActionsContext,
   SessionStateContext,
+  SessionStructureContext,
   useSession,
   useSessionActions,
+  useSessionStructure,
 } from "./session-store/context.js";
 import {
   useBootEffect,
@@ -33,7 +35,7 @@ export {
   mergeGameStateForReplacement,
   enrichGameStateFromSnapshot,
 } from "./session-store/game-state.js";
-export { useSession, useSessionActions };
+export { useSession, useSessionActions, useSessionStructure };
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -61,6 +63,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     refs,
     handleSseEvent,
   });
+
+  const structure = useMemo(
+    () => ({
+      session: state.session,
+      world: state.world,
+      sessionPlugins: state.sessionPlugins,
+      gameState: state.gameState,
+    }),
+    [state.session, state.world, state.sessionPlugins, state.gameState],
+  );
 
   useBootEffect(state, actions.boot);
   useEffect(() => setApprovalPluginNames(state.plugins), [state.plugins]);
@@ -91,15 +103,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     initialEventCursor: state.initialEventCursor,
   });
 
-  // Two providers: the actions value is referentially stable across progress
-  // state changes (useBuildSessionActions memoises it), so action-only
-  // consumers via useSessionActions() never re-render on progress updates. Only
-  // useSessionState() / useSession() consumers track the high-frequency state.
+  // Three providers: actions stay referentially stable, structure updates only
+  // on session/plugin/gameState commits (isolating side panels and plugin UIs
+  // from per-token SSE churn), and full state serves streaming views.
   return (
     <SessionActionsContext.Provider value={actions}>
-      <SessionStateContext.Provider value={state}>
-        {children}
-      </SessionStateContext.Provider>
+      <SessionStructureContext.Provider value={structure}>
+        <SessionStateContext.Provider value={state}>
+          {children}
+        </SessionStateContext.Provider>
+      </SessionStructureContext.Provider>
     </SessionActionsContext.Provider>
   );
 }
+

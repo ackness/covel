@@ -27,6 +27,12 @@ vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { sessionPlugins: mocks.plugins, gameState: {} },
   }),
+  useSessionStructure: () => ({
+    session: null,
+    world: null,
+    sessionPlugins: mocks.plugins,
+    gameState: {},
+  }),
   useSessionActions: () => ({
     upsertInteractionDraft: mocks.upsertInteractionDraft,
   }),

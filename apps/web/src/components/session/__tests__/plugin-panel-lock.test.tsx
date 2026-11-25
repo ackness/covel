@@ -13,6 +13,7 @@ import { PluginPanel } from "../plugin-panel.js";
 
 const captured = vi.hoisted(() => ({
   handlers: undefined as ComponentProps<typeof JSONUIProvider>["handlers"],
+  store: undefined as ComponentProps<typeof JSONUIProvider>["store"],
 }));
 vi.mock("@json-render/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@json-render/react")>();
@@ -20,6 +21,7 @@ vi.mock("@json-render/react", async (importOriginal) => {
     ...actual,
     JSONUIProvider: (props: ComponentProps<typeof actual.JSONUIProvider>) => {
       captured.handlers = props.handlers;
+      captured.store = props.store;
       return <actual.JSONUIProvider {...props} />;
     },
   };
@@ -31,6 +33,12 @@ vi.mock("@/stores/session-store.js", () => ({
       session: { id: "session" },
       pendingInteractionDrafts: [],
     },
+  }),
+  useSessionStructure: () => ({
+    gameState: { characters: [] },
+    session: { id: "session" },
+    world: null,
+    sessionPlugins: [],
   }),
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
@@ -93,4 +101,32 @@ it("runs the handlers of the latest render, not the ones it mounted with", async
     expect(latest).toHaveBeenCalledWith({ value: "clicked" }),
   );
   expect(mounted).not.toHaveBeenCalled();
+});
+
+it("resets internal panel state when switching to a different panelId on the same mount", () => {
+  const { rerender } = render(
+    <PluginPanel
+      pluginId="test"
+      panelId="panel-a"
+      spec={spec}
+      stateOverride={{ draft: "from-a" }}
+    />,
+  );
+  const storeA = captured.store!;
+  expect(storeA.get("/draft")).toBe("from-a");
+  act(() => {
+    storeA.set("/draft", "typed-in-a");
+  });
+  expect(storeA.get("/draft")).toBe("typed-in-a");
+
+  rerender(
+    <PluginPanel
+      pluginId="test"
+      panelId="panel-b"
+      spec={spec}
+      stateOverride={{}}
+    />,
+  );
+  expect(captured.store).not.toBe(storeA);
+  expect(captured.store!.get("/draft")).toBeUndefined();
 });

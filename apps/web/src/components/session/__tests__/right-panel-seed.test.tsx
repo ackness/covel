@@ -31,6 +31,12 @@ vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { sessionPlugins: context.plugins, gameState: {} },
   }),
+  useSessionStructure: () => ({
+    session: null,
+    world: null,
+    sessionPlugins: context.plugins,
+    gameState: {},
+  }),
 }));
 vi.mock("../world-document-panel.js", () => ({
   WorldDocumentPanel: () => <div />,

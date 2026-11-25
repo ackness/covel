@@ -149,10 +149,16 @@ export function RawJsonBlock({ content }: { content: string }) {
   }, []);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    clearTimeout(copyTimerRef.current);
-    copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return;
+    void clipboard
+      .writeText(content)
+      .then(() => {
+        setCopied(true);
+        clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
   };
 
   return (

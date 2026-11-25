@@ -9,7 +9,7 @@ import {
   resolvePluginPanelTarget,
   type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
-import { useSession } from "@/stores/session-store.js";
+import { useSessionStructure } from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -58,7 +58,7 @@ export function useRightPanelState(
   panelRequest?: RightPanelRequest | null,
 ): RightPanelState {
   const { i18n, t } = useTranslation();
-  const { state: sessionState } = useSession();
+  const sessionState = useSessionStructure();
   const panelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
   const [storageData, setStorageData] = useState<StorageStatusData | null>(
     null,

@@ -21,6 +21,12 @@ vi.mock("@/stores/session-store.js", () => ({
   useSession: () => ({
     state: { session: { id: "s" }, gameState: { characters: [] } },
   }),
+  useSessionStructure: () => ({
+    session: { id: "s" },
+    gameState: { characters: [] },
+    world: null,
+    sessionPlugins: [],
+  }),
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 afterEach(cleanup);

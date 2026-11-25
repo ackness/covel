@@ -758,4 +758,58 @@ describe("LLM settings regressions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reload saved value" }));
     expect((input as HTMLInputElement).value).toBe("https://remote.example");
   });
+
+  it("applies capOverride.output strictly to the currently bound preset in LlmSlotCard", () => {
+    const allPresets = collectLlmSlotPresetCandidates(
+      [
+        {
+          id: "bound-model",
+          name: "Bound Model",
+          provider: "openai",
+          model: "custom-img",
+          protocol: "openai-chat-v1",
+          capability: { input: ["text"], output: ["text"] },
+        },
+        {
+          id: "unrelated-text",
+          name: "Unrelated Text Model",
+          provider: "openai",
+          model: "plain-text",
+          protocol: "openai-chat-v1",
+          capability: { input: ["text"], output: ["text"] },
+        },
+      ],
+      [],
+    );
+
+    render(
+      <LlmSlotCard
+        slotId="image"
+        slotConfig={{ image: { presetId: "bound-model" } }}
+        serverSlot={{
+          provider: "openai",
+          model: "default-img",
+          protocol: "openai-image-v1",
+          tag: "image",
+        }}
+        allPresets={allPresets}
+        capOverride={{ output: ["image"] }}
+        isConfigured={true}
+        isFirst={false}
+        isDiscovered={false}
+        isEditing={false}
+        commitSlot={vi.fn()}
+        onToggleEditing={vi.fn()}
+        onResetCapability={vi.fn()}
+        onUpdateCapability={vi.fn()}
+      />,
+    );
+
+    const modelSelect = screen.getByLabelText("Model configuration");
+    const optionValues = within(modelSelect)
+      .getAllByRole("option")
+      .map((opt) => (opt as HTMLOptionElement).value);
+    expect(optionValues).toContain("preset:bound-model");
+    expect(optionValues).not.toContain("preset:unrelated-text");
+  });
 });

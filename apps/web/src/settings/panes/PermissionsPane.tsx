@@ -33,7 +33,7 @@ import { getPluginDiagnostics } from "@/services/api/plugin-diagnostics.js";
 import { listInstalledPlugins } from "@/services/api/plugins.js";
 import { ApiError } from "@/services/api/request.js";
 import { getOperatorToken } from "@/services/session-credentials.js";
-import { SessionStateContext } from "@/stores/session-store/context.js";
+import { SessionStructureContext } from "@/stores/session-store/context.js";
 import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { OperatorAccessPane } from "./OperatorAccessPane.js";
 import { PermissionsPluginList, toI18nSlug } from "./PermissionsPluginList.js";
@@ -63,8 +63,8 @@ function summarizeCeilings(
 
 export function PermissionsPane({ sessionId }: { sessionId?: string }) {
   const { t } = useTranslation();
-  const sessionState = useContext(SessionStateContext);
-  const activeSessionId = sessionId ?? sessionState?.session?.id;
+  const sessionStructure = useContext(SessionStructureContext);
+  const activeSessionId = sessionId ?? sessionStructure?.session?.id;
   const desktop = isDesktopApp();
   const { notice, show } = usePaneNotice();
 
@@ -168,6 +168,19 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     })).filter((group) => group.keys.length > 0);
   }, [snapshot]);
 
+  const groupedSessionGrants = useMemo(() => {
+    const byPlugin = new Map<string, string[]>();
+    for (const grant of approvals?.grants ?? []) {
+      const actions = byPlugin.get(grant.pluginId);
+      if (actions) actions.push(grant.action);
+      else byPlugin.set(grant.pluginId, [grant.action]);
+    }
+    return Array.from(byPlugin, ([pluginId, actions]) => ({
+      pluginId,
+      actions,
+    }));
+  }, [approvals]);
+
   const showOperatorAccess =
     snapshot?.deploymentForm !== "personal" ||
     isOperatorTokenRequired() !== false ||
@@ -177,17 +190,19 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     setBusy: (busy: boolean) => void,
     action: () => Promise<void>,
     successMessage: string,
-  ) {
+  ): Promise<boolean> {
     setBusy(true);
     try {
       await action();
       setRefreshNonce((n) => n + 1);
       show({ tone: "success", message: successMessage });
+      return true;
     } catch (err) {
       show({
         tone: "error",
         message: err instanceof Error ? err.message : t("settings.saveFailed"),
       });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -239,8 +254,8 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     pluginId: string,
     decisions: PluginGrantDecisions,
     expectedDigest?: string,
-  ) {
-    await runMutation(
+  ): Promise<boolean> {
+    return runMutation(
       (busy) => setBusyPluginId(busy ? pluginId : null),
       async () => {
         const updated = await setPluginGrants(pluginId, {
@@ -588,7 +603,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
             )}
           </div>
 
-          {(approvals?.grants.length ?? 0) === 0 ? (
+          {groupedSessionGrants.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               {t(
                 "settings.permissions.noSessionGrants",
@@ -597,24 +612,22 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
             </p>
           ) : (
             <ul className="space-y-2">
-              {approvals!.grants.map((grant) => (
+              {groupedSessionGrants.map(({ pluginId, actions }) => (
                 <li
-                  key={`${grant.pluginId}:${grant.action}`}
+                  key={pluginId}
                   className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-2.5 py-1.5 text-xs"
                 >
-                  <div className="min-w-0 space-x-2">
-                    <span className="font-mono font-medium">
-                      {grant.pluginId}
-                    </span>
+                  <div className="min-w-0 flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-medium">{pluginId}</span>
                     <span className="font-mono text-muted-foreground">
-                      {grant.action}
+                      {actions.join(", ")}
                     </span>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={revokingSession}
-                    onClick={() => void handleRevokeSession(grant.pluginId)}
+                    onClick={() => void handleRevokeSession(pluginId)}
                   >
                     {t("settings.permissions.revokePlugin", "Revoke")}
                   </Button>

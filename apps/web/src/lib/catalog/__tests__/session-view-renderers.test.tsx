@@ -19,6 +19,7 @@ import {
 import {
   SessionActionsContext,
   SessionStateContext,
+  SessionStructureContext,
   type SessionActions,
 } from "@/stores/session-store/context.js";
 import { initialState } from "@/stores/session-store/reducer.js";
@@ -44,6 +45,12 @@ const state = {
   ...initialState,
   session: { id: "s" } as NonNullable<typeof initialState.session>,
 };
+const structure = {
+  session: state.session,
+  world: state.world,
+  sessionPlugins: state.sessionPlugins,
+  gameState: state.gameState,
+};
 const slots: PluginViewSession = {
   sessionId: "s",
   renderMessages: (content) => <p>Public {content}</p>,
@@ -52,9 +59,11 @@ const slots: PluginViewSession = {
 function shell(children: React.ReactNode) {
   return (
     <SessionActionsContext.Provider value={actions}>
-      <SessionStateContext.Provider value={state}>
-        {children}
-      </SessionStateContext.Provider>
+      <SessionStructureContext.Provider value={structure}>
+        <SessionStateContext.Provider value={state}>
+          {children}
+        </SessionStateContext.Provider>
+      </SessionStructureContext.Provider>
     </SessionActionsContext.Provider>
   );
 }
