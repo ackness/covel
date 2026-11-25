@@ -230,7 +230,7 @@ describe("POST /api/sessions/:id/messages/sync", () => {
     ).toEqual(["first", "kept", "no id"]);
   });
 
-  it("rejects invalid timestamps, oversized content, and excessive batch counts (M-14)", async () => {
+  it("rejects invalid timestamps, oversized content, and excessive batch counts", async () => {
     const store = createMemoryStore();
     await store.createSession({
       phase: "playing",

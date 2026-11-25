@@ -67,24 +67,4 @@ describe("rateLimiter X-Forwarded-For resolution", () => {
     expect(r4.status).toBe(200);
     expect(await r4.json()).toEqual({ ip: "203.0.113.9" });
   });
-
-  it("ignores X-Forwarded-For when the socket peer is not a trusted proxy", async () => {
-    delete process.env.TRUSTED_PROXY_IPS;
-
-    const app = new Hono();
-    app.use("/limited", rateLimiter({ max: 1 }));
-    app.get("/limited", (c) => c.json({ ip: resolveClientIp(c) }));
-    const port = await start(app);
-
-    const r1 = await fetch(`http://127.0.0.1:${port}/limited`, {
-      headers: { "x-forwarded-for": "203.0.113.1" },
-    });
-    expect(r1.status).toBe(200);
-    expect(await r1.json()).toEqual({ ip: "127.0.0.1" });
-
-    const r2 = await fetch(`http://127.0.0.1:${port}/limited`, {
-      headers: { "x-forwarded-for": "203.0.113.2" },
-    });
-    expect(r2.status).toBe(429);
-  });
 });

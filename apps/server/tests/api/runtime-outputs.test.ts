@@ -275,7 +275,7 @@ describe("runtime-outputs API", () => {
       expect(body.items[0]!.type).toBe("form-submit");
     });
 
-    it("clamps oversized limit query params to 500 (M-14)", async () => {
+    it("clamps oversized limit query params to 500", async () => {
       const seenLimits: Array<number | undefined> = [];
       const origOutputs = store.listRuntimeOutputs.bind(store);
       const origRecords = store.listInteractionRecords.bind(store);
@@ -289,11 +289,8 @@ describe("runtime-outputs API", () => {
       };
 
       expect(
-        (
-          await app.request(
-            "/api/sessions/sess-1/runtime-outputs?limit=999999",
-          )
-        ).status,
+        (await app.request("/api/sessions/sess-1/runtime-outputs?limit=999999"))
+          .status,
       ).toBe(200);
       expect(
         (

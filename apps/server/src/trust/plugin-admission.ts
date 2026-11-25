@@ -37,21 +37,6 @@ export function declarativeAdmissionDecision(
   ).effective;
 }
 
-export function isDeclarativeCapabilityAllowed(
-  permissionService: PermissionService | undefined,
-  pluginId: string,
-  profile?: HostProfile,
-  isOperator = false,
-): boolean {
-  if (!permissionService) return true;
-  return permissionService.isCapabilityAllowedForPlugin(
-    "plugin.declarative",
-    pluginId,
-    profile,
-    isOperator,
-  );
-}
-
 /** Sync check: package is verified declarative AND allowed by `plugin.declarative` policy. */
 export function isDeclarativeAdmitted(
   trust: TrustedSourceService | undefined,
@@ -93,7 +78,7 @@ export async function refreshDeclarativeEligibility(
 
 /**
  * Route-level declarative admission check:
- * - Refreshes package integrity first.
+ * - Refreshes package integrity first unless `options.refresh === false`.
  * - Returns `{ admitted: false, denied }` with 403/401 when a statically
  *   declarative package is explicitly denied by L1/L2/L3 `plugin.declarative`.
  * - Returns `{ admitted: false }` without `denied` when `plugin.declarative`
@@ -104,11 +89,14 @@ export async function evaluateDeclarativeRouteAdmission(
   trust: TrustedSourceService | undefined,
   permissionService: PermissionService | undefined,
   pluginId: string,
+  options?: { readonly refresh?: boolean },
 ): Promise<
   | { readonly admitted: true }
   | { readonly admitted: false; readonly denied?: Response }
 > {
-  await trust?.ensureFresh(pluginId);
+  if (options?.refresh !== false) {
+    await trust?.ensureFresh(pluginId);
+  }
   if (!trust?.isDeclarative(pluginId)) {
     return { admitted: false };
   }
@@ -122,12 +110,14 @@ export async function evaluateDeclarativeRouteAdmission(
   }
   const profile = hostProfileOf(c);
   return {
-    admitted: isDeclarativeCapabilityAllowed(
-      permissionService,
-      pluginId,
-      profile,
-      isOperatorRequest(c, profile),
-    ),
+    admitted: permissionService
+      ? permissionService.isCapabilityAllowedForPlugin(
+          "plugin.declarative",
+          pluginId,
+          profile,
+          isOperatorRequest(c, profile),
+        )
+      : true,
   };
 }
 

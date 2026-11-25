@@ -15,10 +15,7 @@ import {
   setWorldDataConventions,
 } from "../../../world-data/conventions.js";
 import type { ApiBootstrapConfig } from "./config.js";
-import {
-  createEventDirectory,
-  type EventDirectory,
-} from "./event-directory.js";
+import { createEventDirectory, type EventDirectory } from "@covel/tools";
 import {
   discoverAndRegisterPlugins,
   type DiscoverAndRegisterPluginsResult,

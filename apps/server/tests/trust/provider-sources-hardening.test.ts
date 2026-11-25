@@ -67,7 +67,11 @@ function createTestHost(opts?: {
     }),
     evaluateCapabilityForPlugin: (key: string) => ({
       effective:
-        key === "plugin.providerSource" ? (allow() ? "allow" : "deny") : "allow",
+        key === "plugin.providerSource"
+          ? allow()
+            ? "allow"
+            : "deny"
+          : "allow",
       lockedBy: allow() ? undefined : "policy",
       ceiling: "allow",
     }),
@@ -80,18 +84,19 @@ function createTestHost(opts?: {
     store,
     getPermissionService: () => permissionService,
     getTrustedSources: () => undefined,
-    getInstancePlugins: () => ({
-      isActivated: () => true,
-      activate: async () => {},
-      listInstancePlugins: () => [],
-      activateForEvent: async () => {},
-    }) as never,
+    getInstancePlugins: () =>
+      ({
+        isActivated: () => true,
+        activate: async () => {},
+        listInstancePlugins: () => [],
+        activateForEvent: async () => {},
+      }) as never,
   });
 
   return { host };
 }
 
-describe("ProviderSourceHost hardening (M-05)", () => {
+describe("ProviderSourceHost hardening", () => {
   it("rejects forbidden hop-by-hop, Host, Proxy-*, and CR/LF headers returned by resolve()", async () => {
     const { host } = createTestHost();
     let headersToReturn: Record<string, string> = {};
@@ -143,7 +148,12 @@ describe("ProviderSourceHost hardening (M-05)", () => {
       id: "sub",
       async listAccounts() {
         return [
-          { id: "acct-default", label: "Default", status: "ready", isDefault: true },
+          {
+            id: "acct-default",
+            label: "Default",
+            status: "ready",
+            isDefault: true,
+          },
           { id: "acct-backup", label: "Backup", status: "ready" },
         ];
       },
@@ -176,7 +186,12 @@ describe("ProviderSourceHost hardening (M-05)", () => {
       id: "sub",
       async listAccounts() {
         return [
-          { id: "acct-default", label: "Default", status: "ready", isDefault: true },
+          {
+            id: "acct-default",
+            label: "Default",
+            status: "ready",
+            isDefault: true,
+          },
         ];
       },
       async resolve() {

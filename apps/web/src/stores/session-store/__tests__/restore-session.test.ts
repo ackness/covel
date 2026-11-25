@@ -298,6 +298,17 @@ describe("restoreSessionState workspace ordering", () => {
       type: "SET_EXECUTION_ERROR",
       error: "offline",
     });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: expect.objectContaining({
+        sessionId: session.id,
+        status: null,
+        hydrating: false,
+        checking: false,
+        stalled: true,
+        error: "offline",
+      }),
+    });
     expect(api.getSessionView).not.toHaveBeenCalled();
     expect(api.listSessionPlugins).not.toHaveBeenCalled();
     expect(api.listSuspensions).not.toHaveBeenCalled();
@@ -655,36 +666,5 @@ describe("restoreSessionState runtime run identities", () => {
         resumed: true,
       }),
     ]);
-  });
-
-  it("marks execution recovery as stalled with hydrating false when workspace hydration fails", async () => {
-    const ds = makeDataService();
-    const workspace = makeWorkspace();
-    vi.mocked(workspace.hydrate).mockRejectedValueOnce(
-      new Error("checkpoint sync timed out"),
-    );
-    let state = initialState;
-    await expect(
-      restoreSessionState({
-        ds,
-        workspace,
-        dispatch: (action) => {
-          state = reducer(state, action);
-        },
-        sessionIdRef: { current: null },
-        sessionGenerationRef,
-        worlds: [world],
-        session,
-      }),
-    ).rejects.toThrow("checkpoint sync timed out");
-
-    expect(state.executionRecovery).toMatchObject({
-      sessionId: session.id,
-      status: null,
-      hydrating: false,
-      checking: false,
-      stalled: true,
-      error: "checkpoint sync timed out",
-    });
   });
 });

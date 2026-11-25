@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOpenAiChatAdapter } from "@covel/ai-provider";
 import { createMemoryStore } from "@covel/store/memory";
 import { setupPluginTools } from "../../src/routes/api/bootstrap/tools.js";
-import type { EventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
+import type { EventDirectory } from "@covel/tools";
 
 afterEach(() => {
   vi.restoreAllMocks();

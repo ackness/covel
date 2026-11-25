@@ -801,7 +801,7 @@ describe("sub-agent delegation budget recovery", () => {
     expect(delegation.snapshot().actorIds).toEqual(["char-b"]);
   });
 
-  it("forwards pluginDataVisibility and forks world/visibility for function runtime ctx.agents.run (H-14)", async () => {
+  it("forwards pluginDataVisibility and forks world/visibility for function runtime ctx.agents.run", async () => {
     const store = await createSeededStore(["bank", "coordinator", "helper"]);
     await store.setPluginData({
       id: `${SESSION}:bank:wallet:gold`,
@@ -811,7 +811,7 @@ describe("sub-agent delegation budget recovery", () => {
       key: "gold",
       value: { amount: 10 },
       createdAt: NOW,
-    updatedAt: NOW,
+      updatedAt: NOW,
     });
 
     const services = new PluginServiceRegistry({

@@ -109,9 +109,15 @@ describe("consume unread request bodies", () => {
   });
 
   it.each([
-    ["reads a rejected body within the limit", 500, true],
-    ["does not read a body larger than any route accepts", 5_000, false],
-  ])("%s", async (_name, size, expected) => {
+    ["reads a rejected body within the limit", 1_000, 500, true],
+    ["does not read a body larger than any route accepts", 1_000, 5_000, false],
+    [
+      "caps default unread body draining to the route's own limit (1 MiB for standard routes)",
+      undefined,
+      1 * 1024 * 1024 + 64,
+      false,
+    ],
+  ])("%s", async (_name, maxBytes, size, expected) => {
     const app = new Hono();
     let read: boolean | undefined;
     // Outside the middleware under test: sees the request after it ran.
@@ -119,7 +125,7 @@ describe("consume unread request bodies", () => {
       await next();
       read = c.req.raw.bodyUsed;
     });
-    app.use("*", createConsumeUnreadBodyMiddleware(1_000));
+    app.use("*", createConsumeUnreadBodyMiddleware(maxBytes));
     app.patch("/reject", (c) => c.json({ error: "no" }, 401));
 
     const response = await app.request("/reject", {
@@ -133,29 +139,5 @@ describe("consume unread request bodies", () => {
 
     expect(response.status).toBe(401);
     expect(read).toBe(expected);
-  });
-
-  it("caps default unread body draining to the route's own limit (1 MiB for standard routes)", async () => {
-    const app = new Hono();
-    let read: boolean | undefined;
-    app.use("*", async (c, next) => {
-      await next();
-      read = c.req.raw.bodyUsed;
-    });
-    app.use("*", createConsumeUnreadBodyMiddleware());
-    app.patch("/reject", (c) => c.json({ error: "no" }, 401));
-
-    const oversized = 1 * 1024 * 1024 + 64;
-    const response = await app.request("/reject", {
-      method: "PATCH",
-      headers: {
-        "content-length": String(oversized),
-        "content-type": "text/plain",
-      },
-      body: "x".repeat(oversized),
-    });
-
-    expect(response.status).toBe(401);
-    expect(read).toBe(false);
   });
 });

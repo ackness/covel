@@ -15,9 +15,8 @@ import {
   type LoadPluginDatasets,
   type TurnExecutorDeps,
 } from "@covel/runtime";
-import { createDefaultToolRegistry } from "@covel/tools";
+import { createDefaultToolRegistry, createEventDirectory } from "@covel/tools";
 import { createDefaultToolApprovalPipeline } from "@covel/approval";
-import { createTestEventDirectory } from "./event-directory.js";
 import {
   evaluateExpectations,
   hasUnexpectedRunFailure,
@@ -171,7 +170,7 @@ export async function runRuntimeDebug(
     });
     registry.syncSessionActivations(sessionId, pluginIds);
 
-    const eventDirectory = createTestEventDirectory({
+    const eventDirectory = createEventDirectory({
       registry,
       resolvePluginDir: (id) => discoveries.get(id)?.rootPath,
     });

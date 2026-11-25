@@ -401,15 +401,12 @@ async function runChannel(): Promise<void> {
             }
           },
         });
-        if (controller.signal.aborted) {
-          abortInflight();
-          return;
-        }
+        if (controller.signal.aborted) return;
       } catch {
         // Stream dropped, aborted, or refused: cancel orphaned local fetches
         // before deciding whether to reconnect.
         abortInflight();
-        if (controller.signal.aborted || !relayWanted()) return;
+        if (controller.signal.aborted) return;
       } finally {
         if (streamController === controller) {
           streamController = null;
@@ -431,4 +428,3 @@ async function runChannel(): Promise<void> {
     }
   }
 }
-

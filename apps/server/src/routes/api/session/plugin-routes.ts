@@ -1,7 +1,4 @@
-import {
-  evaluateDeclarativeRouteAdmission,
-  isDeclarativeAdmitted,
-} from "../../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../../trust/plugin-admission.js";
 import { pluginFaultHost } from "../plugin-faults.js";
 import { readLockedSession } from "./locked-mutation.js";
 import {
@@ -345,19 +342,15 @@ export function registerSessionPluginRoutes(
 
       await c.get("trustedSources")?.verifyAll();
       if (trust.source === "community") {
-        if (c.get("trustedSources")?.isDeclarative(pluginId)) {
-          const lockedDeclDenied = c
-            .get("permissionService")
-            ?.requireCapabilityForPlugin(c, "plugin.declarative", pluginId);
-          if (lockedDeclDenied) return lockedDeclDenied;
-        }
-        if (
-          !isDeclarativeAdmitted(
-            c.get("trustedSources"),
-            c.get("permissionService"),
-            pluginId,
-          )
-        ) {
+        const lockedDeclarative = await evaluateDeclarativeRouteAdmission(
+          c,
+          c.get("trustedSources"),
+          c.get("permissionService"),
+          pluginId,
+          { refresh: false },
+        );
+        if (!lockedDeclarative.admitted) {
+          if (lockedDeclarative.denied) return lockedDeclarative.denied;
           const operatorDenied = requireAccess(c, "plugin.community");
           if (operatorDenied) return operatorDenied;
         }

@@ -259,7 +259,6 @@ async function queueOrVerifyReward(
     grantsToSettle,
     turn,
     sourceTurnId,
-    stageWhenUnverified,
   },
 ) {
   if (reward.requireOutcome !== true) {
@@ -275,18 +274,16 @@ async function queueOrVerifyReward(
     }
     return;
   }
-  if (stageWhenUnverified) {
-    await ctx.pluginData.set(PENDING_OPTIONS, key, {
-      rewardKey: key,
-      eventId,
-      ...(optionId ? { optionId } : {}),
-      rewardId: reward.id,
-      turn,
-      stagedTurn: turn,
-      turnId: ctx.turnId,
-      sourceTurnId,
-    });
-  }
+  await ctx.pluginData.set(PENDING_OPTIONS, key, {
+    rewardKey: key,
+    eventId,
+    ...(optionId ? { optionId } : {}),
+    rewardId: reward.id,
+    turn,
+    stagedTurn: turn,
+    turnId: ctx.turnId,
+    sourceTurnId,
+  });
 }
 
 async function applyMatchedRewrittenOption(
@@ -343,7 +340,6 @@ async function applyMatchedRewrittenOption(
       grantsToSettle,
       turn,
       sourceTurnId,
-      stageWhenUnverified: true,
     });
   }
 }
@@ -439,7 +435,6 @@ async function syncEventsAndOptions(
           grantsToSettle,
           turn,
           sourceTurnId,
-          stageWhenUnverified: true,
         });
       }
     }
@@ -538,32 +533,22 @@ async function writeMessageSurface(
   }
 }
 
+const emptyAssessResult = () => ({
+  outcome: "success",
+  value: {
+    judged: false,
+    armed: [],
+    unlockedOptions: [],
+    rewardsGranted: [],
+  },
+});
+
 export default async function handler(ctx) {
   // Only top-level turns assess and mutate hidden trigger state.
-  if (ctx.recursionDepth > 0) {
-    return {
-      outcome: "success",
-      value: {
-        judged: false,
-        armed: [],
-        unlockedOptions: [],
-        rewardsGranted: [],
-      },
-    };
-  }
+  if (ctx.recursionDepth > 0) return emptyAssessResult();
 
   const { events, eventIds, optionIds } = await loadEvents(ctx);
-  if (!events.length) {
-    return {
-      outcome: "success",
-      value: {
-        judged: false,
-        armed: [],
-        unlockedOptions: [],
-        rewardsGranted: [],
-      },
-    };
-  }
+  if (!events.length) return emptyAssessResult();
 
   const turn = ctx.logicalTurn ?? 1;
   const sourceTurnId = ctx.execution?.sourceTurnId ?? ctx.turnId;

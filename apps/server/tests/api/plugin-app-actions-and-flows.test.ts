@@ -876,7 +876,7 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
     expect(redirRefused.status).toBe(500);
   });
 
-  it("activates only the target plugin for shared action/flow names and sets Cache-Control: no-store on flows (M-10)", async () => {
+  it("activates only the target plugin for shared action/flow names and sets Cache-Control: no-store on flows", async () => {
     const manifest = (name: string) => ({
       apiVersion: 2,
       scope: "instance",
@@ -926,7 +926,7 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
     expect(booted.instancePlugins.isActivated("shared-b")).toBe(false);
   });
 
-  it("times out hanging app actions with 504 app_action_timeout (M-10)", async () => {
+  it("times out hanging app actions with 504 app_action_timeout", async () => {
     const { createPluginAppActionRoutes } =
       await import("../../src/routes/api/plugin-app-actions.js");
     const { createAppActionRegistry } =
@@ -980,7 +980,7 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
     expect(await res.json()).toMatchObject({ code: "app_action_timeout" });
   });
 
-  it("enforces maxConcurrentRuns during async start(), aborts/cleans up on close(), and cleans half-registered entries on replacePlugin rollback (M-07)", async () => {
+  it("enforces maxConcurrentRuns during async start(), aborts/cleans up on close(), and cleans half-registered entries on replacePlugin rollback", async () => {
     const { createConfigFlowEngine } =
       await import("../../src/routes/api/bootstrap/config-flows.js");
     const { createAppActionRegistry } =
@@ -1039,9 +1039,7 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
       runId,
       signal,
       onLoopbackStarted,
-    }: Parameters<
-      Parameters<typeof engine.start>[3]
-    >[0]) =>
+    }: Parameters<Parameters<typeof engine.start>[3]>[0]) =>
       ({
         pluginId,
         flowId,

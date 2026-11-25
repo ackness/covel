@@ -73,9 +73,7 @@ function main() {
   const outcome = vm.runInContext(
     \`(() => {
       try {
-        const value = __covelFn(__covelInput);
-        if (value === undefined) return { kind: "invalid_output" };
-        const json = JSON.stringify(value);
+        const json = JSON.stringify(__covelFn(__covelInput));
         if (typeof json !== "string") return { kind: "invalid_output" };
         return { kind: "ok", json };
       } catch (err) {
@@ -96,19 +94,16 @@ function main() {
     { timeout: timeoutMs },
   );
 
-  if (!outcome || typeof outcome !== "object" || outcome.kind === "invalid_output") {
-    throw Object.assign(
-      new Error("Sandbox worker must return a JSON-serializable value (not undefined)"),
-      { covelCode: "invalid_output" },
-    );
-  }
-  if (outcome.kind === "error") {
+  if (outcome && typeof outcome === "object" && outcome.kind === "error") {
     throw Object.assign(
       new Error(typeof outcome.message === "string" ? outcome.message : "Sandbox failed"),
       { covelCode: "runtime_error" },
     );
   }
-  const serialized = outcome.json;
+  const serialized =
+    outcome && typeof outcome === "object" && outcome.kind === "ok"
+      ? outcome.json
+      : undefined;
   if (typeof serialized !== "string") {
     throw Object.assign(
       new Error("Sandbox worker must return a JSON-serializable value (not undefined)"),

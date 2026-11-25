@@ -230,7 +230,7 @@ describe("settled session lock", () => {
     ).resolves.toBe("nested");
   });
 
-  it("offers credentials once to a newly arrived unrunnable job before skipping it (M-18)", async () => {
+  it("offers credentials once to a newly arrived unrunnable job before skipping it", async () => {
     const { raw, lock, setPending } = setup();
     let release!: () => void;
     let entered!: () => void;

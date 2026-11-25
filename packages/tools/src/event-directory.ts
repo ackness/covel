@@ -5,7 +5,7 @@
  * and prompt catalog rendering.
  */
 
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   Ajv2020,
@@ -66,6 +66,7 @@ interface ResolvedEventEntry {
 
 interface LoadedSchema {
   readonly validate: ValidateFunction;
+  readonly formatErrors: () => string;
   readonly raw: Readonly<Record<string, unknown>>;
 }
 
@@ -86,7 +87,6 @@ async function resolveContainedSchemaPath(
   const resolved = path.resolve(rootRealPath, relativePath);
   if (!isStrictlyInsideRoot(rootRealPath, resolved)) return null;
   try {
-    await lstat(resolved);
     const realResolved = await realpath(resolved);
     return isStrictlyInsideRoot(rootRealPath, realResolved)
       ? realResolved
@@ -94,6 +94,16 @@ async function resolveContainedSchemaPath(
   } catch {
     return null;
   }
+}
+
+function schemaKeyFor(
+  pluginId: string,
+  pluginDir: string | undefined,
+  schemaPath: string,
+): string {
+  return pluginDir
+    ? path.resolve(pluginDir, schemaPath)
+    : `${pluginId}:${schemaPath}`;
 }
 
 function requiredFieldsSummary(raw: AnySchema): string {
@@ -122,7 +132,6 @@ export function createEventDirectory(
     pluginDir: string | undefined,
   ): Promise<void>;
 } {
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
   const schemaCache = new WeakMap<
     PluginEventDecl,
     Map<string, Promise<LoadedSchema>>
@@ -141,9 +150,11 @@ export function createEventDirectory(
       if (!manifest.events || manifest.events.length === 0) continue;
       const pluginDir = deps.resolvePluginDir(manifest.pluginId);
       for (const decl of manifest.events) {
-        const schemaKey = pluginDir
-          ? path.resolve(pluginDir, decl.schema)
-          : `${manifest.pluginId}:${decl.schema}`;
+        const schemaKey = schemaKeyFor(
+          manifest.pluginId,
+          pluginDir,
+          decl.schema,
+        );
         const existing = byTopic.get(decl.topic);
         if (existing) {
           if (
@@ -210,10 +221,27 @@ export function createEventDirectory(
     // Schema IDs are local to this declaration, never registered across
     // generations or plugins. Local $refs still resolve within the document.
     const compiler = new Ajv2020({ allErrors: true, strict: false });
+    const validate = compiler.compile(raw as AnySchema);
     return {
-      validate: compiler.compile(raw as AnySchema),
+      validate,
+      formatErrors: () => compiler.errorsText(validate.errors),
       raw: raw as Readonly<Record<string, unknown>>,
     };
+  }
+
+  async function validateEntry(
+    entry: ResolvedEventEntry,
+    data: Record<string, unknown>,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    let loaded: LoadedSchema;
+    try {
+      loaded = await loadSchema(entry);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, reason: `schema unreadable: ${message}` };
+    }
+    if (loaded.validate(data)) return { ok: true };
+    return { ok: false, reason: loaded.formatErrors() };
   }
 
   return {
@@ -225,9 +253,11 @@ export function createEventDirectory(
               pluginId: manifest.pluginId,
               decl,
               pluginDir,
-              schemaKey: pluginDir
-                ? path.resolve(pluginDir, decl.schema)
-                : `${manifest.pluginId}:${decl.schema}`,
+              schemaKey: schemaKeyFor(
+                manifest.pluginId,
+                pluginDir,
+                decl.schema,
+              ),
             }),
           ),
         ),
@@ -259,15 +289,7 @@ export function createEventDirectory(
       const entry = collectSessionEvents(sessionId).get(topic);
       if (!entry || !entry.decl.advertise)
         return { ok: false, reason: `unknown topic "${topic}"` };
-      let loaded: LoadedSchema;
-      try {
-        loaded = await loadSchema(entry);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { ok: false, reason: `schema unreadable: ${message}` };
-      }
-      if (loaded.validate(data)) return { ok: true };
-      return { ok: false, reason: ajv.errorsText(loaded.validate.errors) };
+      return validateEntry(entry, data);
     },
 
     async validateOwn(sessionId, pluginId, topic, data) {
@@ -282,30 +304,16 @@ export function createEventDirectory(
           reason: `plugin "${pluginId}" does not declare topic "${topic}"`,
         };
       const pluginDir = deps.resolvePluginDir(pluginId);
-      let loaded: LoadedSchema;
-      try {
-        loaded = await loadSchema({
+      const verdict = await validateEntry(
+        {
           pluginId,
           decl,
           pluginDir,
-          schemaKey: pluginDir
-            ? path.resolve(pluginDir, decl.schema)
-            : `${pluginId}:${decl.schema}`,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          ok: false,
-          code: "invalid",
-          reason: `schema unreadable: ${message}`,
-        };
-      }
-      if (loaded.validate(data)) return { ok: true };
-      return {
-        ok: false,
-        code: "invalid",
-        reason: ajv.errorsText(loaded.validate.errors),
-      };
+          schemaKey: schemaKeyFor(pluginId, pluginDir, decl.schema),
+        },
+        data,
+      );
+      return verdict.ok ? verdict : { ...verdict, code: "invalid" };
     },
 
     async catalogText(sessionId, locale) {

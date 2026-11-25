@@ -8,9 +8,6 @@ import {
 } from "@/stores/plugin-data-store.js";
 
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: { gameState: { characters: [] }, session: { id: "session-a" } },
-  }),
   useSessionStructure: () => ({
     gameState: { characters: [] },
     session: { id: "session-a" },

@@ -21,7 +21,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { BudgetOptions, CompactorRunner } from "@covel/context";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { HostProfile } from "./host-profile.js";
-import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
+import type { EventDirectory } from "@covel/tools";
 import type { RuntimeJobWorker } from "./routes/api/plugin-rpc/runtime-job-worker.js";
 
 type LoadRuntimeFn = (
@@ -222,8 +222,6 @@ declare module "hono" {
      * `emit-event` builtin tool registered in `setupPluginTools`.
      */
     eventDirectory?: EventDirectory;
-    /** Per-plugin secret vault backing `covel.secrets` and uninstall cleanup. */
-    secretVault?: import("./trust/secret-vault.js").SecretVault;
     /** Cleans up secrets, instance data, caches, timers, flows, and grants on plugin uninstall. */
     cleanupUninstalledPlugin?: (pluginId: string) => Promise<void>;
   }

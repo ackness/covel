@@ -21,6 +21,7 @@ import {
 } from "./execution-steps.js";
 import {
   applyPluginMessageSurface,
+  extractPluginMessageTurnId,
   refreshPluginMessageSurfaces,
 } from "./plugin-message-surface.js";
 import {
@@ -119,27 +120,21 @@ function capLiveMessages(
   }
   const keptIds = new Set(kept.map((message) => message.id));
   const removedIds = new Set(
-    dropped
-      .map((message) => message.id)
-      .filter((id) => !keptIds.has(id)),
+    dropped.map((message) => message.id).filter((id) => !keptIds.has(id)),
   );
   let nextSubmittedBlockIds: Set<string> | undefined;
-  let nextSubmittedBlockValues: Record<string, Record<string, unknown>> | undefined;
-  if (removedIds.size > 0) {
-    for (const id of removedIds) {
-      if (state.submittedBlockIds.has(id)) {
-        nextSubmittedBlockIds ??= new Set(state.submittedBlockIds);
-        nextSubmittedBlockIds.delete(id);
-      }
-      if (Object.hasOwn(state.submittedBlockValues, id)) {
-        nextSubmittedBlockValues ??= { ...state.submittedBlockValues };
-        delete nextSubmittedBlockValues[id];
-      }
+  let nextSubmittedBlockValues:
+    Record<string, Record<string, unknown>> | undefined;
+  for (const id of removedIds) {
+    if (state.submittedBlockIds.has(id)) {
+      nextSubmittedBlockIds ??= new Set(state.submittedBlockIds);
+      nextSubmittedBlockIds.delete(id);
+    }
+    if (Object.hasOwn(state.submittedBlockValues, id)) {
+      nextSubmittedBlockValues ??= { ...state.submittedBlockValues };
+      delete nextSubmittedBlockValues[id];
     }
   }
-  const submittedBlockIds = nextSubmittedBlockIds ?? state.submittedBlockIds;
-  const submittedBlockValues =
-    nextSubmittedBlockValues ?? state.submittedBlockValues;
   let pluginMessageData = state.pluginMessageData;
   if (removedTurns.size > 0) {
     let dataChanged = false;
@@ -158,15 +153,7 @@ function capLiveMessages(
       }
       let nextBucket: Record<string, unknown> | undefined;
       for (const [key, value] of Object.entries(bucket)) {
-        const record =
-          value && typeof value === "object" && !Array.isArray(value)
-            ? (value as Record<string, unknown>)
-            : null;
-        const turnId =
-          (typeof record?.__turnId === "string" && record.__turnId) ||
-          (typeof record?.turnId === "string" && record.turnId) ||
-          key;
-        if (removedTurns.has(turnId)) {
+        if (removedTurns.has(extractPluginMessageTurnId(key, value))) {
           nextBucket ??= { ...bucket };
           delete nextBucket[key];
         }
@@ -188,11 +175,11 @@ function capLiveMessages(
     messages: kept,
     assetsByTurn,
     assetProgressByTurn,
-    ...(submittedBlockIds !== state.submittedBlockIds
-      ? { submittedBlockIds }
+    ...(nextSubmittedBlockIds
+      ? { submittedBlockIds: nextSubmittedBlockIds }
       : {}),
-    ...(submittedBlockValues !== state.submittedBlockValues
-      ? { submittedBlockValues }
+    ...(nextSubmittedBlockValues
+      ? { submittedBlockValues: nextSubmittedBlockValues }
       : {}),
     ...(pluginMessageData !== state.pluginMessageData
       ? { pluginMessageData }

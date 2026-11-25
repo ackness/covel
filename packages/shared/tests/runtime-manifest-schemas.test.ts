@@ -882,10 +882,9 @@ describe("a story runtime does not hard-depend on another package", () => {
 });
 
 describe("tightened author manifest schemas and generated JSON constraints", () => {
-  const pluginJsonValidator = new Ajv({
-    allErrors: true,
-    strict: false,
-  }).compile(JSON.parse(readFileSync(schemaOutputPath("plugin"), "utf8")));
+  const pluginJsonValidator = ajv.compile(
+    JSON.parse(readFileSync(schemaOutputPath("plugin"), "utf8")),
+  );
 
   it("enforces minProperties on contributes.worldProjections and outputs in plugin-manifest.schema.json", () => {
     const valid = {

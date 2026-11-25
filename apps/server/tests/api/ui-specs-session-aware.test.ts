@@ -166,7 +166,7 @@ describe("GET /api/ui-specs session-aware filter", () => {
     expect(body.right[0]!.pluginId).toBe("codex");
   });
 
-  it("returns 409 session_incarnation_changed when session is replaced mid-read (M-14)", async () => {
+  it("returns 409 session_incarnation_changed when session is replaced mid-read", async () => {
     const origGet = store.getSession.bind(store);
     let reads = 0;
     store.getSession = async (id) => {

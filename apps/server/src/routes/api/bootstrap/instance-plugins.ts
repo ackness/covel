@@ -19,7 +19,6 @@ import { compareText } from "@covel/shared";
 import type { CapabilityKey } from "@covel/shared/permissions";
 import type { HostProfile } from "../../../host-profile.js";
 import type { PermissionService } from "../../../trust/permission-service.js";
-import { isDeclarativeCapabilityAllowed } from "../../../trust/plugin-admission.js";
 import type { TrustedSourceService } from "../../../trust/trusted-source-service.js";
 import type { BootstrapPluginEntries } from "./plugin-entry.js";
 
@@ -112,7 +111,10 @@ export function isInstancePluginAllowed(
   }
 
   if (trustedSources?.isDeclarative(pluginId)) {
-    return isDeclarativeCapabilityAllowed(permissionService, pluginId);
+    return permissionService.isCapabilityAllowedForPlugin(
+      "plugin.declarative",
+      pluginId,
+    );
   }
 
   const verdict = permissionService.evaluateRpcApproval(

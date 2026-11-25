@@ -260,11 +260,10 @@ async function decryptEnvelopeValue(
   envelope: SecretEnvelope,
   pluginId: string,
   key: string,
-  passphrase: string | null,
-  deriveKey: (salt: Buffer) => Promise<Buffer>,
+  deriveKey: ((salt: Buffer) => Promise<Buffer>) | null,
 ): Promise<SecretJsonValue> {
   if (!envelope.encrypted) {
-    if (passphrase !== null) {
+    if (deriveKey !== null) {
       throw new SecretVaultError(
         "decrypt_failed",
         `Secret "${pluginId}/${key}" is stored in plaintext, but COVEL_CREDENTIALS_KEY requires encrypted secrets`,
@@ -272,7 +271,7 @@ async function decryptEnvelopeValue(
     }
     return normalizeJsonValue(envelope.value as SecretJsonValue);
   }
-  if (passphrase === null) {
+  if (deriveKey === null) {
     throw new SecretVaultError(
       "decrypt_failed",
       `Secret "${pluginId}/${key}" is encrypted, but COVEL_CREDENTIALS_KEY is not configured`,
@@ -304,7 +303,6 @@ async function decryptEnvelopeValue(
     ]).toString("utf8");
     return JSON.parse(plaintext) as SecretJsonValue;
   } catch (error) {
-    if (error instanceof SecretVaultError) throw error;
     throw new SecretVaultError(
       "decrypt_failed",
       `Failed to decrypt secret "${pluginId}/${key}"`,
@@ -319,10 +317,9 @@ async function encodeEnvelope(
   generation: number,
   updatedAt: string,
   value: SecretJsonValue,
-  passphrase: string | null,
-  deriveKey: (salt: Buffer) => Promise<Buffer>,
+  deriveKey: ((salt: Buffer) => Promise<Buffer>) | null,
 ): Promise<SecretEnvelope> {
-  if (passphrase === null) {
+  if (deriveKey === null) {
     return {
       version: 1,
       encrypted: false,
@@ -366,24 +363,21 @@ export function createSecretVault(
   const passphrase = trimmedKey && trimmedKey.length > 0 ? trimmedKey : null;
   const derivedKeyCache = new Map<string, Buffer>();
 
-  const deriveKeyForSalt = async (salt: Buffer): Promise<Buffer> => {
-    if (passphrase === null) {
-      throw new SecretVaultError(
-        "decrypt_failed",
-        "COVEL_CREDENTIALS_KEY is not configured",
-      );
-    }
-    const cacheKey = salt.toString("base64");
-    const cached = derivedKeyCache.get(cacheKey);
-    if (cached) return cached;
-    const derived = await deriveScryptKey(passphrase, salt);
-    if (derivedKeyCache.size >= MAX_DERIVED_KEY_CACHE) {
-      const oldest = derivedKeyCache.keys().next().value;
-      if (oldest !== undefined) derivedKeyCache.delete(oldest);
-    }
-    derivedKeyCache.set(cacheKey, derived);
-    return derived;
-  };
+  const deriveKeyForSalt: ((salt: Buffer) => Promise<Buffer>) | null =
+    passphrase === null
+      ? null
+      : async (salt: Buffer): Promise<Buffer> => {
+          const cacheKey = salt.toString("base64");
+          const cached = derivedKeyCache.get(cacheKey);
+          if (cached) return cached;
+          const derived = await deriveScryptKey(passphrase, salt);
+          if (derivedKeyCache.size >= MAX_DERIVED_KEY_CACHE) {
+            const oldest = derivedKeyCache.keys().next().value;
+            if (oldest !== undefined) derivedKeyCache.delete(oldest);
+          }
+          derivedKeyCache.set(cacheKey, derived);
+          return derived;
+        };
 
   const lockContext = new AsyncLocalStorage<ReadonlySet<string>>();
   const keyTails = new Map<string, Promise<void>>();
@@ -474,7 +468,6 @@ export function createSecretVault(
       envelope,
       safePlugin,
       safeKey,
-      passphrase,
       deriveKeyForSalt,
     )) as T;
     return {
@@ -504,7 +497,6 @@ export function createSecretVault(
       generation,
       updatedAt,
       normalized,
-      passphrase,
       deriveKeyForSalt,
     );
     await ensureDirPrivate(secretsRoot);

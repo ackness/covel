@@ -67,7 +67,7 @@ export interface ModelRelayLimits {
   readonly maxChannelsPerClient: number;
 }
 
-export const DEFAULT_MODEL_RELAY_LIMITS: ModelRelayLimits = {
+const DEFAULT_MODEL_RELAY_LIMITS: ModelRelayLimits = {
   connectWaitMs: 10_000,
   headTimeoutMs: 15 * 60_000,
   bodyIdleTimeoutMs: 60_000,
@@ -148,10 +148,7 @@ export function createModelRelayRegistry(
     return count;
   };
 
-  const canAttachChannel = (
-    channelId: string,
-    clientKey?: string,
-  ): boolean => {
+  const canAttachChannel = (channelId: string, clientKey?: string): boolean => {
     if (channels.has(channelId)) return true;
     if (channels.size >= config.maxChannels) return false;
     if (

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { currentCharacterOf, primarySeat, type Seat } from "@covel/shared";
-import { useSession } from "@/stores/session-store.js";
+import { useSessionStructure } from "@/stores/session-store.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { sessionCharacters } from "@/lib/session-characters.js";
 
@@ -125,7 +125,7 @@ export function selectPlayerStatus(
 }
 
 export function usePlayerStatus(): PlayerStatus | null {
-  const { state } = useSession();
+  const state = useSessionStructure();
   const { i18n } = useTranslation();
   const seats = state.session?.seats;
   return useMemo(

@@ -23,9 +23,10 @@ function makeCtx({
   turnId = "t-1",
   sourceTurnId,
   planned = {},
+  events = { [event.id]: event },
 } = {}) {
   const data = {
-    "_hidden.events": { [event.id]: event },
+    "_hidden.events": { ...events },
     "_hidden.planned": { ...planned },
     revealed: { ...revealed },
   };
@@ -214,37 +215,19 @@ describe("evaluate handler", () => {
       when: { dimension: "location", equals: "harbor" },
       rewards: [{ id: "r1", kind: "narrative", text: "Extra coin." }],
     };
-    const data = {
-      "_hidden.events": {
+    const { ctx: baseCtx, writes } = makeCtx({
+      location: "harbor",
+      phase: 1,
+      events: {
         [pureReward.id]: pureReward,
         [event.id]: event,
       },
-      "_hidden.planned": {},
       revealed: {
         // Listed first in revealed, has NO payload.
         "bonus-gold": { lastTurn: 4, lastTurnId: "t-1", count: 1 },
         "lighthouse-orphan": { lastTurn: 4, lastTurnId: "t-1", count: 1 },
       },
-    };
-    const writes = [];
-    const baseCtx = {
-      locale: "en-US",
-      logicalTurn: 5,
-      inputs: {
-        worldTime: { value: { phase: 1 } },
-        dimensions: { value: { location: { value: "harbor", version: 1 } } },
-      },
-      pluginData: {
-        list: async (ns) =>
-          Object.entries(data[ns] ?? {}).map(([key, value]) => ({
-            key,
-            value,
-          })),
-        set: async (namespace, key, value) => {
-          writes.push({ namespace, key, value });
-        },
-      },
-    };
+    });
 
     // Retry of sourceTurnId t-1 still finds the payload event despite bonus-gold appearing first.
     const retryRes = await handler({

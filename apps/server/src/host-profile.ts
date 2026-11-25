@@ -675,8 +675,7 @@ function capabilityDenialFor(
     return capabilityDisabledDenial(key);
   }
   if (ceiling === "operator-only") {
-    const token = presentedToken(c);
-    return token !== undefined && profile.isOperatorToken(token)
+    return isOperatorRequest(c, profile)
       ? null
       : {
           status: 401,

@@ -1787,14 +1787,16 @@ describe("resumeRuntimePipeline", () => {
     expect(result.error).toMatch(/Runtime not found/);
   });
 
-  it("preserves pre-suspension toolCalls and emittedEvents across function suspend and resume (M-19)", async () => {
+  it("preserves pre-suspension toolCalls and emittedEvents across function suspend and resume", async () => {
     mockToolExecutor.setToolResult("emit-cue", {
       toolCallId: "tc-emit-cue",
       name: "emit-cue",
       result: "emitted:before-suspend",
       parsedResult: { tag: "before-suspend" },
       success: true,
-      emittedEvents: [{ topic: "cue.emitted", data: { tag: "before-suspend" } }],
+      emittedEvents: [
+        { topic: "cue.emitted", data: { tag: "before-suspend" } },
+      ],
     });
     const manifest: RuntimeManifest = {
       ...makeFunctionManifest(),
@@ -1838,8 +1840,7 @@ describe("resumeRuntimePipeline", () => {
     expect(
       (
         suspension.pendingContinuation.toolCallsSoFar[0] as
-          | { toolName?: string }
-          | undefined
+          { toolName?: string } | undefined
       )?.toolName,
     ).toBe("emit-cue");
     expect(suspension.pendingContinuation.emittedEvents).toEqual([

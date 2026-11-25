@@ -20,7 +20,7 @@ import { createRuntimeLoader } from "../../src/routes/api/bootstrap/runtime-load
 import { buildPluginDetail } from "../../src/lib/plugin-descriptor.js";
 import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 import { buildSessionCommandList } from "../../src/routes/api/session/commands.js";
-import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
+import { createEventDirectory } from "@covel/tools";
 import { validatePluginBundle } from "../../src/routes/api/install/plugin-bundle.js";
 import { inHookScope } from "../helpers/hook-scope.js";
 

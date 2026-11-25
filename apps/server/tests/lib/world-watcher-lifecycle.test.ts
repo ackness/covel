@@ -95,15 +95,13 @@ it("serializes reloads and drains accepted work before releasing dependencies", 
   expect(fixtures.load).toHaveBeenCalledTimes(2);
 });
 
-it("handles FSWatcher error events cleanly without crashing the server (M-11)", async () => {
+it("handles FSWatcher error events cleanly without crashing the server", async () => {
   const { EventEmitter } = await import("node:events");
   vi.spyOn(console, "log").mockImplementation(() => {});
   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   const emitter = new EventEmitter();
   const close = vi.fn();
-  fixtures.watch.mockImplementation(() =>
-    Object.assign(emitter, { close }),
-  );
+  fixtures.watch.mockImplementation(() => Object.assign(emitter, { close }));
   const watcher = createWorldFileWatcher(
     path.resolve("fixture-worlds"),
     {

@@ -374,7 +374,6 @@ export async function writeWorldPackage(
     !locale ||
     typeof id !== "string" ||
     id.trim().length === 0 ||
-    typeof world.manifest.id !== "string" ||
     world.manifest.id !== id ||
     !validateWorldManifest(world.manifest).valid ||
     !worldDimensionsSchema.safeParse(

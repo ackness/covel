@@ -1356,7 +1356,7 @@ describe("Turn executor hook wire-in", () => {
       expect(llm.calls).toHaveLength(1);
     });
 
-    it("pins toolCallId/name and serializes non-string PostToolUse replacement result (M-17)", async () => {
+    it("pins toolCallId/name and serializes non-string PostToolUse replacement result", async () => {
       const llm = new SimpleMockLLM();
       llm.responseQueue = [
         {
@@ -1420,7 +1420,7 @@ describe("Turn executor hook wire-in", () => {
       expect(toolMsg?.content).toBe('{"rewritten":42}');
     });
 
-    it("does not enqueue detached or background jobs for a plugin sitting out after TurnStart failure (M-15)", async () => {
+    it("does not enqueue detached or background jobs for a plugin sitting out after TurnStart failure", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
       pipeline.register({
@@ -1466,7 +1466,9 @@ describe("Turn executor hook wire-in", () => {
               m.name === storyManifest.name
                 ? async () => ({
                     outcome: "success",
-                    value: { segments: narrationSegments("The story goes on.") },
+                    value: {
+                      segments: narrationSegments("The story goes on."),
+                    },
                     effects: {
                       events: [{ topic: "story.ping", data: { ok: true } }],
                     },

@@ -21,7 +21,7 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
-import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
+import { createEventDirectory } from "@covel/tools";
 import {
   createInProcessSessionLock,
   type SessionLock,

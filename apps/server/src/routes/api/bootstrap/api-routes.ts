@@ -132,9 +132,6 @@ export function mountApiRoutes(args: {
     c.set("hookPipeline", host.hookPipeline);
     c.set("pluginFaults", host.pluginFaults);
     c.set("eventDirectory", catalog.eventDirectory);
-    if (secretVault) {
-      c.set("secretVault", secretVault);
-    }
     c.set("cleanupUninstalledPlugin", cleanupUninstalledPlugin);
     c.set("memorySystem", memorySystem);
     c.set("rpcExecutor", rpc.rpcExecutor);

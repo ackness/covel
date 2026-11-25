@@ -2005,7 +2005,7 @@ it("clears every first-token timer when a failed transport queues for its fallba
   }
 });
 
-it("resets firstTokenSeen, buffers, and idle/ttfb guards on stream-reset and queue pause (H-13)", async () => {
+it("resets firstTokenSeen, buffers, and idle/ttfb guards on stream-reset and queue pause", async () => {
   vi.useFakeTimers();
   const llm: LLMAdapter = {
     generate: vi.fn(),

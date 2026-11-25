@@ -11,7 +11,6 @@ import {
   releaseSqliteConnection,
 } from "../sqlite/shared-connection.js";
 import { runSqliteTransaction } from "../sqlite/node-sqlite.js";
-import { MEDIA_WRITE_METHODS } from "../store-write-methods.js";
 import {
   createReadStream,
   existsSync,
@@ -373,10 +372,18 @@ function initializeSqliteMediaStore(
         await publishFile(filePath(known.path), bytes);
       }
       try {
-        return await gatedDb.recordAsset(bytes, id, mime, cleanMeta, initialRef);
+        return await gatedDb.recordAsset(
+          bytes,
+          id,
+          mime,
+          cleanMeta,
+          initialRef,
+        );
       } catch (error) {
         if (newlyPublishedPath) {
-          const existsInDb = await gatedDb.lookupPath(id).catch(() => undefined);
+          const existsInDb = await gatedDb
+            .lookupPath(id)
+            .catch(() => undefined);
           if (!existsInDb) {
             await rm(newlyPublishedPath, { force: true }).catch(() => {});
           }
@@ -555,22 +562,16 @@ function initializeSqliteMediaStore(
   // Gate every DB-touching read and write method on the shared connection
   // (matching SqliteStore), while `put`, `get`, and `openReadStream` gate only
   // their DB statements via `gatedDb` to keep disk I/O off the write gate.
-  const gatedMethods = new Set([
-    ...Object.keys(store).filter(
+  const gatedMethods = new Set(
+    Object.keys(store).filter(
       (name) =>
         name !== "put" &&
         name !== "get" &&
         name !== "openReadStream" &&
         name !== "close",
     ),
-    ...MEDIA_WRITE_METHODS,
-  ]);
-  return {
-    ...gate.gateWrites(store, gatedMethods),
-    put: store.put,
-    get: store.get,
-    openReadStream: store.openReadStream,
-  };
+  );
+  return gate.gateWrites(store, gatedMethods);
 }
 
 async function isReadable(path: string): Promise<boolean> {

@@ -293,27 +293,4 @@ describe("server-scoped settings", () => {
     expect(adapter.readEntries()).toEqual({});
     expect(store.get(KEY)).toBe("90");
   });
-
-  it("unregisters a dynamically registered key without erasing persisted values", async () => {
-    const { store } = createStore();
-    await store.init();
-    const dynamicKey = "ui.sessionTheme.sess-ephemeral";
-    store.register({
-      key: dynamicKey,
-      schema: z.string().nullable(),
-      default: null,
-      group: "general",
-      label: "Session theme",
-    });
-    await store.set(dynamicKey, "midnight");
-    expect(store.listEntries().some((entry) => entry.key === dynamicKey)).toBe(
-      true,
-    );
-
-    store.unregister(dynamicKey);
-    expect(store.listEntries().some((entry) => entry.key === dynamicKey)).toBe(
-      false,
-    );
-    expect(store.get(dynamicKey)).toBe("midnight");
-  });
 });

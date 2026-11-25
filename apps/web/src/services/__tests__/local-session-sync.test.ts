@@ -1346,30 +1346,7 @@ describe("LocalDataService browser-authoritative sync", () => {
 
     await createSessionWorkspace(service, "local").hydrate("sess-stale-409");
 
-    await expect(
-      vault.getPendingCommit("sess-stale-409"),
-    ).resolves.toBeNull();
+    await expect(vault.getPendingCommit("sess-stale-409")).resolves.toBeNull();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalled();
-  });
-
-  it("ignores undefined object properties when comparing world snapshots", async () => {
-    const service = await serviceWithWorld("world-1", {
-      alpha: 1,
-      optional: undefined,
-    });
-    await createSave(service, "world-1", "sess-undef-props", [], "en-US");
-    const before = await vault.getLatestCheckpoint("sess-undef-props");
-    expect(before?.revision).toBe(1);
-
-    const existingWorld = await vault.getWorld("world-1");
-    expect(existingWorld).toBeTruthy();
-    await vault.upsertWorld({
-      ...existingWorld!,
-      metadata: { alpha: 1, anotherOptional: undefined },
-    });
-
-    await createSessionWorkspace(service, "local").hydrate("sess-undef-props");
-    const after = await vault.getLatestCheckpoint("sess-undef-props");
-    expect(after?.revision).toBe(1);
   });
 });

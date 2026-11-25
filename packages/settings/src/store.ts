@@ -212,8 +212,7 @@ export class SettingsStore implements SettingsStoreApi {
         : (stored as Record<SettingKey, unknown>);
       // Refuse misplaced credentials and server-scoped keys before any repair copies data.
       for (const key of Object.keys(entries)) {
-        this.assertNonSecretEntry(key);
-        this.assertNonServerEntry(key);
+        this.assertDeviceValueEntry(key);
       }
       const keys = this.refusedKeys(entries);
       if (keys.length === 0 || !this.adapter.backupBundle) return { stored };
@@ -536,8 +535,7 @@ export class SettingsStore implements SettingsStoreApi {
   ): Record<SettingKey, unknown> {
     return Object.fromEntries(
       Object.entries(entries).map(([key, value]) => {
-        this.assertNonSecretEntry(key);
-        this.assertNonServerEntry(key);
+        this.assertDeviceValueEntry(key);
         const entry = this.registry.get(key);
         if (!entry) return [key, value];
         const parsed = entry.schema.safeParse(value);
@@ -692,8 +690,7 @@ export class SettingsStore implements SettingsStoreApi {
     if (this.repairing) return this.afterRepair(() => this.setMany(entries));
     try {
       const updates = Object.entries(entries).map(([key, value]) => {
-        this.assertNonSecretEntry(key);
-        this.assertNonServerEntry(key);
+        this.assertDeviceValueEntry(key);
         const schema = this.registry.get(key)?.schema;
         const parsed = schema?.safeParse(value);
         if (parsed && !parsed.success) {
@@ -735,8 +732,7 @@ export class SettingsStore implements SettingsStoreApi {
       // The editor base is already normalized by export(). Validate its secret
       // and server-scope boundaries without transforming it a second time.
       for (const key of Object.keys(expectedEntries)) {
-        this.assertNonSecretEntry(key);
-        this.assertNonServerEntry(key);
+        this.assertDeviceValueEntry(key);
       }
       const expected = structuredClone(expectedEntries);
       const current = this.serializeEntries();
@@ -898,8 +894,7 @@ export class SettingsStore implements SettingsStoreApi {
     const secretUpdates: Array<[string, string]> = [];
     for (const [key, value] of Object.entries(bundle.entries)) {
       if (!selected.has(key)) continue;
-      this.assertNonSecretEntry(key);
-      this.assertNonServerEntry(key);
+      this.assertDeviceValueEntry(key);
       const entry = this.registry.get(key);
       let normalized: unknown = value;
       if (entry) {
@@ -1041,15 +1036,12 @@ export class SettingsStore implements SettingsStoreApi {
     );
   }
 
-  private assertNonSecretEntry(key: SettingKey): void {
+  private assertDeviceValueEntry(key: SettingKey): void {
     if (this.isSecretKey(key)) {
       throw new Error(
         `Secret setting ${key} must use the separate keys channel`,
       );
     }
-  }
-
-  private assertNonServerEntry(key: SettingKey): void {
     if (this.isServerKey(key)) {
       throw new Error(
         `Server setting ${key} must use the server settings channel`,

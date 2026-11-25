@@ -188,3 +188,36 @@ it("releases progress and assets when the last message of their turn leaves the 
   expect([...next.assetsByTurn.keys()]).toEqual(["kept"]);
   expect([...next.assetProgressByTurn.keys()]).toEqual(["kept"]);
 });
+
+it("prunes submitted blocks and plugin message data when live message window caps old entries", () => {
+  configureMessagesWindowCap(CAP_MIN);
+  const full = stateWith(
+    Array.from({ length: CAP_MIN }, (_, i) => msg(i, { turnId: `t-${i}` })),
+  );
+  const droppedId = msg(0).id;
+  const keptId = msg(CAP_MIN - 1).id;
+  const populated: SessionState = {
+    ...full,
+    submittedBlockIds: new Set([droppedId, keptId]),
+    submittedBlockValues: {
+      [droppedId]: { choice: "old" },
+      [keptId]: { choice: "keep" },
+    },
+    pluginMessageData: {
+      notes: {
+        "entry-0": { __turnId: "t-0", text: "old" },
+        "entry-last": { __turnId: `t-${CAP_MIN - 1}`, text: "keep" },
+      },
+    },
+  };
+
+  const next = addMessage(populated, msg(CAP_MIN, { turnId: `t-${CAP_MIN}` }));
+  expect(next.messages).toHaveLength(CAP_MIN);
+  expect(next.submittedBlockIds.has(droppedId)).toBe(false);
+  expect(next.submittedBlockIds.has(keptId)).toBe(true);
+  expect(next.submittedBlockValues[droppedId]).toBeUndefined();
+  expect(next.submittedBlockValues[keptId]).toEqual({ choice: "keep" });
+  expect(next.pluginMessageData.notes).toEqual({
+    "entry-last": { __turnId: `t-${CAP_MIN - 1}`, text: "keep" },
+  });
+});

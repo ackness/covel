@@ -1494,7 +1494,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(res.status).toBe(404);
     });
 
-    it("rejects ended and deletion-pending sessions before queuing approvals or loading community code (M-14)", async () => {
+    it("rejects ended and deletion-pending sessions before queuing approvals or loading community code", async () => {
       await store.updateSession(SESSION_ID, { status: "ended" });
       const endedSession = (await store.getSession(SESSION_ID))!;
       const endedRes = await app.request(

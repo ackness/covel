@@ -691,8 +691,7 @@ export function ConfigFlowDialog() {
   const step = run?.step;
   const stepKind = step?.kind;
   const stepId = step && "stepId" in step ? step.stepId : undefined;
-  const stepCompletion =
-    step?.kind === "browser" ? step.completion : undefined;
+  const stepCompletion = step?.kind === "browser" ? step.completion : undefined;
   const stepIntervalSec =
     step?.kind === "device" ? step.intervalSec : undefined;
 
@@ -754,7 +753,6 @@ export function ConfigFlowDialog() {
   const dismiss = async () => {
     const req = activeConfigFlow;
     const current = activeRunRef.current;
-    resetStepInputs();
     if (req && current && current.status === "active") {
       const cancelPromise = cancelRunOnce(
         req.pluginId,
@@ -779,6 +777,9 @@ export function ConfigFlowDialog() {
     if (!run || submitting) return;
     const expectedFlowKey = flowKey;
     const expectedRunId = run.runId;
+    const isStaleRun = () =>
+      activeFlowKeyRef.current !== expectedFlowKey ||
+      activeRunRef.current?.runId !== expectedRunId;
     setSubmitting(true);
     setErrorMessage(null);
     try {
@@ -788,20 +789,10 @@ export function ConfigFlowDialog() {
         run.runId,
         payload,
       );
-      if (
-        activeFlowKeyRef.current !== expectedFlowKey ||
-        activeRunRef.current?.runId !== expectedRunId
-      ) {
-        return;
-      }
+      if (isStaleRun()) return;
       applyRun(res.run);
     } catch (err) {
-      if (
-        activeFlowKeyRef.current !== expectedFlowKey ||
-        activeRunRef.current?.runId !== expectedRunId
-      ) {
-        return;
-      }
+      if (isStaleRun()) return;
       setErrorMessage(err instanceof Error ? err.message : String(err));
     } finally {
       if (activeFlowKeyRef.current === expectedFlowKey) {

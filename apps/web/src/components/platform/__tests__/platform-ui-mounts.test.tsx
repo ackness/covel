@@ -544,31 +544,31 @@ describe("Platform v2 Web UI mounts", () => {
     ).toBeTruthy();
   });
 
-  it("renders FloatingWindowHost filtered strictly by instance vs session scope", () => {
-    const entries = [
-      {
-        pluginId: "demo-platform",
-        specs: [
-          {
-            id: "inst-win",
-            label: "Instance Utility",
-            windowScope: "instance" as const,
-            view: { component: "Stack", children: [] },
-          },
-          {
-            id: "sess-win",
-            label: "Session Utility",
-            windowScope: "session" as const,
-            view: { component: "Stack", children: [] },
-          },
-        ],
-      },
-    ];
+  const WINDOW_ENTRIES = [
+    {
+      pluginId: "demo-platform",
+      specs: [
+        {
+          id: "inst-win",
+          label: "Instance Utility",
+          windowScope: "instance" as const,
+          view: { component: "Stack", children: [] },
+        },
+        {
+          id: "sess-win",
+          label: "Session Utility",
+          windowScope: "session" as const,
+          view: { component: "Stack", children: [] },
+        },
+      ],
+    },
+  ];
 
+  it("renders FloatingWindowHost filtered strictly by instance vs session scope", () => {
     render(
       <>
-        <FloatingWindowHost scope="instance" entries={entries} />
-        <FloatingWindowHost scope="session" entries={entries} />
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
+        <FloatingWindowHost scope="session" entries={WINDOW_ENTRIES} />
       </>,
     );
 
@@ -740,32 +740,12 @@ describe("Platform v2 Web UI mounts", () => {
   });
 
   it("preserves minimized floating window body, stops dragging on pointercancel, and closes session windows when switching sessions", () => {
-    const entries = [
-      {
-        pluginId: "demo-platform",
-        specs: [
-          {
-            id: "inst-win",
-            label: "Instance Utility",
-            windowScope: "instance" as const,
-            view: { component: "Stack", children: [] },
-          },
-          {
-            id: "sess-win",
-            label: "Session Utility",
-            windowScope: "session" as const,
-            view: { component: "Stack", children: [] },
-          },
-        ],
-      },
-    ];
-
     const { rerender } = render(
       <>
-        <FloatingWindowHost scope="instance" entries={entries} />
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
         <FloatingWindowHost
           scope="session"
-          entries={entries}
+          entries={WINDOW_ENTRIES}
           sessionId="sess-a"
         />
       </>,
@@ -776,7 +756,9 @@ describe("Platform v2 Web UI mounts", () => {
       openPluginWindow("demo-platform", "sess-win");
     });
 
-    const sessWin = screen.getByTestId("floating-window-demo-platform:sess-win");
+    const sessWin = screen.getByTestId(
+      "floating-window-demo-platform:sess-win",
+    );
     const header = sessWin.querySelector("header")!;
     header.setPointerCapture = vi.fn();
     fireEvent.pointerDown(header, { clientX: 50, clientY: 50, pointerId: 1 });
@@ -795,10 +777,10 @@ describe("Platform v2 Web UI mounts", () => {
     // Switching sessions closes session-scoped windows while keeping instance windows open.
     rerender(
       <>
-        <FloatingWindowHost scope="instance" entries={entries} />
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
         <FloatingWindowHost
           scope="session"
-          entries={entries}
+          entries={WINDOW_ENTRIES}
           sessionId="sess-b"
         />
       </>,

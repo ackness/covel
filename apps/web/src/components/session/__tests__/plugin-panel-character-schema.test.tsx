@@ -10,9 +10,6 @@ const session = vi.hoisted(() => ({
   gameState: {} as Record<string, unknown>,
 }));
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: { gameState: session.gameState, session: { id: "session-a" } },
-  }),
   useSessionStructure: () => ({
     gameState: session.gameState,
     session: { id: "session-a" },

@@ -391,7 +391,7 @@ describe("POST /api/media/cleanup gate", () => {
     expect(body.code).toBe("invalid_request");
   });
 
-  it("returns 400 invalid_request on malformed or non-object JSON body instead of running default cleanup (M-14)", async () => {
+  it("returns 400 invalid_request on malformed or non-object JSON body instead of running default cleanup", async () => {
     process.env.COVEL_MEDIA_CLEANUP_ENABLED = "true";
     const app = createTestApp(createMemoryMediaStore());
     const malformed = await app.request("/api/media/cleanup", {

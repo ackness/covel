@@ -285,43 +285,60 @@ describe("DELETE /api/plugins/:id (uninstall)", () => {
 
   it("cleans up SecretVault secrets and instance_data on plugin uninstall", async () => {
     const { createMemoryStore } = await import("@covel/store/memory");
-    const { createSecretVault } = await import("../../src/trust/secret-vault.js");
-    const configDir = await mkdtemp(path.join(tmpdir(), "covel-uninstall-cfg-"));
+    const { bootstrapApi } = await import("../../src/routes/api/bootstrap.js");
+    const { closeTestApi } = await import("../helpers/close-api.js");
+    const configDir = await mkdtemp(
+      path.join(tmpdir(), "covel-uninstall-cfg-"),
+    );
+    const emptyBuiltins = await mkdtemp(
+      path.join(tmpdir(), "covel-uninstall-builtins-"),
+    );
     const dir = path.join(pluginsDir, "oauth-plugin");
     await mkdir(dir, { recursive: true });
     const store = createMemoryStore();
-    const secretVault = createSecretVault({ configDir });
-    await secretVault.set("oauth-plugin", "refresh-token", { tok: "secret-1" });
-    const now = new Date().toISOString();
-    await store.upsertInstanceData({
-      pluginId: "oauth-plugin",
-      namespace: "accounts",
-      key: "acct-1",
-      value: { email: "user@example.com" },
-      createdAt: now,
-      updatedAt: now,
+    const booted = await bootstrapApi({
+      pluginsDir: emptyBuiltins,
+      pluginsDirs: [emptyBuiltins, pluginsDir],
+      covelHome: configDir,
+      store,
+      storeBackend: "memory",
+      llmAdapter: {
+        generate: async () => ({
+          content: "",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 0, outputTokens: 0 },
+        }),
+      },
     });
-
-    const app = new Hono();
-    app.use("*", async (c, next) => {
-      c.set("pluginRegistry", makeRegistry());
-      c.set("store", store);
-      c.set("secretVault", secretVault);
-      await next();
-    });
-    app.route("/api/plugins", pluginRoutes);
 
     try {
-      const res = await app.request("/api/plugins/oauth-plugin", {
+      await booted.secretVault.set("oauth-plugin", "refresh-token", {
+        tok: "secret-1",
+      });
+      const now = new Date().toISOString();
+      await store.upsertInstanceData({
+        pluginId: "oauth-plugin",
+        namespace: "accounts",
+        key: "acct-1",
+        value: { email: "user@example.com" },
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const res = await booted.app.request("/api/plugins/oauth-plugin", {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      expect(await secretVault.list("oauth-plugin")).toEqual([]);
+      expect(await booted.secretVault.list("oauth-plugin")).toEqual([]);
       expect(
         await store.getInstanceData("oauth-plugin", "accounts", "acct-1"),
       ).toBeNull();
     } finally {
+      await closeTestApi(booted);
+      await store.close();
       await rm(configDir, { recursive: true, force: true });
+      await rm(emptyBuiltins, { recursive: true, force: true });
     }
   });
 });

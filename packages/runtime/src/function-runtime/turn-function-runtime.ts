@@ -317,6 +317,17 @@ export async function executeFunctionRuntime({
       attachPresentationState(failed, runtimeContext.presentation);
     return failed;
   }
+  const collectToolRecordsAndEvents = (): {
+    allToolCalls: ToolCallRecord[];
+    allToolEvents: EmittedEvent[];
+  } => ({
+    allToolCalls: [...structuredClone(priorToolCalls), ...runtimeTools.records],
+    allToolEvents: [
+      ...structuredClone(priorEmittedEvents),
+      ...runtimeTools.events,
+    ],
+  });
+
   if (handlerOutcome.outcome === "suspended") {
     // A continuation keeps only the handler's own work. Results of its
     // `ctx.recursiveCall`s commit with its success and cannot wait for a
@@ -335,14 +346,7 @@ export async function executeFunctionRuntime({
         run,
         `${manifest.name} cannot suspend after changing another plugin's data through a write service`,
       );
-    const allToolCalls: ToolCallRecord[] = [
-      ...structuredClone(priorToolCalls),
-      ...runtimeTools.records,
-    ];
-    const allToolEvents: EmittedEvent[] = [
-      ...structuredClone(priorEmittedEvents),
-      ...runtimeTools.events,
-    ];
+    const { allToolCalls, allToolEvents } = collectToolRecordsAndEvents();
     const suspensionId = crypto.randomUUID();
     // Keep domain writes uncommitted until resume succeeds. The continuation
     // also owns the original binding snapshots rather than resolving them again.
@@ -418,14 +422,7 @@ export async function executeFunctionRuntime({
             : {}),
         };
 
-  const allToolCalls: ToolCallRecord[] = [
-    ...structuredClone(priorToolCalls),
-    ...runtimeTools.records,
-  ];
-  const allToolEvents: EmittedEvent[] = [
-    ...structuredClone(priorEmittedEvents),
-    ...runtimeTools.events,
-  ];
+  const { allToolCalls, allToolEvents } = collectToolRecordsAndEvents();
   let effects = materialized.effects;
 
   if (

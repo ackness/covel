@@ -569,8 +569,6 @@ interface BatchSlot {
   skip(): void;
 }
 
-export { forkPluginDataVisibility };
-
 /**
  * The execution's service observer for a sub-agent, tagging each call with
  * the scheduled runtime the sub-agent works for, so the fault latch

@@ -17,7 +17,8 @@ import {
 
 const { lookupOverride } = vi.hoisted(() => ({
   lookupOverride: {
-    fn: null as null | (() => Promise<Array<{ address: string; family: number }>>),
+    fn: null as
+      null | (() => Promise<Array<{ address: string; family: number }>>),
   },
 }));
 
@@ -111,8 +112,6 @@ describe("fetchWithRetry and fetchWithAuthProxyRetry (net.authProxy)", () => {
         }),
       ).rejects.toThrow(/refusing to follow redirect \(HTTP 302\)/);
     } finally {
-      Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, true);
-      await resetOutboundProxyForTests();
       await new Promise<void>((resolve) => proxy.close(() => resolve()));
       await new Promise<void>((resolve) => target.close(() => resolve()));
     }
@@ -159,9 +158,6 @@ describe("fetchWithRetry and fetchWithAuthProxyRetry (net.authProxy)", () => {
       ).rejects.toThrow(/SSRF policy|disallowed address/i);
     } finally {
       lookupOverride.fn = null;
-      configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
-      Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, true);
-      await resetOutboundProxyForTests();
     }
   });
 });

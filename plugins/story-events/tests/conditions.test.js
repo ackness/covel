@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCondition } from "../lib/conditions.js";
+import {
+  collectConditionRefs,
+  evaluateCondition,
+  hasJudgeLeaf,
+  inspectCondition,
+} from "../lib/conditions.js";
 
 const state = {
   dimensions: {
@@ -233,9 +238,7 @@ describe("cross-plugin deterministic leaves", () => {
 });
 
 describe("four-valued semantic short-circuiting", () => {
-  it("short-circuits judge leaves when deterministic branches already decide the tree", async () => {
-    const { hasJudgeLeaf, inspectCondition } =
-      await import("../lib/conditions.js");
+  it("short-circuits judge leaves when deterministic branches already decide the tree", () => {
     const judgeLeaf = {
       judge: "The protagonist suspects the broker is lying",
       id: "suspect-broker",
@@ -319,10 +322,7 @@ describe("four-valued semantic short-circuiting", () => {
     ).toEqual({ status: "undecided", pending: [], issues: [] });
   });
 
-  it("rejects malformed deterministic leaves as undecided instead of routing them to the judge, and unifies locale-map detection", async () => {
-    const { collectConditionRefs, hasJudgeLeaf, inspectCondition } =
-      await import("../lib/conditions.js");
-
+  it("rejects malformed deterministic leaves as undecided instead of routing them to the judge, and unifies locale-map detection", () => {
     for (const malformed of [
       { time: "hour" },
       { item: "Key" },
@@ -373,8 +373,7 @@ describe("four-valued semantic short-circuiting", () => {
     );
   });
 
-  it("isolates pre-turn met:false judge caches from audit-phase re-evaluation on the same turn", async () => {
-    const { inspectCondition } = await import("../lib/conditions.js");
+  it("isolates pre-turn met:false judge caches from audit-phase re-evaluation on the same turn", () => {
     const leaf = {
       judge: "The door unlocks.",
       id: "door",

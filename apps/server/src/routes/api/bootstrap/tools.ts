@@ -16,13 +16,13 @@ import {
   createDefaultToolRegistry,
   buildSessionCharacterWriteTools,
   buildSessionEmitEventTool,
+  type EventDirectory,
   type ToolModule,
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import { createToolExecutor, type ManagedToolExecutor } from "@covel/runtime";
 import { createDefaultToolApprovalPipeline } from "@covel/approval";
 import type { PermissionService } from "../../../trust/permission-service.js";
-import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
   readonly store: DataStore;

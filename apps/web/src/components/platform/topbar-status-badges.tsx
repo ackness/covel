@@ -136,19 +136,13 @@ function TopbarStatusBadgeItem({
     const pollSec = spec.pollIntervalSec;
 
     const runOnce = async () => {
-      if (cancelled) return;
       controller = new AbortController();
-      try {
-        await refreshStatus(controller.signal);
-      } catch {
-        // Transient poll failure leaves existing status untouched.
-      } finally {
-        controller = null;
-        if (!cancelled && pollSec) {
-          timer = window.setTimeout(() => {
-            void runOnce();
-          }, pollSec * 1000);
-        }
+      await refreshStatus(controller.signal);
+      controller = null;
+      if (!cancelled && pollSec) {
+        timer = window.setTimeout(() => {
+          void runOnce();
+        }, pollSec * 1000);
       }
     };
 

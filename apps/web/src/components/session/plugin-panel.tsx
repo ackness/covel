@@ -266,8 +266,7 @@ function SnapshotPluginPanel(props: PluginPanelProps) {
   );
 }
 
-const EMPTY_DATA: Record<string, unknown> = {};
-const EMPTY_SURFACE_CONTEXT: Readonly<Record<string, unknown>> = {};
+const EMPTY_RECORD: Record<string, unknown> = {};
 
 function LivePluginPanel(props: PluginPanelProps) {
   const { pluginId, spec } = props;
@@ -298,7 +297,7 @@ function LivePluginPanel(props: PluginPanelProps) {
               return [key, value];
             }),
           )
-        : EMPTY_DATA,
+        : EMPTY_RECORD,
     [rawCharacters],
   );
   const schema = sessionState.gameState.characterSchema;
@@ -306,7 +305,7 @@ function LivePluginPanel(props: PluginPanelProps) {
     () =>
       schema && typeof schema === "object" && !Array.isArray(schema)
         ? (schema as Record<string, unknown>)
-        : EMPTY_DATA,
+        : EMPTY_RECORD,
     [schema],
   );
   const jobsData = useMemo(
@@ -318,11 +317,11 @@ function LivePluginPanel(props: PluginPanelProps) {
               job.messageKey ? { ...job, message: t(job.messageKey) } : job,
             ]),
           )
-        : EMPTY_DATA,
+        : EMPTY_RECORD,
     [namespace, jobs, t],
   );
   const frameworkData = isDisallowedWebviewSessionSource(spec)
-    ? EMPTY_DATA
+    ? EMPTY_RECORD
     : sourceKind === "session.characters"
       ? sessionCharacters
       : sourceKind === "session.characterSchema"
@@ -424,8 +423,10 @@ function PluginPanelView({
     [stateStore],
   );
 
-  const webviewData = isDisallowedWebviewSessionSource(spec) ? EMPTY_DATA : data;
-  const resolvedSurfaceContext = surfaceContext ?? EMPTY_SURFACE_CONTEXT;
+  const webviewData = isDisallowedWebviewSessionSource(spec)
+    ? EMPTY_RECORD
+    : data;
+  const resolvedSurfaceContext = surfaceContext ?? EMPTY_RECORD;
   const webviewState = useMemo(
     () => ({
       data: webviewData,
@@ -434,7 +435,13 @@ function PluginPanelView({
       context: resolvedSurfaceContext,
       uiState,
     }),
-    [webviewData, activeLocale, interactionLocked, resolvedSurfaceContext, uiState],
+    [
+      webviewData,
+      activeLocale,
+      interactionLocked,
+      resolvedSurfaceContext,
+      uiState,
+    ],
   );
 
   const initialState = useMemo(

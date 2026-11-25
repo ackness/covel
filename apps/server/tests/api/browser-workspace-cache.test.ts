@@ -20,6 +20,7 @@ async function setup() {
   const cache = createBrowserWorkspaceCache();
   const sessionLock = createInProcessSessionLock();
   const pluginRegistry = createPluginRegistry();
+  const clearPluginEntrySession = vi.fn();
   const routes = createBrowserWorkspaceRoutes(cache);
   const sessionRoutes = new Hono<SessionRouteEnv>();
   registerSessionDeleteRoute(sessionRoutes);
@@ -30,6 +31,7 @@ async function setup() {
     c.set("sessionLock", sessionLock);
     c.set("pluginRegistry", pluginRegistry);
     c.set("clearBrowserWorkspace", cache.clearSession);
+    c.set("clearPluginEntrySession", clearPluginEntrySession);
     await next();
   });
   app.route("/api/sessions", routes);
@@ -108,7 +110,14 @@ async function setup() {
     return committed.json();
   }
 
-  return { store, cache, request, seed, initialize };
+  return {
+    store,
+    cache,
+    clearPluginEntrySession,
+    request,
+    seed,
+    initialize,
+  };
 }
 
 beforeEach(() => {
@@ -261,52 +270,10 @@ describe("browser workspace cache lifecycle", () => {
   });
 
   it("invokes clearPluginEntrySession when deleting a session", async () => {
-    const store = createMemoryStore();
-    const sessionLock = createInProcessSessionLock();
-    const pluginRegistry = createPluginRegistry();
-    const clearPluginEntrySession = vi.fn();
-    const sessionRoutes = new Hono<SessionRouteEnv>();
-    registerSessionDeleteRoute(sessionRoutes);
-    const app = new Hono();
-    app.use("*", async (c, next) => {
-      c.set("store", store);
-      c.set("storeBackend", "memory");
-      c.set("sessionLock", sessionLock);
-      c.set("pluginRegistry", pluginRegistry);
-      c.set("clearPluginEntrySession", clearPluginEntrySession);
-      await next();
-    });
-    app.route("/api/sessions", sessionRoutes);
-    await store.upsertWorld({
-      id: "world",
-      name: "World",
-      description: "",
-      createdAt: NOW,
-    });
-    await store.createSession({
-      id: "clean-me",
-      worldId: "world",
-      status: "active",
-      phase: "playing",
-      completedPlayerTurns: 0,
-      setupRuntimes: {},
-      seats: [
-        { id: "main", controller: "human", role: "player", characters: "auto" },
-      ],
-      activePlugins: [],
-      locale: "zh-CN",
-      metadata: {
-        sessionIncarnationNonce: "inc",
-        ownerTokenHash: hashSessionOwnerToken(OWNER),
-      },
-      createdAt: NOW,
-      updatedAt: NOW,
-    });
+    const { clearPluginEntrySession, request, seed } = await setup();
+    await seed("clean-me");
 
-    const res = await app.request("/api/sessions/clean-me", {
-      method: "DELETE",
-      headers: { "x-session-token": OWNER },
-    });
+    const res = await request("clean-me", "", "DELETE");
     expect(res.status).toBe(200);
     expect(clearPluginEntrySession).toHaveBeenCalledWith("clean-me");
   });

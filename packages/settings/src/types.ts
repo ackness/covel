@@ -186,7 +186,7 @@ export interface SettingsStoreApi {
   readBackup(name: string): Promise<string | null>;
   register<T>(entry: SettingEntry<T>): void;
   /** Drop a dynamically registered schema entry without deleting stored values. */
-  unregister?(key: SettingKey): void;
+  unregister(key: SettingKey): void;
   ready(): Promise<void>;
   /** Refresh non-secret settings without overwriting pending local mutations. */
   refresh(): Promise<void>;

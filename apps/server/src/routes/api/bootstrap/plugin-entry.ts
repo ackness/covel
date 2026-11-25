@@ -315,6 +315,23 @@ export async function createBootstrapPluginEntries(
     });
   };
 
+  const syncPackageScopeMetadata = (
+    pluginId: string,
+    plugin:
+      | {
+          readonly scope?: "session" | "instance" | "both";
+          readonly activationEvents?: readonly string[];
+        }
+      | undefined,
+  ): void => {
+    packageScopes.set(pluginId, plugin?.scope ?? "session");
+    if (plugin?.scope === "both" && plugin.activationEvents?.length) {
+      lazyDualScopeEntries.add(pluginId);
+    } else {
+      lazyDualScopeEntries.delete(pluginId);
+    }
+  };
+
   // Compile entry declarations once. Both the approval/pending path and actual
   // activation consume this exact definition, so metadata-only multi-runtime
   // roots cannot be visible to one path and absent from the other.
@@ -322,14 +339,7 @@ export async function createBootstrapPluginEntries(
     const registryEntry = params.pluginRegistry?.get(pluginId);
     try {
       const declared = registryEntry ?? (await loadPluginDefinition(discovery));
-      packageScopes.set(
-        pluginId,
-        declared.packageManifest?.plugin.scope ?? "session",
-      );
-      const plugin = declared.packageManifest?.plugin;
-      if (plugin?.scope === "both" && plugin.activationEvents?.length) {
-        lazyDualScopeEntries.add(pluginId);
-      }
+      syncPackageScopeMetadata(pluginId, declared.packageManifest?.plugin);
       const definition = await loadPluginEntryDefinition(
         discovery,
         declared.packageManifest,
@@ -807,16 +817,7 @@ export async function createBootstrapPluginEntries(
       ]);
       await params.prepareDeclarations?.(next.entry);
       const syncReloadScopeMetadata = () => {
-        const nextPlugin = next.entry.packageManifest?.plugin;
-        packageScopes.set(pluginId, nextPlugin?.scope ?? "session");
-        if (
-          nextPlugin?.scope === "both" &&
-          nextPlugin.activationEvents?.length
-        ) {
-          lazyDualScopeEntries.add(pluginId);
-        } else {
-          lazyDualScopeEntries.delete(pluginId);
-        }
+        syncPackageScopeMetadata(pluginId, next.entry.packageManifest?.plugin);
       };
       const generation = crypto.randomUUID();
       // Deferred approval must import the same fresh graph as an approved reload.

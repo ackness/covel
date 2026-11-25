@@ -321,7 +321,7 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 413 limit_exceeded when upload exceeds 20 MB (M-14)", async () => {
+  it("returns 413 limit_exceeded when upload exceeds 20 MB", async () => {
     const { app } = await makeApp();
     const oversized = new Uint8Array(20 * 1024 * 1024 + 1);
     oversized.set(IMG, 0);

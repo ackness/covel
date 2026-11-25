@@ -42,12 +42,6 @@ vi.mock("../plugin-webview.js", () => ({
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: {
-      session: { id: "session-1" },
-      gameState: mocks.gameState,
-    },
-  }),
   useSessionStructure: () => ({
     session: { id: "session-1" },
     gameState: mocks.gameState,

@@ -64,7 +64,7 @@ describe("startLoopbackCallbackSession", () => {
     await expect(fetch(session.callbackUrl)).rejects.toThrow();
   });
 
-  it("rejects forged non-loopback Host headers without closing the listener (M-03)", async () => {
+  it("rejects forged non-loopback Host headers without closing the listener", async () => {
     const net = await import("node:net");
     const session = await startLoopbackCallbackSession({
       path: "/auth/callback",
@@ -96,7 +96,7 @@ describe("startLoopbackCallbackSession", () => {
     expect(result.query.code).toBe("legit");
   });
 
-  it("settles and closes cleanly even when the client disconnects before reading the response (M-03)", async () => {
+  it("settles and closes cleanly even when the client disconnects before reading the response", async () => {
     const net = await import("node:net");
     const session = await startLoopbackCallbackSession({
       path: "/auth/callback",
@@ -148,7 +148,7 @@ describe("startLoopbackCallbackSession", () => {
     }
   });
 
-  it("skips a preferred port already bound on ::1 when IPv6 is available (M-03)", async ({
+  it("skips a preferred port already bound on ::1 when IPv6 is available", async ({
     skip,
   }) => {
     const blocker = http.createServer((_req, res) => res.end("v6-busy"));

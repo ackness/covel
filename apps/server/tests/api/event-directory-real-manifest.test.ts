@@ -19,7 +19,7 @@ import {
   loadRuntime,
 } from "@covel/plugin-loader";
 import { buildSessionEmitEventTool } from "@covel/tools";
-import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
+import { createEventDirectory } from "@covel/tools";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../../plugins");
 const SESSION_ID = "sess-real-manifest";

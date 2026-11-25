@@ -20,7 +20,6 @@ const api = vi.hoisted(() => ({
 const activePlugins = [{ id: "probe", active: true }];
 vi.mock("@/services/api.js", () => api);
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({ state: { sessionPlugins: activePlugins } }),
   useSessionStructure: () => ({
     session: null,
     world: null,

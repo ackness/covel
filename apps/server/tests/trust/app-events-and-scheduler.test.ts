@@ -714,9 +714,7 @@ describe("AppEvents, AppScheduler, and Instance UI Slot Gating", () => {
     expect(hostedCalls).toEqual([]);
   });
 
-  it("keeps recurring schedule alive after scheduleOnce and aborts/fences in-flight tasks on replacePlugin (M-06)", async () => {
-    const { createAppScheduler } =
-      await import("../../src/routes/api/bootstrap/app-scheduler.js");
+  it("keeps recurring schedule alive after scheduleOnce and aborts/fences in-flight tasks on replacePlugin", async () => {
     await writePluginDir(
       builtinDir,
       "sched-m06",

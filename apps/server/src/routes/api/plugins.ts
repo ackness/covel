@@ -106,17 +106,7 @@ pluginRoutes.delete("/:id", accessGuard("host.files"), async (c) => {
       await cancelPackageUpdate(root, id);
       const staged = await stagePackageRemoval(finalDir);
       await removePackageStaging(staged.directory);
-      const cleanup = c.get("cleanupUninstalledPlugin");
-      if (cleanup) {
-        await cleanup(id);
-      } else {
-        await Promise.all([
-          c.get("secretVault")?.deletePlugin(id) ?? Promise.resolve(0),
-          c.get("store")?.deletePluginInstanceData?.(id) ?? Promise.resolve(0),
-          c.get("permissionService")?.deletePluginGrant(id) ??
-            Promise.resolve(),
-        ]);
-      }
+      await c.get("cleanupUninstalledPlugin")?.(id);
     });
   } catch (error) {
     const { status, body } = errorResponse(error);

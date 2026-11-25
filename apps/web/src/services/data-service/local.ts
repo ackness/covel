@@ -102,9 +102,9 @@ function worldSnapshotJson(
   return JSON.stringify(world, (_key, value: unknown) =>
     value !== null && typeof value === "object" && !Array.isArray(value)
       ? Object.fromEntries(
-          Object.entries(value)
-            .filter(([, entryValue]) => entryValue !== undefined)
-            .sort(([left], [right]) => left.localeCompare(right)),
+          Object.entries(value).sort(([left], [right]) =>
+            left.localeCompare(right),
+          ),
         )
       : value,
   );
@@ -414,15 +414,15 @@ export class LocalDataService implements DataService {
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
     const vault = await this.ready();
     return vault.withWorldLock(id, "exclusive", () =>
-      this.updateWorldNow(id, patch),
+      this.updateWorldNow(vault, id, patch),
     );
   }
 
   private async updateWorldNow(
+    vault: BrowserVault,
     id: string,
     patch: WorldPatch,
   ): Promise<WorldRecord> {
-    const vault = await this.ready();
     const existing = await vault.getWorld(id);
     if (!existing) throw new Error("World not found: " + id);
     const hasDimensions =

@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import {
+  PLUGIN_ASSETS_PATH,
   PLUGIN_FRAME_PATH,
   PLUGIN_PAGE_READY_TIMEOUT_MS,
   PLUGIN_PAGE_HEARTBEAT_INTERVAL_MS,
@@ -79,10 +80,8 @@ function areStateValuesEqual(
   return true;
 }
 
-const PLUGIN_ASSETS_PREFIX = "/plugin-assets/";
-
 function isSafePluginAssetSrc(raw: string): boolean {
-  if (!raw.startsWith(PLUGIN_ASSETS_PREFIX)) return false;
+  if (!raw.startsWith(`${PLUGIN_ASSETS_PATH}/`)) return false;
   if (raw.includes("//") || raw.includes("\\")) return false;
   if (/[\x00-\x1f\x7f]/.test(raw)) return false;
   const pathOnly = raw.split(/[?#]/, 1)[0] ?? "";
@@ -282,7 +281,7 @@ export function PluginWebview(props: {
       clearTimeout(readyTimer.current);
       controller.abort();
     };
-  }, [frameKey, props.src, src, unsafeSrc]);
+  }, [frameKey, props.src, src]);
 
   useEffect(() => {
     if (!props.onPageFailure) return;

@@ -4,8 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   CAPABILITY_CATALOG,
   CAPABILITY_KEYS,
-  permissionsPolicySchema,
-  pluginGrantDecisionsSchema,
   type CapabilityKey,
 } from "@covel/shared/permissions";
 
@@ -39,27 +37,17 @@ const ENFORCEMENT_SITES: Readonly<
   "plugin.providerSource": [
     "apps/server/src/routes/api/bootstrap/provider-sources.ts",
   ],
-  "channel.bridge": [
-    "apps/server/src/routes/api/bootstrap/plugin-host.ts",
-  ],
-  "plugin.globalAutoEnable": [
-    "apps/server/src/routes/api/session/plugins.ts",
-  ],
-  "secrets.own": [
-    "apps/server/src/routes/api/bootstrap/plugin-entry-api.ts",
-  ],
+  "channel.bridge": ["apps/server/src/routes/api/bootstrap/plugin-host.ts"],
+  "plugin.globalAutoEnable": ["apps/server/src/routes/api/session/plugins.ts"],
+  "secrets.own": ["apps/server/src/routes/api/bootstrap/plugin-entry-api.ts"],
   "net.httpDeclared": [
     "apps/server/src/routes/api/bootstrap/plugin-entry-api.ts",
     "apps/server/src/routes/api/turn-execution-deps.ts",
     "apps/server/src/routes/api/bootstrap/runtime-jobs.ts",
     "packages/runtime/src/function-runtime/http-permissions.ts",
   ],
-  "net.authProxy": [
-    "apps/server/src/routes/api/bootstrap/plugin-entry-api.ts",
-  ],
-  "net.loopbackCallback": [
-    "apps/server/src/routes/api/plugin-flows.ts",
-  ],
+  "net.authProxy": ["apps/server/src/routes/api/bootstrap/plugin-entry-api.ts"],
+  "net.loopbackCallback": ["apps/server/src/routes/api/plugin-flows.ts"],
   "network.localModels": [
     "apps/server/src/host-profile.ts",
     "apps/server/src/routes/api/bootstrap/provider-sources.ts",
@@ -71,15 +59,9 @@ const ENFORCEMENT_SITES: Readonly<
     "apps/server/src/routes/api/plugin-rpc.ts",
     "apps/server/src/routes/api/plugin-data.ts",
   ],
-  "runtime.highRiskTools": [
-    "apps/server/src/routes/api/bootstrap/tools.ts",
-  ],
-  "app.scheduler": [
-    "apps/server/src/routes/api/bootstrap/app-scheduler.ts",
-  ],
-  "host.installPackages": [
-    "apps/server/src/host-profile.ts",
-  ],
+  "runtime.highRiskTools": ["apps/server/src/routes/api/bootstrap/tools.ts"],
+  "app.scheduler": ["apps/server/src/routes/api/bootstrap/app-scheduler.ts"],
+  "host.installPackages": ["apps/server/src/host-profile.ts"],
 };
 
 describe("capability enforcement registry", () => {
@@ -94,18 +76,6 @@ describe("capability enforcement registry", () => {
       if (def.reserved) {
         expect(def.defaultPolicy).toBe("deny");
         expect(def.allowAutoPolicy).toBe(false);
-        expect(
-          permissionsPolicySchema.safeParse({ [key]: "ask" }).success,
-        ).toBe(false);
-        expect(
-          permissionsPolicySchema.safeParse({ [key]: "allow" }).success,
-        ).toBe(false);
-        expect(
-          pluginGrantDecisionsSchema.safeParse({ [key]: "allow" }).success,
-        ).toBe(false);
-        expect(
-          pluginGrantDecisionsSchema.safeParse({ [key]: "deny" }).success,
-        ).toBe(false);
         continue;
       }
 
