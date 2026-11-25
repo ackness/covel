@@ -118,11 +118,22 @@ export function sqliteWriteOrderTriggersSql(): string {
 export function pgWriteOrderTriggersSql(): string {
   const functions = `
   CREATE OR REPLACE FUNCTION covel_next_session_write(p_session_id text)
-    RETURNS bigint LANGUAGE sql AS $fn$
+    RETURNS bigint LANGUAGE plpgsql AS $fn$
+  DECLARE
+    next_val bigint;
+  BEGIN
+    -- Unify lock order with compareAndSetPluginDataBatch / deletePgSessionCascade
+    -- / updateSession: acquire the sessions row lock before session_write_counters
+    -- so concurrent transactions cannot deadlock in AB-BA order. FOR NO KEY UPDATE
+    -- excludes concurrent session updates/deletes while permitting
+    -- FOR KEY SHARE checks on vector inserts.
+    PERFORM 1 FROM sessions WHERE id = p_session_id FOR NO KEY UPDATE;
     INSERT INTO session_write_counters AS c (session_id, value)
       VALUES (p_session_id, 1)
       ON CONFLICT (session_id) DO UPDATE SET value = c.value + 1
-      RETURNING value
+      RETURNING value INTO next_val;
+    RETURN next_val;
+  END;
   $fn$;
 
   CREATE OR REPLACE FUNCTION covel_record_change(
@@ -143,11 +154,21 @@ export function pgWriteOrderTriggersSql(): string {
   END;
   $fn$;
 
-  DROP TRIGGER IF EXISTS turn_messages_write_seq ON turn_messages;
-  CREATE TRIGGER turn_messages_write_seq
-    BEFORE INSERT ON turn_messages
-    FOR EACH ROW
-    EXECUTE FUNCTION turn_messages_write_seq();`;
+  DO $trg$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'turn_messages_write_seq'
+        AND tgrelid = 'turn_messages'::regclass
+        AND NOT tgisinternal
+    ) THEN
+      CREATE TRIGGER turn_messages_write_seq
+        BEFORE INSERT ON turn_messages
+        FOR EACH ROW
+        EXECUTE FUNCTION turn_messages_write_seq();
+    END IF;
+  END;
+  $trg$;`;
   const changes = RECORD_CHANGE_SOURCES.map(
     (source) => `
   CREATE OR REPLACE FUNCTION ${source.table}_record_change() RETURNS trigger
@@ -162,11 +183,21 @@ export function pgWriteOrderTriggersSql(): string {
   END;
   $fn$;
 
-  DROP TRIGGER IF EXISTS ${source.table}_record_change ON ${source.table};
-  CREATE TRIGGER ${source.table}_record_change
-    AFTER INSERT OR UPDATE OR DELETE ON ${source.table}
-    FOR EACH ROW
-    EXECUTE FUNCTION ${source.table}_record_change();`,
+  DO $trg$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = '${source.table}_record_change'
+        AND tgrelid = '${source.table}'::regclass
+        AND NOT tgisinternal
+    ) THEN
+      CREATE TRIGGER ${source.table}_record_change
+        AFTER INSERT OR UPDATE OR DELETE ON ${source.table}
+        FOR EACH ROW
+        EXECUTE FUNCTION ${source.table}_record_change();
+    END IF;
+  END;
+  $trg$;`,
   );
   return [functions, ...changes].join("\n");
 }

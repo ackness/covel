@@ -1,6 +1,9 @@
-import { resolveI18nText } from "@covel/plugin-handlers-utils";
-import { resolveI18nDeep } from "@covel/plugin-handlers-utils";
-import { pickLocaleText } from "@covel/plugin-handlers-utils";
+import {
+  modelFacingJson,
+  pickLocaleText,
+  resolveI18nDeep,
+  resolveI18nText,
+} from "@covel/plugin-handlers-utils";
 import {
   DIMENSION_DATA_NAMESPACE,
   derivedDimensionFields,
@@ -174,7 +177,7 @@ export default function (covel) {
           `schema: ${JSON.stringify(schemaForTracker(resolveI18nDeep(dimensionSchemaWithoutDerived(schema) ?? schema, ctx.locale)))}`,
           "</dimension>",
         ].join("\n");
-        const value = `${id}: ${JSON.stringify(dimensionValueWithoutDerived(schema, frozen ? frozen.value : record.value))}`;
+        const value = `${id}: ${JSON.stringify(modelFacingJson(dimensionValueWithoutDerived(schema, frozen ? frozen.value : record.value)))}`;
         if (used + block.length + value.length <= FULL_RULES_BUDGET) {
           complete.push(block);
           values.push(value);

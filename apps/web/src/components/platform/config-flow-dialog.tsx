@@ -122,10 +122,21 @@ function FormStepView({
         const normalized: Record<string, unknown> = {};
         for (const field of step.fields) {
           const raw = formValues[field.name];
-          normalized[field.name] =
-            field.type === "number" && raw !== "" && raw !== undefined
-              ? Number(raw)
-              : raw;
+          if (field.type === "number" && raw !== "" && raw !== undefined) {
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed)) {
+              setErrorMessage(
+                t("platform.fieldInvalidNumber", {
+                  field: resolveDisplayText(field.label, locale) || field.name,
+                  defaultValue: "{{field}} must be a valid number",
+                }),
+              );
+              return;
+            }
+            normalized[field.name] = parsed;
+          } else {
+            normalized[field.name] = raw;
+          }
         }
         void onSubmitStep({ stepId: step.stepId, data: normalized });
       }}
@@ -346,8 +357,25 @@ function DeviceStepView({
           size="sm"
           className="gap-1.5"
           onClick={() => {
-            void navigator.clipboard?.writeText(step.userCode);
-            emitToast("info", t("platform.codeCopied", "Code copied"));
+            const clipboard = navigator.clipboard;
+            if (!clipboard?.writeText) {
+              emitToast(
+                "error",
+                t("platform.copyFailed", "Could not copy to clipboard"),
+              );
+              return;
+            }
+            void clipboard
+              .writeText(step.userCode)
+              .then(() => {
+                emitToast("info", t("platform.codeCopied", "Code copied"));
+              })
+              .catch(() => {
+                emitToast(
+                  "error",
+                  t("platform.copyFailed", "Could not copy to clipboard"),
+                );
+              });
           }}
         >
           <Copy className="h-3.5 w-3.5" />
@@ -550,29 +578,51 @@ export function ConfigFlowDialog() {
 
   const notifiedDoneRunRef = useRef<string | null>(null);
   const activeRunRef = useRef<ConfigFlowRunSnapshot | null>(null);
+  const activeFlowKeyRef = useRef<number | undefined>(undefined);
+  const lastStepKeyRef = useRef<string | null>(null);
+  const cancelledRunIdsRef = useRef<Set<string>>(new Set());
   activeRunRef.current = run;
 
   const flowKey = activeConfigFlow?.key;
+  activeFlowKeyRef.current = flowKey;
 
-  const resetStepInputs = () => {
+  const clearStepInputs = () => {
+    setFormValues({});
     setCallbackInput("");
     setImportContent("");
     setImportFilename(undefined);
   };
 
+  const resetStepInputs = () => {
+    lastStepKeyRef.current = null;
+    clearStepInputs();
+  };
+
+  const cancelRunOnce = (pluginId: string, flowId: string, runId: string) => {
+    if (cancelledRunIdsRef.current.has(runId)) return Promise.resolve();
+    cancelledRunIdsRef.current.add(runId);
+    return Promise.resolve(
+      cancelPluginConfigFlow(pluginId, flowId, runId),
+    ).catch(() => {});
+  };
+
   const applyRun = (nextRun: ConfigFlowRunSnapshot) => {
+    const nextStepId = "stepId" in nextRun.step ? nextRun.step.stepId : "";
+    const nextStepKey = `${nextRun.runId}:${nextRun.step.kind}:${nextStepId}`;
+    const stepChanged = lastStepKeyRef.current !== nextStepKey;
+    lastStepKeyRef.current = nextStepKey;
+
     setRun(nextRun);
-    if (nextRun.step.kind === "form") {
-      setFormValues(initFormValues(nextRun.step.fields));
-    } else if (nextRun.step.kind === "browser") {
-      setCallbackInput("");
-    } else if (nextRun.step.kind === "import") {
-      setImportContent("");
-      setImportFilename(undefined);
-    } else if (nextRun.step.kind === "done") {
+    if (nextRun.step.kind === "done") {
+      clearStepInputs();
       if (notifiedDoneRunRef.current !== nextRun.runId) {
         notifiedDoneRunRef.current = nextRun.runId;
         bumpPlatformInstanceDataVersion();
+      }
+    } else if (stepChanged) {
+      clearStepInputs();
+      if (nextRun.step.kind === "form") {
+        setFormValues(initFormValues(nextRun.step.fields));
       }
     }
   };
@@ -583,26 +633,30 @@ export function ConfigFlowDialog() {
       setErrorMessage(null);
       setLoading(false);
       setSubmitting(false);
+      resetStepInputs();
       return;
     }
     let cancelled = false;
     setRun(null);
     setErrorMessage(null);
     setLoading(true);
+    setSubmitting(false);
     resetStepInputs();
 
+    const startedFlow = activeConfigFlow;
+
     void startPluginConfigFlow(
-      activeConfigFlow.pluginId,
-      activeConfigFlow.flowId,
-      activeConfigFlow.initial,
+      startedFlow.pluginId,
+      startedFlow.flowId,
+      startedFlow.initial,
     )
       .then(async ({ run: startedRun }) => {
         if (!cancelled) {
           applyRun(startedRun);
         } else if (startedRun.status === "active") {
-          await cancelPluginConfigFlow(
-            activeConfigFlow.pluginId,
-            activeConfigFlow.flowId,
+          await cancelRunOnce(
+            startedFlow.pluginId,
+            startedFlow.flowId,
             startedRun.runId,
           );
         }
@@ -618,53 +672,98 @@ export function ConfigFlowDialog() {
 
     return () => {
       cancelled = true;
+      const current = activeRunRef.current;
+      if (
+        current &&
+        current.status === "active" &&
+        current.pluginId === startedFlow.pluginId &&
+        current.flowId === startedFlow.flowId
+      ) {
+        void cancelRunOnce(
+          startedFlow.pluginId,
+          startedFlow.flowId,
+          current.runId,
+        );
+      }
     };
   }, [flowKey]);
 
   const step = run?.step;
+  const stepKind = step?.kind;
+  const stepId = step && "stepId" in step ? step.stepId : undefined;
+  const stepCompletion = step?.kind === "browser" ? step.completion : undefined;
+  const stepIntervalSec =
+    step?.kind === "device" ? step.intervalSec : undefined;
 
-  // Poll loop for active `device` and loopback-enabled `browser` steps.
+  // Non-overlapping poll loop for active `device` and loopback-enabled `browser` steps.
   useEffect(() => {
     if (!activeConfigFlow || !run || run.status !== "active") return;
     const shouldPoll =
-      run.step.kind === "device" ||
-      (run.step.kind === "browser" && run.step.completion !== "paste");
+      stepKind === "device" ||
+      (stepKind === "browser" && stepCompletion !== "paste");
     if (!shouldPoll) return;
 
     const intervalMs =
-      run.step.kind === "device" ? (run.step.intervalSec ?? 2) * 1000 : 2000;
+      stepKind === "device" ? (stepIntervalSec ?? 2) * 1000 : 2000;
     let cancelled = false;
-    const timer = window.setInterval(() => {
-      void getPluginConfigFlowRun(
-        activeConfigFlow.pluginId,
-        activeConfigFlow.flowId,
-        run.runId,
-      )
-        .then((res) => {
-          if (!cancelled) applyRun(res.run);
-        })
-        .catch(() => {
-          // Transient poll errors let the user still cancel or retry.
-        });
-    }, intervalMs);
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
+
+    const schedule = () => {
+      if (cancelled) return;
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+        controller = new AbortController();
+        void getPluginConfigFlowRun(
+          activeConfigFlow.pluginId,
+          activeConfigFlow.flowId,
+          run.runId,
+          controller.signal,
+        )
+          .then((res) => {
+            if (!cancelled) applyRun(res.run);
+          })
+          .catch(() => {
+            // Transient poll errors let the user still cancel or retry.
+          })
+          .finally(() => {
+            controller = null;
+            if (!cancelled) schedule();
+          });
+      }, intervalMs);
+    };
+
+    schedule();
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
+      controller?.abort();
     };
-  }, [activeConfigFlow, run?.runId, run?.status, run?.step.kind]);
+  }, [
+    activeConfigFlow,
+    run?.runId,
+    run?.status,
+    stepKind,
+    stepId,
+    stepCompletion,
+    stepIntervalSec,
+  ]);
 
   const dismiss = async () => {
     const req = activeConfigFlow;
     const current = activeRunRef.current;
-    closePluginConfigFlow();
     if (req && current && current.status === "active") {
-      await cancelPluginConfigFlow(
+      const cancelPromise = cancelRunOnce(
         req.pluginId,
         req.flowId,
         current.runId,
-      ).catch(() => {});
+      );
+      closePluginConfigFlow();
+      await cancelPromise;
+      return;
     }
+    closePluginConfigFlow();
   };
 
   if (!activeConfigFlow) return null;
@@ -676,6 +775,11 @@ export function ConfigFlowDialog() {
     readonly cancelled?: boolean;
   }) => {
     if (!run || submitting) return;
+    const expectedFlowKey = flowKey;
+    const expectedRunId = run.runId;
+    const isStaleRun = () =>
+      activeFlowKeyRef.current !== expectedFlowKey ||
+      activeRunRef.current?.runId !== expectedRunId;
     setSubmitting(true);
     setErrorMessage(null);
     try {
@@ -685,11 +789,15 @@ export function ConfigFlowDialog() {
         run.runId,
         payload,
       );
+      if (isStaleRun()) return;
       applyRun(res.run);
     } catch (err) {
+      if (isStaleRun()) return;
       setErrorMessage(err instanceof Error ? err.message : String(err));
     } finally {
-      setSubmitting(false);
+      if (activeFlowKeyRef.current === expectedFlowKey) {
+        setSubmitting(false);
+      }
     }
   };
 
@@ -712,7 +820,13 @@ export function ConfigFlowDialog() {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
+          {description ? (
+            <DialogDescription>{description}</DialogDescription>
+          ) : (
+            <DialogDescription className="sr-only">
+              {t("platform.flowDialogDescription", "Plugin configuration flow")}
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         {loading && (

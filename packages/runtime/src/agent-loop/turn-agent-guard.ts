@@ -31,7 +31,7 @@ import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js"
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runLeasedInvocation } from "../turn-executor/runtime-scaffold.js";
 import { freezeInputSlots } from "./runtime-input-slots.js";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 
 export interface ExecuteAgentGuardOptions {
   readonly lastPlayerInput?:

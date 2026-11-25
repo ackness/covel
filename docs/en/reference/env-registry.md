@@ -442,7 +442,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 
 **`TRUSTED_PROXY_IPS`**
 
-- The rate-limit middleware (`middleware/rate-limit.ts`) uses it to decide whether to trust `X-Forwarded-For`.
+- The rate-limit middleware (`middleware/rate-limit.ts`) uses it to decide whether to trust `X-Forwarded-For`, walking hops right-to-left while skipping trusted proxy addresses (with `::ffff:` IPv4-mapped normalization) so spoofed leading entries cannot bypass IP rate limits or relay quotas.
 - SSRF protection for outbound requests is open by default to all public `https` hosts. So there is no variable such as "allowed model hosts".
 
 **`COVEL_PG_LOCK_POOL_MAX`**
@@ -472,13 +472,13 @@ This section explains, one by one, the variables whose behavior is more detailed
 **`COVEL_PERMISSIONS_POLICY`**
 
 - Comma-separated `CapabilityKey=allow|ask|deny` list that fixes the `permissions.policy` L2 instance capability policy at startup (`env > stored > default`).
-- When valid and present, `/api/config/server-settings` and `/api/permissions/snapshot` report `source: "env"` and `settable: false`, and policy updates return `409 server_setting_fixed`; setting `allow` on a capability that forbids instance-level auto-allow invalidates the override so the environment value is ignored.
+- When valid and present, `/api/config/server-settings` and `/api/permissions/snapshot` report `source: "env"` and `settable: false`, and policy updates return `409 server_setting_fixed`; setting `allow` on a capability that forbids instance-level auto-allow or modifying a `reserved` capability invalidates the override so the environment value is ignored.
 - See [Security · Instance policy and persistent grants](../internals/security.md#instance-policy-and-persistent-grants).
 
 **`COVEL_CREDENTIALS_KEY`**
 
-- Optional secret passphrase (SHA-256 derived 256-bit key with AES-256-GCM authenticated encryption) for protecting file-backed plugin secrets managed via `ctx.secrets` under `<config>/secrets/`.
-- When unset, secret files are still written atomically with `0600` permissions in the local config directory and remain excluded from the database and `/api/config/raw/*`. Do not rotate away an active passphrase while secret files encrypted under it remain on disk.
+- Optional secret passphrase (per-file random-salt `scrypt` 256-bit key derivation with AES-256-GCM authenticated encryption, strictly validating a 12-byte IV and 16-byte auth tag) for protecting file-backed plugin secrets managed via `ctx.secrets` under `<config>/secrets/`.
+- When configured, reading unencrypted `encrypted: false` secret files is strictly rejected to prevent plaintext downgrade attacks; re-save plugin credentials if switching an older unencrypted development directory to encrypted mode. When unset, secret files are still written atomically with `0600` permissions in the local config directory and remain excluded from the database and `/api/config/raw/*`.
 
 ### Desktop proxy
 

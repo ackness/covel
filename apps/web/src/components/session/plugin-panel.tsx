@@ -29,7 +29,7 @@ import {
   usePluginNamespaces,
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
-import { useSession } from "@/stores/session-store.js";
+import { useSessionStructure } from "@/stores/session-store.js";
 import type { PluginRpcRequest, PluginRpcResponse } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
@@ -226,6 +226,10 @@ function SessionPluginPanel(props: PluginPanelProps) {
   const webview = props.spec.webview as
     { html?: string; url?: string; height?: number } | undefined;
   const session = props.sessionBridge;
+  const webviewState = useMemo(
+    () => ({ locale: i18n.language, session: session?.projection }),
+    [i18n.language, session?.projection],
+  );
   if (!webview || !session) return null;
   return (
     <PluginWebview
@@ -244,7 +248,7 @@ function SessionPluginPanel(props: PluginPanelProps) {
       isCurrent={session.isCurrent}
       locked={false}
       handlers={session.handlers ?? {}}
-      state={{ locale: i18n.language, session: session.projection }}
+      state={webviewState}
     />
   );
 }
@@ -262,6 +266,8 @@ function SnapshotPluginPanel(props: PluginPanelProps) {
   );
 }
 
+const EMPTY_RECORD: Record<string, unknown> = {};
+
 function LivePluginPanel(props: PluginPanelProps) {
   const { pluginId, spec } = props;
   const { t } = useTranslation();
@@ -278,37 +284,50 @@ function LivePluginPanel(props: PluginPanelProps) {
     [ownerNamespaces, dataSource?.bindings],
   );
   const jobs = usePluginJobs(pluginId);
-  const { state: sessionState } = useSession();
-  const sessionCharacters =
-    sessionState.gameState.characters &&
-    Array.isArray(sessionState.gameState.characters)
-      ? Object.fromEntries(
-          sessionState.gameState.characters.map((character, index) => {
-            const value = character as Record<string, unknown>;
-            const key =
-              typeof value.id === "string" ? value.id : `character-${index}`;
-            return [key, value];
-          }),
-        )
-      : {};
+  const sessionState = useSessionStructure();
+  const rawCharacters = sessionState.gameState.characters;
+  const sessionCharacters = useMemo(
+    () =>
+      rawCharacters && Array.isArray(rawCharacters)
+        ? Object.fromEntries(
+            rawCharacters.map((character, index) => {
+              const value = character as Record<string, unknown>;
+              const key =
+                typeof value.id === "string" ? value.id : `character-${index}`;
+              return [key, value];
+            }),
+          )
+        : EMPTY_RECORD,
+    [rawCharacters],
+  );
   const schema = sessionState.gameState.characterSchema;
-  const sessionCharacterSchema =
-    schema && typeof schema === "object" && !Array.isArray(schema)
-      ? (schema as Record<string, unknown>)
-      : {};
+  const sessionCharacterSchema = useMemo(
+    () =>
+      schema && typeof schema === "object" && !Array.isArray(schema)
+        ? (schema as Record<string, unknown>)
+        : EMPTY_RECORD,
+    [schema],
+  );
+  const jobsData = useMemo(
+    () =>
+      namespace === "_jobs"
+        ? Object.fromEntries(
+            jobs.map((job) => [
+              job.jobId,
+              job.messageKey ? { ...job, message: t(job.messageKey) } : job,
+            ]),
+          )
+        : EMPTY_RECORD,
+    [namespace, jobs, t],
+  );
   const frameworkData = isDisallowedWebviewSessionSource(spec)
-    ? {}
+    ? EMPTY_RECORD
     : sourceKind === "session.characters"
       ? sessionCharacters
       : sourceKind === "session.characterSchema"
         ? sessionCharacterSchema
         : namespace === "_jobs"
-          ? Object.fromEntries(
-              jobs.map((job) => [
-                job.jobId,
-                job.messageKey ? { ...job, message: t(job.messageKey) } : job,
-              ]),
-            )
+          ? jobsData
           : liveData;
   return (
     <PluginPanelView
@@ -379,8 +398,10 @@ function PluginPanelView({
     pluginId,
     panelId ?? spec.id ?? spec.label ?? "panel",
   ]);
+  const stateCacheKeyRef = useRef<string | null>(null);
   const stateStoreRef = useRef<StateStore | null>(null);
-  if (!stateStoreRef.current) {
+  if (stateCacheKeyRef.current !== stateCacheKey || !stateStoreRef.current) {
+    stateCacheKeyRef.current = stateCacheKey;
     const cached = stateCache?.get(stateCacheKey);
     stateStoreRef.current = cached ?? createStateStore({});
     if (!cached) stateCache?.set(stateCacheKey, stateStoreRef.current);
@@ -389,6 +410,9 @@ function PluginPanelView({
   const [uiState, setUiState] = useState(
     () => stateStore.get("/uiState") ?? null,
   );
+  useEffect(() => {
+    setUiState(stateStore.get("/uiState") ?? null);
+  }, [stateStore]);
   const updateUiState = useCallback(
     (params: Record<string, unknown>) => {
       const snapshot = parsePluginUiState(params.value);
@@ -397,6 +421,27 @@ function PluginPanelView({
       return { status: "ok" };
     },
     [stateStore],
+  );
+
+  const webviewData = isDisallowedWebviewSessionSource(spec)
+    ? EMPTY_RECORD
+    : data;
+  const resolvedSurfaceContext = surfaceContext ?? EMPTY_RECORD;
+  const webviewState = useMemo(
+    () => ({
+      data: webviewData,
+      locale: activeLocale,
+      locked: interactionLocked,
+      context: resolvedSurfaceContext,
+      uiState,
+    }),
+    [
+      webviewData,
+      activeLocale,
+      interactionLocked,
+      resolvedSurfaceContext,
+      uiState,
+    ],
   );
 
   const initialState = useMemo(
@@ -735,7 +780,6 @@ function PluginPanelView({
           };
         }
       }
-      const webviewData = isDisallowedWebviewSessionSource(spec) ? {} : data;
       return (
         <PluginWebview
           themeSessionId={sessionId}
@@ -749,13 +793,7 @@ function PluginPanelView({
           fill={fill}
           locked={interactionLocked}
           handlers={allowed}
-          state={{
-            data: webviewData,
-            locale: activeLocale,
-            locked: interactionLocked,
-            context: surfaceContext ?? {},
-            uiState,
-          }}
+          state={webviewState}
         />
       );
     }

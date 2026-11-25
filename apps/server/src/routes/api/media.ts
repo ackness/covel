@@ -82,7 +82,7 @@ type ErrorCode =
   | "unavailable"
   | "limit_exceeded";
 
-type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 500 | 503;
+type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 413 | 500 | 503;
 
 function jsonError(
   code: ErrorCode,
@@ -189,7 +189,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     return jsonError(
       "limit_exceeded",
       "image exceeds the 20 MB upload limit",
-      400,
+      413,
     );
   }
   const sniffed = sniffImageMime(bytes);
@@ -313,12 +313,18 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
   }
 
   let body: CleanupRequestBody = {};
-  try {
-    const parsed = await c.req.json().catch(() => ({}));
-    if (parsed && typeof parsed === "object")
-      body = parsed as CleanupRequestBody;
-  } catch {
-    return jsonError("invalid_request", "invalid cleanup request body", 400);
+  const rawBody = await c.req.text();
+  if (rawBody.trim().length > 0) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      return jsonError("invalid_request", "invalid cleanup request body", 400);
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return jsonError("invalid_request", "invalid cleanup request body", 400);
+    }
+    body = parsed as CleanupRequestBody;
   }
 
   let policy: MediaLifecyclePolicy;

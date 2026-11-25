@@ -1,4 +1,4 @@
-import { resolveI18nText } from "@covel/plugin-handlers-utils";
+import { isLocaleMap, resolveI18nText } from "@covel/plugin-handlers-utils";
 import {
   compareCondition,
   conditionOperatorOf,
@@ -16,14 +16,43 @@ export const TURN_BOUNDS = ["turnGte", "turnLte"];
 
 const NUMERIC_OPS = new Set(NUMERIC_CONDITION_OPERATORS);
 
-function isTextMap(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+const RESERVED_CONDITION_KEYS = new Set([
+  "all",
+  "any",
+  "not",
+  "judge",
+  "id",
+  "scope",
+  "sticky",
+  "watch",
+  "dimension",
+  "path",
+  "time",
+  "affinity",
+  "item",
+  "attribute",
+  "revealed",
+  "selected",
+  "turnsSinceGte",
+  "turnsSinceLte",
+  "turnGte",
+  "turnLte",
+  "equals",
+  "notEquals",
+  "in",
+  "gte",
+  "gt",
+  "lte",
+  "lt",
+  "exists",
+]);
+
+function isShorthandJudgeTextMap(value) {
+  if (!isLocaleMap(value)) return false;
   const entries = Object.entries(value);
-  return (
-    entries.length > 0 &&
-    entries.every(
-      ([, item]) => typeof item === "string" && item.trim().length > 0,
-    )
+  return entries.every(
+    ([key, item]) =>
+      !RESERVED_CONDITION_KEYS.has(key) && item.trim().length > 0,
   );
 }
 
@@ -93,16 +122,16 @@ function itemLeaf(node, operator, state, issues) {
   const entry = raw && Number(raw.quantity ?? 1) > 0 ? raw : undefined;
   if (operator === "exists" && node.path === undefined)
     return asStatus(compareCondition("exists", entry, node.exists));
-  if (!entry) {
-    const actual = node.path === "quantity" ? 0 : undefined;
-    return asStatus(compareCondition(operator, actual, node[operator]));
-  }
   const field =
     node.path !== undefined
       ? node.path
       : NUMERIC_OPS.has(operator) || typeof node[operator] === "number"
         ? "quantity"
         : undefined;
+  if (!entry) {
+    const actual = field === "quantity" ? 0 : undefined;
+    return asStatus(compareCondition(operator, actual, node[operator]));
+  }
   const actual = field === undefined ? entry : readConditionPath(entry, field);
   return asStatus(compareCondition(operator, actual, node[operator]));
 }
@@ -133,10 +162,12 @@ function judgeLeaf(node, pathKey, state, options, issues, pending) {
   const cached = state.judgments?.[key];
   if (cached) {
     if (sticky && cached.met === true) return "true";
-    if (
+    const sameTurn =
       (state.sourceTurnId && cached.sourceTurnId === state.sourceTurnId) ||
-      (state.turnId && cached.turnId === state.turnId)
-    ) {
+      (state.turnId && cached.turnId === state.turnId);
+    const samePhase =
+      !options.phase || !cached.phase || cached.phase === options.phase;
+    if (sameTurn && (cached.met === true || samePhase)) {
       return asStatus(cached.met === true);
     }
   }
@@ -260,9 +291,9 @@ export function inspectCondition(condition, state, options = {}) {
 
     const operator = conditionOperatorOf(node);
     if (!operator) {
-      // Allow an i18n text map at root/branch as a shorthand judge condition
-      // only if it has no known condition keys.
-      if (isTextMap(node) && !Object.hasOwn(node, "dimension")) {
+      // Allow an i18n locale map at root/branch as a shorthand judge condition
+      // only if it is a strict locale map without condition keywords.
+      if (isShorthandJudgeTextMap(node)) {
         const pending = [];
         const status = judgeLeaf(
           { judge: node },
@@ -343,7 +374,9 @@ export function hasJudgeLeaf(condition) {
   if (Array.isArray(condition.all)) return condition.all.some(hasJudgeLeaf);
   if (Array.isArray(condition.any)) return condition.any.some(hasJudgeLeaf);
   if (Object.hasOwn(condition, "not")) return hasJudgeLeaf(condition.not);
-  return Object.hasOwn(condition, "judge");
+  return (
+    Object.hasOwn(condition, "judge") || isShorthandJudgeTextMap(condition)
+  );
 }
 
 /** Collect cross-plugin references used anywhere in a condition tree. */
@@ -374,7 +407,8 @@ export function collectConditionRefs(
     collectConditionRefs(condition.not, out);
     return out;
   }
-  if (Object.hasOwn(condition, "judge")) out.usesJudge = true;
+  if (Object.hasOwn(condition, "judge") || isShorthandJudgeTextMap(condition))
+    out.usesJudge = true;
   if (typeof condition.affinity === "string" && condition.affinity.trim())
     out.affinityNames.add(condition.affinity.trim());
   if (typeof condition.item === "string" && condition.item.trim())

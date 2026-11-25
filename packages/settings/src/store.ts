@@ -210,8 +210,10 @@ export class SettingsStore implements SettingsStoreApi {
       const entries = versioned
         ? (stored as SettingsPersistenceBundle).entries
         : (stored as Record<SettingKey, unknown>);
-      // Refuse misplaced credentials before any ordinary repair copies data.
-      for (const key of Object.keys(entries)) this.assertNonSecretEntry(key);
+      // Refuse misplaced credentials and server-scoped keys before any repair copies data.
+      for (const key of Object.keys(entries)) {
+        this.assertDeviceValueEntry(key);
+      }
       const keys = this.refusedKeys(entries);
       if (keys.length === 0 || !this.adapter.backupBundle) return { stored };
       const backup = await this.adapter.backupBundle();
@@ -533,7 +535,7 @@ export class SettingsStore implements SettingsStoreApi {
   ): Record<SettingKey, unknown> {
     return Object.fromEntries(
       Object.entries(entries).map(([key, value]) => {
-        this.assertNonSecretEntry(key);
+        this.assertDeviceValueEntry(key);
         const entry = this.registry.get(key);
         if (!entry) return [key, value];
         const parsed = entry.schema.safeParse(value);
@@ -602,6 +604,12 @@ export class SettingsStore implements SettingsStoreApi {
         this.values.set(entry.key, parsed.data);
       }
     }
+  }
+
+  unregister(key: SettingKey): void {
+    this.registry.delete(key);
+    this.invalidHydratedKeys.delete(key);
+    this.pendingRepairKeys.delete(key);
   }
 
   get<T>(key: SettingKey): T {
@@ -682,7 +690,7 @@ export class SettingsStore implements SettingsStoreApi {
     if (this.repairing) return this.afterRepair(() => this.setMany(entries));
     try {
       const updates = Object.entries(entries).map(([key, value]) => {
-        this.assertNonSecretEntry(key);
+        this.assertDeviceValueEntry(key);
         const schema = this.registry.get(key)?.schema;
         const parsed = schema?.safeParse(value);
         if (parsed && !parsed.success) {
@@ -722,9 +730,10 @@ export class SettingsStore implements SettingsStoreApi {
         this.normalizeEntries(entries, "replacement"),
       );
       // The editor base is already normalized by export(). Validate its secret
-      // boundary without transforming it a second time through author schemas.
-      for (const key of Object.keys(expectedEntries))
-        this.assertNonSecretEntry(key);
+      // and server-scope boundaries without transforming it a second time.
+      for (const key of Object.keys(expectedEntries)) {
+        this.assertDeviceValueEntry(key);
+      }
       const expected = structuredClone(expectedEntries);
       const current = this.serializeEntries();
       const conflicts = [
@@ -803,22 +812,31 @@ export class SettingsStore implements SettingsStoreApi {
     if (this.repairing) return this.afterRepair(() => this.clearAll());
     try {
       this.assertHydrated();
+      const valueKeys = [...this.values.keys()];
+      const secretProviders = [...this.secrets.keys()];
       return this.observePersistence(
-        Promise.all([
-          this.persist("values", () => this.values.clear(), [
-            ...this.values.keys(),
-          ]),
-          this.persist("secrets", () => this.secrets.clear(), [
-            ...this.secrets.keys(),
-          ]),
-        ]).then(() => {
-          // A reset of this device leaves the server's settings as they are.
+        Promise.allSettled([
+          this.persist("values", () => this.values.clear(), valueKeys),
+          this.persist("secrets", () => this.secrets.clear(), secretProviders),
+        ]).then(([valuesResult, secretsResult]) => {
+          const valuesOk = valuesResult.status === "fulfilled";
+          const secretsOk = secretsResult.status === "fulfilled";
+          // A reset of this device leaves the server's settings as they are,
+          // and only notifies channels whose reset actually persisted.
           for (const entry of this.registry.values()) {
-            this.notify(
-              entry.key,
-              this.isServerKey(entry.key) ? this.get(entry.key) : entry.default,
-            );
+            if (this.isServerKey(entry.key)) {
+              if (valuesOk && secretsOk) {
+                this.notify(entry.key, this.get(entry.key));
+              }
+              continue;
+            }
+            const isSecret = this.isSecretKey(entry.key);
+            if ((isSecret && secretsOk) || (!isSecret && valuesOk)) {
+              this.notify(entry.key, entry.default);
+            }
           }
+          if (!valuesOk) throw valuesResult.reason;
+          if (!secretsOk) throw secretsResult.reason;
         }),
       );
     } catch (error) {
@@ -876,7 +894,7 @@ export class SettingsStore implements SettingsStoreApi {
     const secretUpdates: Array<[string, string]> = [];
     for (const [key, value] of Object.entries(bundle.entries)) {
       if (!selected.has(key)) continue;
-      this.assertNonSecretEntry(key);
+      this.assertDeviceValueEntry(key);
       const entry = this.registry.get(key);
       let normalized: unknown = value;
       if (entry) {
@@ -1002,7 +1020,9 @@ export class SettingsStore implements SettingsStoreApi {
   private serializeEntries(): Record<SettingKey, unknown> {
     return structuredClone(
       Object.fromEntries(
-        [...this.values].filter(([key]) => !this.isSecretKey(key)),
+        [...this.values].filter(
+          ([key]) => !this.isSecretKey(key) && !this.isServerKey(key),
+        ),
       ),
     );
   }
@@ -1016,10 +1036,15 @@ export class SettingsStore implements SettingsStoreApi {
     );
   }
 
-  private assertNonSecretEntry(key: SettingKey): void {
+  private assertDeviceValueEntry(key: SettingKey): void {
     if (this.isSecretKey(key)) {
       throw new Error(
         `Secret setting ${key} must use the separate keys channel`,
+      );
+    }
+    if (this.isServerKey(key)) {
+      throw new Error(
+        `Server setting ${key} must use the server settings channel`,
       );
     }
   }

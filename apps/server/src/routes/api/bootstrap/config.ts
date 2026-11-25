@@ -136,6 +136,14 @@ export interface ApiBootstrapConfig {
   readonly mediaStore?: MediaStore;
   readonly mediaBackend?: MediaStoreBackend;
   readonly vectorBackend?: VectorBackend;
+  /**
+   * Invoked as soon as `providerSources` and server trust are wired, BEFORE
+   * `onStartup`, `AppStarted`, `warmStatus`, or `startBootstrapMaintenance`
+   * run, so startup tasks and queued jobs can resolve provider-source accounts.
+   */
+  readonly onProviderSourceResolverReady?: (
+    resolver: ProviderSourceHost["resolver"],
+  ) => void;
 }
 
 export interface ApiBootstrapResult {

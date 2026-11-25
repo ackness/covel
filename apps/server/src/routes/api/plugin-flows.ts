@@ -97,6 +97,10 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
   }
 
   const app = new Hono();
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("Cache-Control", "no-store");
+  });
 
   async function resolveFlowAccess(
     c: Context,
@@ -139,11 +143,8 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
     );
     if (accessError) return { ok: false, response: accessError };
 
-    if (activateIfNeeded) {
-      await instancePlugins.activateForEvent(`onFlow:${flowId}`);
-      if (!instancePlugins.isActivated(pluginId)) {
-        await instancePlugins.activate(pluginId);
-      }
+    if (activateIfNeeded && !instancePlugins.isActivated(pluginId)) {
+      await instancePlugins.activate(pluginId);
     }
 
     const flow = configFlows.get(pluginId, flowId);
@@ -208,6 +209,7 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
       flowId,
       runId,
       signal,
+      runSignal,
       onLoopbackStarted,
       onLoopbackClosed,
     }) => {
@@ -241,7 +243,7 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
                 const session = await startLoopbackCallbackSession({
                   path: loopbackDecl.path,
                   ports: loopbackDecl.ports,
-                  signal,
+                  signal: runSignal,
                   canAccept: () => canAcceptLoopback(flowId),
                 });
                 const managedSession: LoopbackCallbackSession = {

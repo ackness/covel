@@ -41,6 +41,12 @@ export interface ProviderResolution {
   protocol: ProviderProtocol;
   hooks: ProviderLifecycleHook[];
   /**
+   * Owning plugin ID when credentials come from a `provider.source@1` slot.
+   * Plugin-registered media and text wires must match this owner so credentials
+   * cannot be routed to a different plugin's wire.
+   */
+  approvedInstanceOwner?: string;
+  /**
    * Whether server-env/platform API keys may be attached to this
    * resolution. False when the effective baseUrl came from a
    * request-scoped source (overlay preset/provider) whose origin differs

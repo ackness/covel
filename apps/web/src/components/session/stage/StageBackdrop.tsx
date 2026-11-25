@@ -99,6 +99,16 @@ export function StageBackdrop({
     setCurrent(layer);
   }, [layer.key]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Unmount the previous backdrop layer once the crossfade completes so old
+  // Media/<img> nodes (and their decoded textures/fetch hooks) are not retained
+  // indefinitely underneath the active frame. The fallback timer handles
+  // reduced-motion environments where animationend may never fire.
+  useEffect(() => {
+    if (!previous) return;
+    const timer = setTimeout(() => setPrevious(null), 600);
+    return () => clearTimeout(timer);
+  }, [previous]);
+
   const gradientStyle: CSSProperties | undefined =
     current.kind === "gradient"
       ? {
@@ -120,6 +130,7 @@ export function StageBackdrop({
         key={current.key}
         className="ui-stage-crossfade absolute inset-0"
         style={gradientStyle}
+        onAnimationEnd={() => setPrevious(null)}
       >
         {renderLayer(current, sessionId)}
       </div>
@@ -130,3 +141,4 @@ export function StageBackdrop({
     </div>
   );
 }
+

@@ -605,17 +605,34 @@ export async function streamLLMWithRetry(
         if (isSettled()) return;
         armFirstTokenGuard();
       };
+      const armIdleGuard = (): void => {
+        if (isSettled()) return;
+        clearTimeout(idleHandle);
+        idleHandle = setTimeout(() => {
+          callAborter.abort(
+            new StreamAttemptTimeoutError(
+              "idle",
+              `idle timeout: no model output for ${Math.round(policy.idleTimeoutMs / 1000)}s`,
+            ),
+          );
+        }, policy.idleTimeoutMs);
+      };
       const onQueueStart = () => {
         if (isSettled()) return () => {};
         clearTimeout(callTimeoutHandle);
         clearTimeout(ttfbHandle);
+        clearTimeout(idleHandle);
         return (waitedMs: number) => {
           if (isSettled()) return;
           queueWaitMs += waitedMs;
           effectiveDeadline += waitedMs;
           if (waitedMs > 0) params.onQueueWait?.(waitedMs);
-          armCallGuard();
-          restartFirstTokenGuard();
+          if (firstTokenSeen) {
+            armIdleGuard();
+          } else {
+            armCallGuard();
+            restartFirstTokenGuard();
+          }
         };
       };
       const onProviderRequest = (request: LLMProviderRequest): void => {
@@ -645,15 +662,7 @@ export async function streamLLMWithRetry(
         }
         lastOutputAt = Date.now();
         noteLlmRequestProgress(requestScope.budget);
-        clearTimeout(idleHandle);
-        idleHandle = setTimeout(() => {
-          callAborter.abort(
-            new StreamAttemptTimeoutError(
-              "idle",
-              `idle timeout: no model output for ${Math.round(policy.idleTimeoutMs / 1000)}s`,
-            ),
-          );
-        }, policy.idleTimeoutMs);
+        armIdleGuard();
       };
       const streamedToolCalls: LLMToolCall[] = [];
       let streamedContent = "";
@@ -711,6 +720,20 @@ export async function streamLLMWithRetry(
             params.argumentStream?.fragment(attempt, fragment);
           } else if (event.type === "stream-reset") {
             params.argumentStream?.reset(attempt);
+            firstTokenSeen = false;
+            firstOutputAt = undefined;
+            lastOutputAt = undefined;
+            clearTimeout(idleHandle);
+            streamedContent = "";
+            streamedReasoningContent = "";
+            streamedToolCalls.length = 0;
+            providerContinuation = undefined;
+            diagnostics = undefined;
+            streamedUsage = undefined;
+            streamFinishReason = undefined;
+            streamRawFinishReason = undefined;
+            armCallGuard();
+            restartFirstTokenGuard();
           } else if (event.type === "text-delta") {
             if (event.textDelta.length > 0) noteOutput();
             streamedContent += event.textDelta;

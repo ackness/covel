@@ -21,7 +21,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { BudgetOptions, CompactorRunner } from "@covel/context";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { HostProfile } from "./host-profile.js";
-import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
+import type { EventDirectory } from "@covel/tools";
 import type { RuntimeJobWorker } from "./routes/api/plugin-rpc/runtime-job-worker.js";
 
 type LoadRuntimeFn = (
@@ -171,6 +171,8 @@ declare module "hono" {
     clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;
+    /** Forget session-scoped plugin entry approval tracking after session end/deletion. */
+    clearPluginEntrySession?: (sessionId: string) => void;
     /**
      * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from
      * the discovery result via `deriveBuiltinPluginIds`). The plugin install
@@ -220,5 +222,7 @@ declare module "hono" {
      * `emit-event` builtin tool registered in `setupPluginTools`.
      */
     eventDirectory?: EventDirectory;
+    /** Cleans up secrets, instance data, caches, timers, flows, and grants on plugin uninstall. */
+    cleanupUninstalledPlugin?: (pluginId: string) => Promise<void>;
   }
 }

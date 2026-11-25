@@ -277,4 +277,37 @@ describe("model relay routes", () => {
       vi.useRealTimers();
     }
   });
+
+  it("exits the SSE heartbeat loop immediately when shutdown aborts requestWork", async () => {
+    const { createApplicationWork } = await import(
+      "../../src/application-work.js"
+    );
+    const registry = createModelRelayRegistry();
+    const work = createApplicationWork();
+    const app = new Hono();
+    app.use(
+      "*",
+      hostProfileMiddleware(
+        resolveHostProfile(readRuntimeEnv({ NODE_ENV: "production" }), {
+          storeBackend: "memory",
+        }),
+      ),
+    );
+    app.use("*", work.middleware);
+    app.route("/api/model-relay", createModelRelayRoutes(registry));
+
+    const stream = await app.request("/api/model-relay/stream", {
+      headers: { "X-Model-Relay": CHANNEL },
+    });
+    expect(stream.status).toBe(200);
+    const reader = stream.body!.getReader();
+    await nextEvent(reader, "ready", { text: "" });
+
+    // Drain should complete promptly (well under the 15s HEARTBEAT_MS) once
+    // abort/close interrupts waitHeartbeat.
+    const started = Date.now();
+    await work.close();
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await reader.cancel().catch(() => {});
+  });
 });

@@ -248,7 +248,7 @@
           "type": "object",
           "propertyNames": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
           },
           "additionalProperties": {
             "type": "object",
@@ -314,6 +314,7 @@
               },
               "select": {
                 "type": "string",
+                "pattern": "^(\\/([^/~]|~0|~1)*)*$",
                 "description": "JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export.",
                 "examples": ["/narrativeOutput"]
               },
@@ -322,11 +323,24 @@
                 "description": "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs."
               },
               "accepts": {
-                "type": "string",
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?!\\/)[a-z0-9_./-]+\\.json$",
+                    "description": "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment."
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+                    "description": "Public contract schema URI (`contract:<contractId>`)."
+                  }
+                ],
                 "description": "Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check."
               },
               "recordAs": {
                 "type": "string",
+                "minLength": 1,
                 "description": "Export key to read from the producer. Required with `scope: committed`."
               }
             },
@@ -384,7 +398,19 @@
           "description": "Own plugin data inlined into the agent prompt."
         },
         "payloadSchema": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!\\/)[a-z0-9_./-]+\\.json$",
+              "description": "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment."
+            },
+            {
+              "type": "string",
+              "pattern": "^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$",
+              "description": "Public contract schema URI (`contract:<contractId>`)."
+            }
+          ],
           "description": "Schema that validates the activation payload."
         },
         "output": {
@@ -410,6 +436,7 @@
             },
             "schema": {
               "type": "string",
+              "minLength": 1,
               "description": "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema."
             },
             "live": {
@@ -419,6 +446,7 @@
             },
             "recordAs": {
               "type": "string",
+              "minLength": 1,
               "description": "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one."
             }
           },
@@ -630,7 +658,8 @@
             "afterTools": {
               "type": "array",
               "items": {
-                "type": "string"
+                "type": "string",
+                "minLength": 1
               },
               "description": "At least one of these own or builtin business tools must succeed before submission. Implies require: tool-use; does not end the run."
             }

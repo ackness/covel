@@ -229,4 +229,65 @@ describe("POST /api/sessions/:id/messages/sync", () => {
       (await base.listMessages("s")).map((message) => message.content).sort(),
     ).toEqual(["first", "kept", "no id"]);
   });
+
+  it("rejects invalid timestamps, oversized content, and excessive batch counts", async () => {
+    const store = createMemoryStore();
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: "s",
+      worldId: "w",
+      status: "active",
+      locale: "zh-CN",
+      completedPlayerTurns: 0,
+      activePlugins: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const app = new Hono();
+    const sessionLock = createInProcessSessionLock();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("sessionLock", sessionLock);
+      await next();
+    });
+    app.route("/api/sessions", messageRoutes);
+
+    const badDate = await app.request("/api/sessions/s/messages/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "ok", createdAt: "not-a-date" }],
+      }),
+    });
+    expect(badDate.status).toBe(400);
+
+    const tooMany = await app.request("/api/sessions/s/messages/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: Array.from({ length: 1_001 }, () => ({
+          role: "user",
+          content: "x",
+        })),
+      }),
+    });
+    expect(tooMany.status).toBe(400);
+
+    const tooLong = await app.request("/api/sessions/s/messages/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "x".repeat(200_001) }],
+      }),
+    });
+    expect(tooLong.status).toBe(400);
+  });
 });

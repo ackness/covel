@@ -73,13 +73,21 @@ export function readPngTextChunks(
 }
 export function stripPngTextChunks(bytes: Uint8Array): Uint8Array {
   const chunks = walk(bytes);
+  const kept = chunks.filter(
+    ({ type }) => !["tEXt", "zTXt", "iTXt", "eXIf", "tIME"].includes(type),
+  );
+  const first = kept[0]?.type;
+  const last = kept.at(-1)?.type;
+  const hasIdat = kept.some(({ type }) => type === "IDAT");
+  if (first !== "IHDR" || !hasIdat || last !== "IEND") {
+    throw new StImportError(
+      "png-invalid",
+      "PNG image is incomplete (requires IHDR, IDAT, and IEND)",
+    );
+  }
   return Buffer.concat([
     PNG_SIGNATURE,
-    ...chunks
-      .filter(
-        ({ type }) => !["tEXt", "zTXt", "iTXt", "eXIf", "tIME"].includes(type),
-      )
-      .map(({ start, end }) => bytes.subarray(start, end)),
+    ...kept.map(({ start, end }) => bytes.subarray(start, end)),
   ]);
 }
 export function extractCardJson(bytes: Uint8Array): {

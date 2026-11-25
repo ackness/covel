@@ -192,8 +192,18 @@ export function createPluginDataMethods(
         )
           return false;
         if (!options.valueFilter) return true;
-        const value = row.value as Record<string, unknown> | null;
-        const field = value?.[options.valueFilter.field];
+        const value = row.value;
+        if (
+          value === null ||
+          typeof value !== "object" ||
+          Array.isArray(value) ||
+          !Object.hasOwn(value, options.valueFilter.field)
+        ) {
+          return false;
+        }
+        const field = (value as Record<string, unknown>)[
+          options.valueFilter.field
+        ];
         return (
           typeof field === "string" &&
           options.valueFilter.values.includes(field)

@@ -106,6 +106,11 @@ export function createAppActionRegistry(): AppActionRegistry {
       try {
         return fn();
       } catch (error) {
+        for (const [key, entry] of [...entries]) {
+          if (entry.pluginId === pluginId) {
+            entries.delete(key);
+          }
+        }
         for (const [key, entry] of saved) {
           entries.set(key, entry);
         }

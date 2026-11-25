@@ -396,12 +396,19 @@ export function buildEntryApi(
   }
   // A service or extension provider's code sends its own requests, so it
   // reaches what its own package declares, whoever calls it.
-  const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
+  const ownUtils = <
+    C extends { utils?: unknown; http?: unknown; signal: AbortSignal },
+  >(
     context: C,
-  ): C =>
-    context.utils
-      ? { ...context, utils: withCallSignal(http, context.signal) }
-      : context;
+  ): C => {
+    if (!context.utils && !context.http) return context;
+    const scopedHttp = withCallSignal(http, context.signal);
+    return {
+      ...context,
+      ...(context.utils ? { utils: scopedHttp } : {}),
+      ...(context.http ? { http: scopedHttp } : {}),
+    };
+  };
 
   // Registration has no session authority. Reads are injected per tool call.
   const toolkit: PluginToolkit = {
@@ -494,13 +501,25 @@ export function buildEntryApi(
           ctx.signal?.throwIfAborted();
           return batch.invoke(() => handler(ctx, payload));
         };
+        const matchOption = options?.match;
         batch.track(
           hookPipeline.register({
             id: `${pluginId}:${event}:entry#${hookSeq}`,
             event,
             pluginId,
             handler: sessionGuardedHandler,
-            ...(options?.match ? { match: options.match } : {}),
+            ...(matchOption
+              ? {
+                  match: (payload) => {
+                    const release = batch.retain();
+                    try {
+                      return matchOption(payload);
+                    } finally {
+                      release();
+                    }
+                  },
+                }
+              : {}),
             ...(typeof options?.timeoutMs === "number"
               ? { timeoutMs: options.timeoutMs }
               : {}),

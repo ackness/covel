@@ -4,6 +4,61 @@ import {
   type CapabilityKey,
 } from "@covel/shared/permissions";
 import { ApiError, requestResponse } from "./request.js";
+import { setModelRelaySupported } from "./server-capabilities.js";
+
+export { isModelRelaySupported } from "./server-capabilities.js";
+
+/**
+ * A shared server that keeps players' saves in their own browsers: the
+ * browser-private form, or a hosted tier on the memory store. Its players see
+ * a notice about where their data and keys go.
+ */
+export interface SharedServerInfo {
+  /** The public source repository, an https address. */
+  readonly repository?: string;
+  /** The commit the running build was made from. */
+  readonly commit?: string;
+}
+
+let operatorTokenRequired: boolean | undefined;
+let sharedServer: SharedServerInfo | null = null;
+let deploymentCapabilities: Partial<
+  Record<CapabilityKey, CapabilityCeiling>
+> | null = null;
+
+/**
+ * Null until a server has answered, and on a server whose saves are not kept
+ * in the player's browser.
+ */
+export function getSharedServerInfo(): SharedServerInfo | null {
+  return sharedServer;
+}
+
+/**
+ * What the last health reply said about the operator token. Undefined until
+ * a server has answered; a caller that hides the token entry on `false` must
+ * keep it on `undefined`, or a hosted operator has no place to enter it.
+ */
+export function isOperatorTokenRequired(): boolean | undefined {
+  return operatorTokenRequired;
+}
+
+/**
+ * L1 deployment ceiling reported by `/api/health`, or `undefined` when the
+ * server has not answered or did not advertise this capability.
+ */
+export function getDeploymentCapabilityCeiling(
+  key: CapabilityKey,
+): CapabilityCeiling | undefined {
+  return deploymentCapabilities?.[key];
+}
+
+/**
+ * True only when the server explicitly reported `key` as `"disabled"` at L1.
+ */
+export function isDeploymentCapabilityDisabled(key: CapabilityKey): boolean {
+  return deploymentCapabilities?.[key] === "disabled";
+}
 
 // -- Server Info -------------------------------------------------
 
@@ -44,13 +99,6 @@ export interface ServerHealth {
   };
 }
 
-let operatorTokenRequired: boolean | undefined;
-let sharedServer: SharedServerInfo | null = null;
-let modelRelay = false;
-let deploymentCapabilities: Partial<
-  Record<CapabilityKey, CapabilityCeiling>
-> | null = null;
-
 const VALID_CEILINGS: ReadonlySet<string> = new Set([
   "enabled",
   "operator-only",
@@ -70,18 +118,6 @@ function sanitizeCapabilities(
     }
   }
   return Object.keys(out).length > 0 ? out : null;
-}
-
-/**
- * A shared server that keeps players' saves in their own browsers: the
- * browser-private form, or a hosted tier on the memory store. Its players see
- * a notice about where their data and keys go.
- */
-export interface SharedServerInfo {
-  /** The public source repository, an https address. */
-  readonly repository?: string;
-  /** The commit the running build was made from. */
-  readonly commit?: string;
 }
 
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i;
@@ -146,51 +182,9 @@ export async function fetchServerHealth(): Promise<ServerHealth> {
     operatorTokenRequired = health.operatorTokenRequired;
   }
   sharedServer = sharedServerFrom(health);
-  modelRelay = health.deployment?.modelRelay === true;
   deploymentCapabilities = sanitizeCapabilities(
     health.deployment?.capabilities,
   );
+  setModelRelaySupported(health.deployment?.modelRelay === true);
   return health;
-}
-
-/**
- * True when the server reaches models on the player's computer or local
- * network through this browser (the local model relay).
- */
-export function isModelRelaySupported(): boolean {
-  return modelRelay;
-}
-
-/**
- * Null until a server has answered, and on a server whose saves are not kept
- * in the player's browser.
- */
-export function getSharedServerInfo(): SharedServerInfo | null {
-  return sharedServer;
-}
-
-/**
- * What the last health reply said about the operator token. Undefined until
- * a server has answered; a caller that hides the token entry on `false` must
- * keep it on `undefined`, or a hosted operator has no place to enter it.
- */
-export function isOperatorTokenRequired(): boolean | undefined {
-  return operatorTokenRequired;
-}
-
-/**
- * L1 deployment ceiling reported by `/api/health`, or `undefined` when the
- * server has not answered or did not advertise this capability.
- */
-export function getDeploymentCapabilityCeiling(
-  key: CapabilityKey,
-): CapabilityCeiling | undefined {
-  return deploymentCapabilities?.[key];
-}
-
-/**
- * True only when the server explicitly reported `key` as `"disabled"` at L1.
- */
-export function isDeploymentCapabilityDisabled(key: CapabilityKey): boolean {
-  return deploymentCapabilities?.[key] === "disabled";
 }

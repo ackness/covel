@@ -99,6 +99,18 @@ export function registerWire<T extends { id: string }>(
     if (live.get(key) === entry) live.delete(key);
   };
 }
+export function describeCrossPluginWireOwner(
+  kind: string,
+  id: string,
+  approvedInstanceOwner: string,
+): string | null {
+  const entry = live.get(`${kind}:${id}`);
+  if (!entry?.owner || entry.owner.pluginId === approvedInstanceOwner) {
+    return null;
+  }
+  return entry.owner.pluginId;
+}
+
 export function getWire<T>(
   kind: string,
   id: string,
@@ -107,7 +119,11 @@ export function getWire<T>(
   const key = `${kind}:${id}`;
   if (approvedInstanceOwner !== undefined) {
     const entry = live.get(key);
-    return entry?.owner?.pluginId === approvedInstanceOwner
+    if (!entry) return null;
+    // Built-in wires (no owner, e.g. openai-images / openai-speech) are
+    // framework code and may carry provider.source@1 credentials; plugin-owned
+    // wires may only receive credentials from their own package.
+    return !entry.owner || entry.owner.pluginId === approvedInstanceOwner
       ? (entry.wire as T)
       : null;
   }

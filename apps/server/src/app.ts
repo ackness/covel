@@ -373,8 +373,9 @@ async function initializeServer(): Promise<void> {
       perRequestMiddleware: [perRequestLlm],
       sessionLock,
       memoryIngestLock,
+      onProviderSourceResolverReady: (resolver) =>
+        ai.setProviderSourceResolver?.(resolver),
     }));
-    ai.setProviderSourceResolver?.(api.providerSources.resolver);
 
     await verifyTrustedSourcesAtBoot(api.trustedSources);
 

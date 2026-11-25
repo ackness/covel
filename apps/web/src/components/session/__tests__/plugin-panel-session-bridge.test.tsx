@@ -17,11 +17,6 @@ vi.mock("../plugin-webview.js", () => ({
     return <div />;
   },
 }));
-vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: { session: { id: "s" }, gameState: { characters: [] } },
-  }),
-}));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 afterEach(cleanup);
 it.each([viewEntry, pageViewEntry])(

@@ -76,7 +76,7 @@
      拆分任务时保留纯文档和发布范围选择。必需任务缺失或跳过时，Verification 和 All checks pass 不得通过。
      测试读取包外文件时，必须声明对应的 Turbo 输入。 -->
 
-- [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, manifests, i18n, changelog fragments, workflows -->
+- [ ] `pnpm check` <!-- static gate: types, Oxlint, package boundaries, deps, circular deps, production env, manifests, i18n, changelog fragments, workflows -->
 - [ ] Tests of the changed packages (`pnpm check:push`, or `pnpm --filter <pkg> test`) / 改动包的测试
 - [ ] `pnpm test` <!-- every suite; CI runs it / 全部测试，CI 会运行 -->
 - [ ] `pnpm test:pg` <!-- store or database changes / 改动存储或数据库时 -->

@@ -38,6 +38,7 @@ import {
 } from "./session-import/media-handling.js";
 import { buildImportPlan } from "./session-import/planning.js";
 import {
+  createLedgerReadCache,
   currentHashForLedger,
   deleteLedgerTarget,
   ledgerKey,
@@ -356,12 +357,12 @@ export async function preflightWorldDataForSession(
 ): Promise<PreflightWorldDataForSessionResult> {
   // The same refusal as session creation, so the getting-ready screen can ask first.
   if (options.worldId) activeDimensionProvider(options.preflight);
-  if (!options.worldId || !options.worldsDirs?.length) {
+  const directRoot = options.worldRoot ?? options.inventory?.worldRoot;
+  if (!options.worldId || (!directRoot && !options.worldsDirs?.length)) {
     return preflightWithoutWorldData(options);
   }
   const worldRoot =
-    options.inventory?.worldRoot ??
-    (await resolveWorldRoot(options.worldId, options.worldsDirs));
+    directRoot ?? (await resolveWorldRoot(options.worldId, options.worldsDirs!));
   if (!worldRoot) {
     return preflightWithoutWorldData(options);
   }
@@ -770,6 +771,10 @@ export async function syncWorldDataForSession(
   let deleted = 0;
   const writesToApply: PlannedWrite[] = [];
   const ledgersToDelete: WorldDataImportLedgerRecord[] = [];
+  const preScanReadCache = createLedgerReadCache(
+    options.store,
+    options.sessionId,
+  );
 
   for (const ledger of ledgers) {
     if (writesByKey.has(ledgerKey(ledger))) continue;
@@ -802,6 +807,7 @@ export async function syncWorldDataForSession(
       store: options.store,
       sessionId: options.sessionId,
       ledger,
+      cache: preScanReadCache,
     });
     if (currentHash === null) {
       ledgersToDelete.push(ledger);
@@ -878,6 +884,7 @@ export async function syncWorldDataForSession(
       store: options.store,
       sessionId: options.sessionId,
       ledger,
+      cache: preScanReadCache,
     });
     if (currentHash === null) {
       if (!options.force) {
@@ -915,6 +922,7 @@ export async function syncWorldDataForSession(
       DataStore,
       "getPluginData" | "listCharacters" | "listSessionLorebookEntries"
     >,
+    cache: ReturnType<typeof createLedgerReadCache>,
   ): Promise<WorldDataDiagnostic[]> => {
     const failures: WorldDataDiagnostic[] = [];
     for (const ledger of ledgersToDelete) {
@@ -936,6 +944,7 @@ export async function syncWorldDataForSession(
           store,
           sessionId: options.sessionId,
           ledger,
+          cache,
         })) === null
       )
         continue;
@@ -970,7 +979,7 @@ export async function syncWorldDataForSession(
     ...finalPluginWriteDiagnostics(plan, writesToApply, {
       observational: true,
     }),
-    ...(await removalDiagnostics(options.store)),
+    ...(await removalDiagnostics(options.store, preScanReadCache)),
   ];
   if (failures.length) return refusalResult(failures);
 
@@ -1013,9 +1022,10 @@ export async function syncWorldDataForSession(
     // Scoped transaction: ledger deletes + plan writes commit atomically and a
     // throw rolls back the DB. Unclaimed materialized bytes remain for media GC.
     await options.store.withTransaction(async (tx) => {
+      const txReadCache = createLedgerReadCache(tx, options.sessionId);
       const boundaryFailures = [
         ...finalPluginWriteDiagnostics(plan, materializedWritesToApply),
-        ...(await removalDiagnostics(tx)),
+        ...(await removalDiagnostics(tx, txReadCache)),
       ];
       if (boundaryFailures.length)
         throw new Error(
@@ -1059,6 +1069,7 @@ export async function syncWorldDataForSession(
             store: tx,
             sessionId: options.sessionId,
             ledger,
+            cache: txReadCache,
           });
           // `null` means the target is already gone — deleting it is still the
           // right outcome, and the pre-scan reached the same conclusion.

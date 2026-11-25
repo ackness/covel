@@ -37,6 +37,8 @@ let proxyDispatcher: Dispatcher | undefined;
 const systemProxyDispatchers = new Map<string, Dispatcher>();
 let directDispatcher:
   ReturnType<typeof createConnectPinnedDispatcher> | undefined;
+let strictDirectDispatcher:
+  ReturnType<typeof createConnectPinnedDispatcher> | undefined;
 
 function createProxyDispatcher(url: string): Dispatcher {
   // Undici 8.7+ forwards plain HTTP with an absolute-form request target by
@@ -45,10 +47,14 @@ function createProxyDispatcher(url: string): Dispatcher {
   return new ProxyAgent({ uri: url, proxyTunnel: true });
 }
 
-function getDirectDispatcher(): ReturnType<
-  typeof createConnectPinnedDispatcher
-> {
-  directDispatcher ??= createConnectPinnedDispatcher();
+function getDirectDispatcher(
+  strictDirect = false,
+): ReturnType<typeof createConnectPinnedDispatcher> {
+  if (strictDirect) {
+    strictDirectDispatcher ??= createConnectPinnedDispatcher(false);
+    return strictDirectDispatcher;
+  }
+  directDispatcher ??= createConnectPinnedDispatcher(true);
   return directDispatcher;
 }
 
@@ -376,6 +382,7 @@ async function fetchWithSystemProxy(
   input: string | URL,
   init: RequestInit,
   resolver: SystemProxyResolver,
+  strictDirect: boolean,
 ): Promise<Response> {
   const targetUrl = input instanceof URL ? input.href : new URL(input).href;
   const routes = parseSystemProxyRoutes(
@@ -386,7 +393,7 @@ async function fetchWithSystemProxy(
     const route = routes[index]!;
     const dispatcher =
       route.kind === "direct"
-        ? getDirectDispatcher()
+        ? getDirectDispatcher(strictDirect)
         : getSystemProxyDispatcher(route.url);
     try {
       return await fetchWithDispatcher(input, init, dispatcher);
@@ -409,17 +416,34 @@ async function fetchWithSystemProxy(
   throw lastError;
 }
 
+export interface OutboundFetchOptions {
+  /**
+   * When true, any direct (non-proxy) route uses strict non-private DNS pinning
+   * (`trustedProviderPath = false`) even on personal hosts. Used by plugin
+   * `net.authProxy` requests so a `direct` or `DIRECT` fallback cannot reach
+   * private/LAN addresses.
+   */
+  readonly strictDirect?: boolean;
+}
+
 function sendOutbound(
   input: string | URL,
   init: RequestInit,
+  options?: OutboundFetchOptions,
 ): Promise<Response> {
+  const strictDirect = options?.strictDirect === true;
   if (currentConfig.mode === "system" && currentSystemProxyResolver) {
-    return fetchWithSystemProxy(input, init, currentSystemProxyResolver);
+    return fetchWithSystemProxy(
+      input,
+      init,
+      currentSystemProxyResolver,
+      strictDirect,
+    );
   }
   return fetchWithDispatcher(
     input,
     init,
-    proxyDispatcher ?? getDirectDispatcher(),
+    proxyDispatcher ?? getDirectDispatcher(strictDirect),
   );
 }
 
@@ -436,9 +460,14 @@ function sendOutbound(
 export async function outboundFetch(
   input: string | URL,
   init: RequestInit = {},
+  options?: OutboundFetchOptions,
 ): Promise<Response> {
   const { redirect, ...rest } = init;
-  const response = await sendOutbound(input, { ...rest, redirect: "manual" });
+  const response = await sendOutbound(
+    input,
+    { ...rest, redirect: "manual" },
+    options,
+  );
   if (
     redirect !== "manual" &&
     response.status >= 300 &&
@@ -453,13 +482,16 @@ export async function outboundFetch(
 }
 
 export async function resetOutboundProxyForTests(): Promise<void> {
-  const dispatchers = [proxyDispatcher, directDispatcher].filter(
-    (dispatcher): dispatcher is Dispatcher => dispatcher !== undefined,
-  );
+  const dispatchers = [
+    proxyDispatcher,
+    directDispatcher,
+    strictDirectDispatcher,
+  ].filter((dispatcher): dispatcher is Dispatcher => dispatcher !== undefined);
   proxyDispatcher = undefined;
   const dynamicDispatchers = [...systemProxyDispatchers.values()];
   systemProxyDispatchers.clear();
   directDispatcher = undefined;
+  strictDirectDispatcher = undefined;
   currentConfig = { mode: "direct" };
   currentSystemProxyUrl = undefined;
   currentSystemProxyResolver = undefined;

@@ -1,5 +1,5 @@
 import type { PluginAppEventHandler, PluginAppEventName } from "@covel/runtime";
-import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
+import type { PluginRegistry } from "@covel/plugin-loader";
 import { compareText } from "@covel/shared";
 import {
   APP_EVENT_NAMES,
@@ -48,6 +48,7 @@ export interface AppEventDispatcherDeps {
   readonly getPermissionService: () => PermissionService | undefined;
   readonly getTrustedSources: () => TrustedSourceService | undefined;
   readonly activateForEvent?: (event: string) => Promise<readonly string[]>;
+  readonly handlerTimeoutMs?: number;
 }
 
 export interface AppEventDispatcher {
@@ -87,6 +88,7 @@ export function createAppEventDispatcher(
 ): AppEventDispatcher {
   const entries = new Map<string, RegisteredAppEventHandler>();
   let emitTail = Promise.resolve();
+  const timeoutMs = deps.handlerTimeoutMs ?? APP_EVENT_HANDLER_TIMEOUT_MS;
 
   async function dispatchEvent<E extends PluginAppEventName>(
     event: E,
@@ -110,21 +112,17 @@ export function createAppEventDispatcher(
         deps.registry.getCurrent(listener.pluginId) ??
         deps.registry.get(listener.pluginId);
       if (!regEntry) continue;
-      const trustSource = getPluginTrustInfo(
+      // Enforce L1/L2/L3 plugin.instanceScope uniformly for both builtin and
+      // community packages (builtin still requires no communityCode grant).
+      const allowed = await checkInstancePluginAllowed(
+        {
+          registry: deps.registry,
+          permissionService: deps.getPermissionService(),
+          trustedSources: deps.getTrustedSources(),
+        },
         listener.pluginId,
-        regEntry.source,
-      ).source;
-      if (trustSource !== "builtin") {
-        const allowed = await checkInstancePluginAllowed(
-          {
-            registry: deps.registry,
-            permissionService: deps.getPermissionService(),
-            trustedSources: deps.getTrustedSources(),
-          },
-          listener.pluginId,
-        );
-        if (!allowed) continue;
-      }
+      );
+      if (!allowed) continue;
 
       const surface = buildPluginInstanceSurface({
         pluginId: listener.pluginId,
@@ -137,18 +135,30 @@ export function createAppEventDispatcher(
       });
 
       const ac = new AbortController();
+      let onAbort: (() => void) | undefined;
+      const abortPromise = new Promise<never>((_resolve, reject) => {
+        onAbort = () => {
+          const reason = ac.signal.reason;
+          reject(
+            reason instanceof Error
+              ? reason
+              : new DOMException("AppEvent handler timed out", "TimeoutError"),
+          );
+        };
+        ac.signal.addEventListener("abort", onAbort, { once: true });
+      });
       const timer = setTimeout(
         () =>
           ac.abort(
             new DOMException("AppEvent handler timed out", "TimeoutError"),
           ),
-        APP_EVENT_HANDLER_TIMEOUT_MS,
+        timeoutMs,
       );
       timer.unref?.();
       try {
         const { sandbox: _sandbox, ...surfaceWithoutSandbox } =
           pickPluginInstanceSurfaceFields(surface);
-        await Promise.resolve(
+        const task = Promise.resolve().then(() =>
           listener.handler(frozenPayload, {
             signal: ac.signal,
             pluginId: listener.pluginId,
@@ -157,6 +167,9 @@ export function createAppEventDispatcher(
             http: withCallSignal(surface.http, ac.signal),
           }),
         );
+        // Prevent a late post-timeout rejection from becoming unhandled.
+        task.catch(() => {});
+        await Promise.race([task, abortPromise]);
       } catch (error) {
         console.warn(
           `[app-events] handler error in plugin "${listener.pluginId}" for ${event}:`,
@@ -164,6 +177,7 @@ export function createAppEventDispatcher(
         );
       } finally {
         clearTimeout(timer);
+        if (onAbort) ac.signal.removeEventListener("abort", onAbort);
       }
     }
   }

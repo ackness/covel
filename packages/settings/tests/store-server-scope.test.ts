@@ -264,4 +264,33 @@ describe("server-scoped settings", () => {
     expect(store.get(KEY)).toBe("90");
     expect(server.saves).toEqual([]);
   });
+
+  it("refuses writing server-scoped keys through setMany, replaceEntries, and import", async () => {
+    const server = createServer({
+      [KEY]: { value: "90", source: "setting", settable: true },
+    });
+    const { store, adapter } = createStore(server);
+    await store.init();
+    await store.refreshServerSettings();
+
+    await expect(store.setMany({ [KEY]: "7" })).rejects.toThrow(
+      /server settings channel/,
+    );
+    await expect(store.replaceEntries({ [KEY]: "7" }, {})).rejects.toThrow(
+      /server settings channel/,
+    );
+    await expect(
+      store.import(
+        {
+          schemaVersion: 1,
+          exportedAt: new Date().toISOString(),
+          entries: { [KEY]: "7" },
+        },
+        { keys: [KEY] },
+      ),
+    ).rejects.toThrow(/server settings channel/);
+
+    expect(adapter.readEntries()).toEqual({});
+    expect(store.get(KEY)).toBe("90");
+  });
 });

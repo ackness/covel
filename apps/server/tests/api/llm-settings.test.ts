@@ -847,3 +847,181 @@ it.each(["saved-key", "external-key"])(
     }
   },
 );
+
+it("redacts server baseUrl, source, and account in /api/ai/ping and /api/ai/models without server.diagnostics", async () => {
+  const { Hono } = await import("hono");
+  const { readRuntimeEnv } = await import("@covel/shared");
+  const { hostProfileMiddleware, resolveHostProfile } = await import(
+    "../../src/host-profile.js"
+  );
+
+  const unsupported = async (): Promise<never> => {
+    throw new Error("unused");
+  };
+  const adapter: ModelProviderAdapter = {
+    generateText: unsupported,
+    generateObject: unsupported,
+    embed: unsupported,
+    async *streamText() {
+      yield { type: "text-delta", textDelta: "hello" };
+      yield {
+        type: "done",
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      };
+    },
+  };
+  const preset: PresetConfig = {
+    id: "server-custom",
+    name: "Server Custom",
+    provider: "corp",
+    source: "corp-plugin/corp-auth",
+    account: "ops-admin@corp.internal",
+    baseUrl: "https://internal-gateway.corp.example/v1",
+    model: "corp-model",
+    tier: "large",
+    enabled: true,
+    supportedModes: ["text", "stream"],
+  };
+  const config = { providers: {}, profiles: [], presets: [preset] };
+  const providerRegistry = createProviderRegistry({
+    providers: {
+      corp: {
+        adapter,
+        defaults: {
+          baseUrl: "https://internal-gateway.corp.example/v1",
+          protocol: "openai-chat-v1",
+        },
+      },
+    },
+  });
+  const presetRegistry = createPresetRegistry(config);
+  const slotRegistry = createSlotRegistry();
+  slotRegistry.configure({
+    slots: { default: { slotId: "default", presetId: preset.id, tag: "text" } },
+  });
+  const gateway = createGateway({
+    providerRegistry,
+    presetRegistry,
+    slotRegistry,
+    getProviderSources: () => ({
+      inspectSync(sourceId, accountId) {
+        return {
+          sourceId,
+          ...(accountId ? { accountId } : {}),
+          ready: true,
+          baseUrl: "https://internal-gateway.corp.example/v1",
+          protocol: "openai-chat-v1",
+          modes: ["text"],
+        };
+      },
+      async resolve(req) {
+        return {
+          sourceId: req.sourceId,
+          declaredBaseUrl: "https://internal-gateway.corp.example/v1",
+          declaredProtocol: "openai-chat-v1",
+          baseUrl: "https://internal-gateway.corp.example/v1",
+          protocol: "openai-chat-v1",
+          headers: { authorization: "Bearer secret" },
+          credentialGeneration: 1,
+        };
+      },
+      async refresh() {
+        return null;
+      },
+    }),
+  });
+
+  const browserPrivateProfile = resolveHostProfile(
+    readRuntimeEnv({
+      NODE_ENV: "production",
+      COVEL_DESKTOP_REST_TOKEN: "ops-secret-token",
+    }),
+    { storeBackend: "memory" },
+  );
+  const host = new Hono();
+  host.use("*", hostProfileMiddleware(browserPrivateProfile));
+  host.route(
+    "/",
+    createMiscApiRoutes(
+      {
+        config,
+        providerRegistry,
+        presetRegistry,
+        slotRegistry,
+        gateway,
+        llmConfig: null,
+        modelDb: null,
+        configSource: { kind: "file", path: "/etc/covel/llm.toml" },
+      },
+      createPluginRegistry(),
+      createMemoryStore(),
+    ),
+  );
+
+  // Anonymous visitor can probe, but must not see internal baseUrl/source/account.
+  const anonPing = await host.request("/api/ai/ping", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ presetId: "server-custom" }),
+  });
+  expect(anonPing.status).toBe(200);
+  const anonPingBody = (await anonPing.json()) as {
+    testedTarget: Record<string, unknown>;
+  };
+  expect(anonPingBody.testedTarget.baseUrl).toBeUndefined();
+  expect(anonPingBody.testedTarget.source).toBeUndefined();
+  expect(anonPingBody.testedTarget.account).toBeUndefined();
+
+  // Operator token still receives full diagnostic target fields.
+  const opPing = await host.request("/api/ai/ping", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: "Bearer ops-secret-token",
+    },
+    body: JSON.stringify({ presetId: "server-custom" }),
+  });
+  expect(opPing.status).toBe(200);
+  const opPingBody = (await opPing.json()) as {
+    testedTarget: Record<string, unknown>;
+  };
+  expect(opPingBody.testedTarget.baseUrl).toBe(
+    "https://internal-gateway.corp.example/v1",
+  );
+  expect(opPingBody.testedTarget.source).toBe("corp-plugin/corp-auth");
+  expect(opPingBody.testedTarget.account).toBe("ops-admin@corp.internal");
+
+  // /api/ai/models redacts server-configured baseUrl for anonymous callers,
+  // while echoing an explicit caller-supplied baseUrl.
+  const fetchMock = vi
+    .fn()
+    .mockImplementation(async () => Response.json({ data: [{ id: "m1" }] }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  const anonModels = await host.request("/api/ai/models", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider: "corp" }),
+  });
+  expect(anonModels.status).toBe(200);
+  const anonModelsBody = (await anonModels.json()) as Record<string, unknown>;
+  expect(anonModelsBody.ok).toBe(true);
+  expect(anonModelsBody.baseUrl).toBeUndefined();
+
+  const explicitModels = await host.request("/api/ai/models", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      provider: "corp",
+      baseUrl: "https://caller-own.example/v1",
+    }),
+  });
+  expect(explicitModels.status).toBe(200);
+  expect(
+    (await explicitModels.json()) as Record<string, unknown>,
+  ).toMatchObject({
+    ok: true,
+    baseUrl: "https://caller-own.example/v1",
+  });
+});

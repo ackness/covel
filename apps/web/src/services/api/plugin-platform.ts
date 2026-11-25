@@ -59,10 +59,11 @@ export async function invokePluginAppAction<T = unknown>(
 export async function fetchPluginInstanceData(
   pluginId: string,
   namespace: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; entries: PluginInstanceDataEntry[] }> {
   return request<{ ok: true; entries: PluginInstanceDataEntry[] }>(
     `/api/plugins/${encodeURIComponent(pluginId)}/instance-data/${encodeURIComponent(namespace)}`,
-    PLATFORM_READ_OPTIONS,
+    signal ? { ...PLATFORM_READ_OPTIONS, signal } : PLATFORM_READ_OPTIONS,
   );
 }
 
@@ -85,10 +86,11 @@ export async function getPluginConfigFlowRun(
   pluginId: string,
   flowId: string,
   runId: string,
+  signal?: AbortSignal,
 ): Promise<{ ok: true; run: ConfigFlowRunSnapshot }> {
   return request<{ ok: true; run: ConfigFlowRunSnapshot }>(
     flowRunPath(pluginId, flowId, runId),
-    PLATFORM_READ_OPTIONS,
+    signal ? { ...PLATFORM_READ_OPTIONS, signal } : PLATFORM_READ_OPTIONS,
   );
 }
 

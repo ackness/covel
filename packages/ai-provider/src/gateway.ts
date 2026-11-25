@@ -25,7 +25,10 @@ import type {
 } from "@covel/shared";
 
 import { AiProviderError } from "./errors.js";
-import { describeUnavailableWire } from "./wire-lifecycle.js";
+import {
+  describeCrossPluginWireOwner,
+  describeUnavailableWire,
+} from "./wire-lifecycle.js";
 import {
   IMAGE_TOKEN_ESTIMATE,
   messagesForTarget,
@@ -137,7 +140,18 @@ function missingMediaWireMessage(
   kind: "image" | "speech" | "transcription" | "music",
   wireId: string,
   unknown: string,
+  approvedInstanceOwner?: string,
 ): string {
+  if (approvedInstanceOwner !== undefined) {
+    const owner = describeCrossPluginWireOwner(
+      kind,
+      wireId,
+      approvedInstanceOwner,
+    );
+    if (owner) {
+      return `${kind} wire "${wireId}" belongs to plugin "${owner}" and cannot receive credentials from provider source plugin "${approvedInstanceOwner}".`;
+    }
+  }
   const unavailable = describeUnavailableWire(kind, wireId);
   if (!unavailable) return unknown;
   return unavailable.inSession
@@ -901,7 +915,7 @@ export function createGateway(deps: GatewayDependencies) {
             typeof slotMeta?.speechWire === "string" && slotMeta.speechWire
               ? slotMeta.speechWire
               : DEFAULT_SPEECH_WIRE;
-          const wire = getSpeechWire(wireId);
+          const wire = getSpeechWire(wireId, resolved.approvedInstanceOwner);
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
@@ -909,6 +923,7 @@ export function createGateway(deps: GatewayDependencies) {
                 "speech",
                 wireId,
                 `unknown speech wire "${wireId}" — register it via registerSpeechWire() or fix llm.toml providerRequestMetadata.speechWire`,
+                resolved.approvedInstanceOwner,
               ),
               provider: targetProvider(target),
               retriable: false,
@@ -971,7 +986,9 @@ export function createGateway(deps: GatewayDependencies) {
           // No default wire: music providers share no request format.
           const wireId =
             typeof slotMeta?.musicWire === "string" ? slotMeta.musicWire : "";
-          const wire = wireId ? getMusicWire(wireId) : null;
+          const wire = wireId
+            ? getMusicWire(wireId, resolved.approvedInstanceOwner)
+            : null;
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
@@ -980,6 +997,7 @@ export function createGateway(deps: GatewayDependencies) {
                     "music",
                     wireId,
                     `unknown music wire "${wireId}" — register it via registerMusicWire() or fix llm.toml providerRequestMetadata.musicWire`,
+                    resolved.approvedInstanceOwner,
                   )
                 : "no music wire configured — set llm.toml providerRequestMetadata.musicWire to a registered music wire",
               provider: targetProvider(target),
@@ -1048,7 +1066,10 @@ export function createGateway(deps: GatewayDependencies) {
             slotMeta.transcriptionWire
               ? slotMeta.transcriptionWire
               : DEFAULT_TRANSCRIPTION_WIRE;
-          const wire = getTranscriptionWire(wireId);
+          const wire = getTranscriptionWire(
+            wireId,
+            resolved.approvedInstanceOwner,
+          );
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
@@ -1056,6 +1077,7 @@ export function createGateway(deps: GatewayDependencies) {
                 "transcription",
                 wireId,
                 `unknown transcription wire "${wireId}" — register it via registerTranscriptionWire() or fix llm.toml providerRequestMetadata.transcriptionWire`,
+                resolved.approvedInstanceOwner,
               ),
               provider: targetProvider(target),
               retriable: false,
@@ -1129,7 +1151,7 @@ export function createGateway(deps: GatewayDependencies) {
             typeof slotMeta?.imageWire === "string" && slotMeta.imageWire
               ? slotMeta.imageWire
               : DEFAULT_IMAGE_WIRE;
-          const wire = getImageWire(wireId);
+          const wire = getImageWire(wireId, resolved.approvedInstanceOwner);
           if (!wire) {
             throw new AiProviderError({
               code: "CONFIG_ERROR",
@@ -1137,6 +1159,7 @@ export function createGateway(deps: GatewayDependencies) {
                 "image",
                 wireId,
                 `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+                resolved.approvedInstanceOwner,
               ),
               provider: targetProvider(target),
               retriable: false,

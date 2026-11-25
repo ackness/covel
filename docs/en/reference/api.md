@@ -1305,7 +1305,7 @@ Query parameters:
 | `runtime-outputs`     | `?runtimeId=`, `?pluginId=`, `?since=`, `?limit=`   |
 | `interaction-records` | `?type=`, `?source=`, `?targetPluginId=`, `?limit=` |
 
-- The `runtime-outputs` list is returned in descending order by `timestamp`.
+- The `runtime-outputs` list is returned in descending order by `timestamp`. `?limit=` is capped at 500 (larger values are clamped to 500).
 - `full-prompt` rebuilds the history from `turn_messages`. It is best effort only: it does not include the system prompt or the injected sections.
 - When a runtime declares `io.concealed`, the first two endpoints return records where `results` is an empty array, and the `input` / `output` of each item in `metaData.toolCallList` is `null`.
 
@@ -1575,7 +1575,7 @@ The debugger's header reads its turn count from `session.completedPlayerTurns` i
 `POST /api/media?sessionId=<id>` (upload an image):
 
 - The body is the raw bytes of the file. `Content-Type` is the file's MIME type.
-- It accepts only `image/*`, up to 20 MB in size.
+- It accepts only `image/*`, up to 20 MB in size (larger uploads return `413` `limit_exceeded`).
 - The bytes must start with the file header of PNG, JPEG, GIF, WebP, AVIF, or BMP. Otherwise it returns 400.
 - The stored MIME type comes from the type judged by the file header, not from the request header.
 - The image is stored by content address, and the session's ownership and reference are recorded.
@@ -4487,6 +4487,7 @@ Rules:
 - A message without an `id` gets a new ID every time, so sending it again appends it again.
 - The whole batch is written inside the session lock and one storage transaction. If any new message fails to write, the whole batch is rolled back.
 - The session must be in the `active` state.
+- Each request accepts at most 1,000 messages, with `content` up to 200,000 characters, non-empty `id` up to 200 characters, and valid `createdAt` timestamp strings; violations return `400`.
 - Rate limit: the same client can make at most 60 requests per minute to the same path. Going over returns `429` (`code: "rate_limit_exceeded"`).
 
 ### Plugin data

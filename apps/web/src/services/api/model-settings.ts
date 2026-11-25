@@ -103,33 +103,36 @@ export function rememberServerPresetProviders(
 function referencedProviderIds(
   extraBindings: readonly SlotConfigEntry[],
   extraProviders: readonly string[],
+  options: { readonly explicitOnly?: boolean; readonly slots?: readonly string[] } = {},
 ): { readonly include: Set<string> | null; readonly exclude: Set<string> } {
   const profiles = getProviderProfiles();
-  const manualProviderIds = new Set<string>();
-  const sourceProviderIds = new Set<string>();
+  const manualProfileIds = new Set<string>();
+  const sourceProfileIds = new Set<string>();
   for (const profile of profiles) {
+    // Only exclude the source-backed connection's own profile id, never its
+    // vendor family `profile.provider` — a player may simultaneously use a
+    // server-side or built-in preset under that vendor family with their own key.
     if (profile.source) {
-      sourceProviderIds.add(profile.id);
-      if (profile.provider) sourceProviderIds.add(profile.provider);
+      sourceProfileIds.add(profile.id);
     } else {
-      manualProviderIds.add(profile.id);
-      if (profile.provider) manualProviderIds.add(profile.provider);
+      manualProfileIds.add(profile.id);
     }
   }
   const exclude = new Set(
-    [...sourceProviderIds].filter((id) => !manualProviderIds.has(id)),
+    [...sourceProfileIds].filter((id) => !manualProfileIds.has(id)),
   );
 
-  const { slotProviders, presetProviders } = serverProviderDirectory;
-  if (!slotProviders || !presetProviders) return { include: null, exclude };
   const customPresets = new Map(
     flattenProviderProfiles(profiles).map((preset) => [preset.id, preset]),
   );
   const families = new Map(
     profiles.flatMap((profile) =>
-      profile.provider ? [[profile.id, profile.provider] as const] : [],
+      profile.provider && !profile.source
+        ? [[profile.id, profile.provider] as const]
+        : [],
     ),
   );
+  const { slotProviders, presetProviders } = serverProviderDirectory;
   const providers = new Set<string>(extraProviders);
   const addBinding = (binding: SlotConfigEntry): boolean => {
     if (binding.modelRef !== undefined) {
@@ -143,13 +146,36 @@ function referencedProviderIds(
       return true;
     }
     if (binding.presetId !== undefined) {
-      const provider = presetProviders[binding.presetId];
+      const provider = presetProviders?.[binding.presetId];
       if (!provider) return false;
       providers.add(provider);
       return true;
     }
     return false;
   };
+
+  if (options.explicitOnly) {
+    for (const binding of extraBindings) {
+      // Unknown bindings fail closed (send no unrelated keys rather than
+      // dumping every saved provider key).
+      addBinding(binding);
+    }
+    if (options.slots && options.slots.length > 0) {
+      const slotConfig = getSlotConfig();
+      for (const slotId of options.slots) {
+        const binding = slotConfig[slotId];
+        if (binding) {
+          addBinding(binding);
+          continue;
+        }
+        const serverProvider = slotProviders?.[slotId];
+        if (serverProvider) providers.add(serverProvider);
+      }
+    }
+    return { include: providers, exclude };
+  }
+
+  if (!slotProviders || !presetProviders) return { include: null, exclude };
   for (const binding of extraBindings) {
     if (!addBinding(binding)) return { include: null, exclude };
   }
@@ -171,6 +197,14 @@ export interface ProviderKeysHeaderOptions {
   bindings?: readonly SlotConfigEntry[];
   /** Providers a request names directly (a model list probe). */
   providers?: readonly string[];
+  /** Specific slot IDs targeted by a probe (e.g. `/api/ai/ping`). */
+  slots?: readonly string[];
+  /**
+   * When true, send only keys resolved from the explicitly named `bindings`,
+   * `providers`, or `slots` — never unrelated slots and never a fallback dump
+   * of all stored keys.
+   */
+  explicitOnly?: boolean;
 }
 
 export function buildProviderKeysHeader(
@@ -180,6 +214,7 @@ export function buildProviderKeysHeader(
   const referenced = referencedProviderIds(
     options.bindings ?? [],
     options.providers ?? [],
+    { explicitOnly: options.explicitOnly, slots: options.slots },
   );
   // Request keys are connection-scoped and never embedded in model profiles.
   const keys = Object.fromEntries(

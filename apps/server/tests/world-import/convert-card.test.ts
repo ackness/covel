@@ -424,3 +424,47 @@ it.each([
     expect(isIdTaken).not.toHaveBeenCalled();
   },
 );
+
+it("disambiguates duplicate character names and drops colliding nicknames across cards", async () => {
+  const result = await convert([
+    v2Card({ name: "Mira" }),
+    v2Card({ name: "Mira" }),
+    v3Card({ name: "Sera", nickname: "mira" }),
+  ]);
+  const characters = JSON.parse(file(result, "characters/characters.json"));
+  expect(characters.map((c: { name: string }) => c.name)).toEqual([
+    "Mira",
+    "Mira (2)",
+    "Sera",
+  ]);
+  expect(characters[2].aliases).toBeUndefined();
+  expect(result.report.items).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ code: "id-conflict", field: "name" }),
+      expect.objectContaining({ code: "field-ignored", field: "nickname" }),
+    ]),
+  );
+  for (const item of result.report.items) {
+    expect(ST_IMPORT_CODES).toContain(item.code);
+  }
+});
+
+it("imports a card PNG missing IEND without emitting a broken cover image", async () => {
+  const truncatedPng = makePng(v2Card()).subarray(0, -12);
+  const result = await convertStImport({
+    files: [{ name: "mira.png", bytes: truncatedPng }],
+    locale: "en-US",
+    isIdTaken: async () => false,
+  });
+  expect(
+    result.entries.some((entry) => entry.relativePath.startsWith("media/")),
+  ).toBe(false);
+  expect(parse(file(result, "world.yaml")).cover).toBeUndefined();
+  expect(result.report.items).toContainEqual(
+    expect.objectContaining({ code: "png-invalid", field: "image" }),
+  );
+  for (const item of result.report.items) {
+    expect(ST_IMPORT_CODES).toContain(item.code);
+  }
+});
+

@@ -92,6 +92,18 @@ describe("DDL codegen ↔ Drizzle parity", () => {
     for (const stmt of createStmts) {
       expect(PG_DDL.includes(stmt), `boot DDL missing: ${stmt}`).toBe(true);
     }
+    // M-20: rolling restarts must not take ACCESS EXCLUSIVE via DROP TRIGGER,
+    // and covel_next_session_write must lock sessions before session_write_counters.
+    expect(PG_DDL).not.toMatch(/\bDROP TRIGGER\b/i);
+    expect(PG_DDL).toContain("SELECT 1 FROM pg_trigger");
+    const sessionLockIdx = PG_DDL.indexOf(
+      "PERFORM 1 FROM sessions WHERE id = p_session_id FOR NO KEY UPDATE;",
+    );
+    const counterUpsertIdx = PG_DDL.indexOf(
+      "INSERT INTO session_write_counters AS c",
+    );
+    expect(sessionLockIdx).toBeGreaterThan(-1);
+    expect(counterUpsertIdx).toBeGreaterThan(sessionLockIdx);
   });
 
   it("SQLite generated DDL yields exactly the Drizzle column shape", () => {

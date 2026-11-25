@@ -16,6 +16,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+export function extractPluginMessageTurnId(
+  key: string,
+  value: unknown,
+): string {
+  const record = asRecord(value);
+  return (
+    (typeof record?.__turnId === "string" && record.__turnId) ||
+    (typeof record?.turnId === "string" && record.turnId) ||
+    key
+  );
+}
+
 function collectPluginMessageStates(
   namespaceState: Record<string, unknown>,
 ): Array<{ turnId: string; state: Record<string, unknown> }> {
@@ -26,10 +38,7 @@ function collectPluginMessageStates(
   return Object.entries(namespaceState).flatMap(([key, value]) => {
     const record = asRecord(value);
     if (!record) return [];
-    const turnId =
-      (typeof record.__turnId === "string" && record.__turnId) ||
-      (typeof record.turnId === "string" && record.turnId) ||
-      key;
+    const turnId = extractPluginMessageTurnId(key, record);
     if (!turnId) return [];
     return [{ turnId, state: record }];
   });

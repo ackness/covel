@@ -1328,4 +1328,25 @@ describe("LocalDataService browser-authoritative sync", () => {
     const updated = await updating;
     expect(updated.status).toBe("paused");
   });
+
+  it("clears a stale pending commit when the server responds 409 browser_checkpoint_required", async () => {
+    const service = await serviceWithWorld();
+    await createSave(service, "world-1", "sess-stale-409", [], "en-US");
+    await vault.stagePendingCommit("sess-stale-409", "act-409");
+    api.fetchBrowserCommit.mockRejectedValueOnce(
+      new ApiError(
+        409,
+        "/api/sessions/sess-stale-409/browser-commit/act-409",
+        JSON.stringify({
+          error: "Browser checkpoint required",
+          code: "browser_checkpoint_required",
+        }),
+      ),
+    );
+
+    await createSessionWorkspace(service, "local").hydrate("sess-stale-409");
+
+    await expect(vault.getPendingCommit("sess-stale-409")).resolves.toBeNull();
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalled();
+  });
 });

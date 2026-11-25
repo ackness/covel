@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { stringify } from "yaml";
-import { canonicalizeLocale, type StImportReport } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  characterNameKey,
+  validateWorldModel,
+  type StImportReport,
+} from "@covel/shared";
 import type { ExtractedEntry } from "../../routes/api/install/shared.js";
 import { SAFE_WORLD_ID_RE } from "../../lib/validators.js";
 import { parseCard, type ParsedCard } from "./card-schema.js";
@@ -187,7 +192,18 @@ export async function convertStImport(input: {
     throw new StImportError("locale-invalid", "Invalid BCP 47 locale");
   const requestReporter = new ImportReporter();
   const sources: StImportReport["sources"] = [];
-  const characters: Record<string, unknown>[] = [];
+  const characters: {
+    id: string;
+    name: string;
+    type: "npc";
+    description: string;
+    aliases?: string[];
+    blueprint: {
+      persona?: { summary: string };
+      scenarioDefaults?: { opening: string };
+      dialogueExamples?: { user?: string; character: string }[];
+    };
+  }[] = [];
   const lore: LoreEntry[] = [];
   const loreIds = new Set<string>();
   const characterIds = new Set<string>();
@@ -301,12 +317,34 @@ export async function convertStImport(input: {
       ...(png ? { png: file.bytes } : {}),
     });
   }
+  const usedNames = new Set<string>();
+  const resolvedNames = new Map<(typeof parsedSources)[number], string>();
+  for (const parsed of parsedSources) {
+    if (!parsed.card) continue;
+    let uniqueName = parsed.name;
+    let suffix = 2;
+    while (usedNames.has(characterNameKey(uniqueName))) {
+      uniqueName = `${parsed.name} (${suffix++})`;
+    }
+    if (uniqueName !== parsed.name) {
+      parsed.reporter.add(
+        "warning",
+        "id-conflict",
+        parsed.source,
+        `Duplicate character name "${parsed.name}" was disambiguated to "${uniqueName}"`,
+        "name",
+      );
+    }
+    usedNames.add(characterNameKey(uniqueName));
+    resolvedNames.set(parsed, uniqueName);
+  }
   const standaloneName =
     cardCount === 1
       ? parsedSources.find((source) => source.card)?.name
       : undefined;
   for (const parsed of parsedSources) {
-    const { source, name, processor, reporter, card, book, png } = parsed;
+    const { source, processor, reporter, card, book, png } = parsed;
+    const name = resolvedNames.get(parsed) ?? parsed.name;
     const { text } = processor;
     if (card) {
       if (card.kind === "card-v1")
@@ -325,6 +363,22 @@ export async function convertStImport(input: {
       const personality = text(card.personality, "personality", 2000);
       const opening = text(card.first_mes, "first_mes", 4000);
       const nickname = text(card.nickname, "nickname", 80).trim();
+      let aliases: string[] | undefined;
+      if (nickname && characterNameKey(nickname) !== characterNameKey(name)) {
+        const nickKey = characterNameKey(nickname);
+        if (usedNames.has(nickKey)) {
+          reporter.add(
+            "warning",
+            "field-ignored",
+            source,
+            `Nickname "${nickname}" conflicted with another character name or alias and was omitted`,
+            "nickname",
+          );
+        } else {
+          usedNames.add(nickKey);
+          aliases = [nickname];
+        }
+      }
       const allExamples = dialogueExamples(card.mes_example ?? "", text);
       const examples = allExamples.slice(0, 10);
       if (allExamples.length > 10)
@@ -348,7 +402,7 @@ export async function convertStImport(input: {
         name,
         type: "npc",
         description,
-        ...(nickname && nickname !== name ? { aliases: [nickname] } : {}),
+        ...(aliases ? { aliases } : {}),
         blueprint: {
           ...(personality ? { persona: { summary: personality } } : {}),
           ...(opening ? { scenarioDefaults: { opening } } : {}),
@@ -422,8 +476,23 @@ export async function convertStImport(input: {
           extensionKeys.length,
         );
       if (png) {
-        if (!cover) cover = stripPngTextChunks(png);
-        else
+        if (!cover) {
+          try {
+            cover = stripPngTextChunks(png);
+          } catch (error) {
+            if (error instanceof StImportError) {
+              reporter.add(
+                "warning",
+                "png-invalid",
+                source,
+                "PNG image was incomplete and omitted as cover",
+                "image",
+              );
+            } else {
+              throw error;
+            }
+          }
+        } else {
           reporter.add(
             "info",
             "field-ignored",
@@ -431,6 +500,7 @@ export async function convertStImport(input: {
             "Additional PNG image was omitted; only the first PNG supplies the cover",
             "image",
           );
+        }
       }
     }
     for (const tag of [...(card?.tags ?? []), ...(book?.tags ?? [])]) {
@@ -465,6 +535,25 @@ export async function convertStImport(input: {
     }
     processor.finish();
     requestReporter.items.push(...reporter.items);
+  }
+  if (characters.length > 0) {
+    validateWorldModel({
+      characterSchema: null,
+      characters: characters.map((character) => ({
+        id: character.id,
+        sessionId: "",
+        name: character.name,
+        type: character.type,
+        description: character.description,
+        ...(character.aliases ? { aliases: character.aliases } : {}),
+        fields: {},
+        version: 1,
+        createdAt: "",
+        updatedAt: "",
+        blueprint: character.blueprint,
+      })),
+      dimensions: {},
+    });
   }
   const reporter = requestReporter;
   const requested = sourceText("world name", reporter, locale);

@@ -382,3 +382,20 @@ it("pauses the ready deadline while hidden and gives an unready document fresh v
   expect(failed).toHaveBeenCalledOnce();
   visibility.mockRestore();
 });
+
+it.each([
+  "//evil.example/plugin.html",
+  "/api/health",
+  "/plugin-assets/demo/../../etc/passwd",
+  "/plugin-assets/demo/\nindex.html",
+])(
+  "fails closed on unsafe PluginWebview src %s without probing or connecting",
+  (unsafeSrc) => {
+    render(<PluginWebview {...props} src={unsafeSrc} />);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(mocks.connect).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: i18n.t("session.pageRetry") }),
+    ).toBeTruthy();
+  },
+);

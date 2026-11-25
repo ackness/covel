@@ -309,3 +309,54 @@ it("reimports the current catalog after deleting the vault and closes old tab co
     (await new LocalDataService(vault).listWorlds()).map(({ id }) => id),
   ).toEqual(["replacement-world"]);
 });
+
+it("awaits catalog initialization before locking during updateWorld and deleteWorld", async () => {
+  const order: string[] = [];
+  api.listWorlds.mockImplementationOnce(async () => {
+    order.push("listWorlds:start");
+    await Promise.resolve();
+    order.push("listWorlds:end");
+    return catalog.map(summarizeWorld);
+  });
+  const lockSpy = vi
+    .spyOn(vault, "withWorldLock")
+    .mockImplementation(async function (this: BrowserVault, id, mode, fn) {
+      order.push(`lock:${id}`);
+      return BrowserVault.prototype.withWorldLock.call(this, id, mode, fn);
+    });
+
+  const updated = await new LocalDataService(vault).updateWorld("last-train", {
+    description: "Updated directly before listing",
+  });
+  expect(updated.description).toBe("Updated directly before listing");
+  expect(order).toEqual([
+    "listWorlds:start",
+    "listWorlds:end",
+    "lock:last-train",
+  ]);
+  lockSpy.mockRestore();
+
+  await vault.clear();
+  const deleteOrder: string[] = [];
+  api.listWorlds.mockImplementationOnce(async () => {
+    deleteOrder.push("listWorlds:start");
+    await Promise.resolve();
+    deleteOrder.push("listWorlds:end");
+    return catalog.map(summarizeWorld);
+  });
+  const deleteLockSpy = vi
+    .spyOn(secondVault, "withWorldLock")
+    .mockImplementation(async function (this: BrowserVault, id, mode, fn) {
+      deleteOrder.push(`lock:${id}`);
+      return BrowserVault.prototype.withWorldLock.call(this, id, mode, fn);
+    });
+
+  await new LocalDataService(secondVault).deleteWorld("haruka-academy");
+  expect(await vault.getWorld("haruka-academy")).toBeNull();
+  expect(deleteOrder).toEqual([
+    "listWorlds:start",
+    "listWorlds:end",
+    "lock:haruka-academy",
+  ]);
+  deleteLockSpy.mockRestore();
+});

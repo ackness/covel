@@ -15,6 +15,7 @@ import {
 import { pluginGrantDecisionsSchema } from "@covel/shared/permissions";
 
 import type { SqlRunner } from "./sql-runner.js";
+import { assertStoreIdentifiers, withoutNul } from "./without-nul.js";
 import type { DataStore, PluginGrantRecord } from "../types.js";
 
 /** Structural handle to the `plugin_grants` table. */
@@ -77,6 +78,7 @@ export function createSqlPluginGrantRecords(
     },
 
     async getPluginGrant(pluginId: string): Promise<PluginGrantRecord | null> {
+      assertStoreIdentifiers(pluginId);
       const row = await runner.selectFirst<PluginGrantRow>(pluginGrants, {
         where: eq(pluginGrants.pluginId, pluginId),
       });
@@ -84,34 +86,37 @@ export function createSqlPluginGrantRecords(
     },
 
     async upsertPluginGrant(record: PluginGrantRecord): Promise<void> {
-      const grantedCapabilities = JSON.stringify(record.grantedCapabilities);
-      const decisions = JSON.stringify(record.decisions);
+      assertStoreIdentifiers(record);
+      const clean = withoutNul(record);
+      const grantedCapabilities = JSON.stringify(clean.grantedCapabilities);
+      const decisions = JSON.stringify(clean.decisions);
       await runner.insert(
         pluginGrants,
         {
-          pluginId: record.pluginId,
-          version: record.version,
-          contentDigest: record.contentDigest,
+          pluginId: clean.pluginId,
+          version: clean.version,
+          contentDigest: clean.contentDigest,
           grantedCapabilities,
           decisions,
-          grantedAt: record.grantedAt,
-          updatedAt: record.updatedAt,
+          grantedAt: clean.grantedAt,
+          updatedAt: clean.updatedAt,
         },
         {
           target: pluginGrants.pluginId,
           set: {
-            version: record.version,
-            contentDigest: record.contentDigest,
+            version: clean.version,
+            contentDigest: clean.contentDigest,
             grantedCapabilities,
             decisions,
-            grantedAt: record.grantedAt,
-            updatedAt: record.updatedAt,
+            grantedAt: clean.grantedAt,
+            updatedAt: clean.updatedAt,
           },
         },
       );
     },
 
     async deletePluginGrant(pluginId: string): Promise<void> {
+      assertStoreIdentifiers(pluginId);
       await runner.delete(pluginGrants, eq(pluginGrants.pluginId, pluginId));
     },
   };

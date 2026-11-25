@@ -209,4 +209,33 @@ describe("PgMediaStore query projections", () => {
     expect(result.deletedIds).toEqual(["asset-orphan"]);
     expect(result.expiredRefs).toHaveLength(2);
   });
+
+  it("acquires ordered per-asset advisory locks and updates media_assets before deleting media_refs in releaseSession", async () => {
+    const txQueries: string[] = [];
+    const runTx = (strings: TemplateStringsArray, ...params: unknown[]) => {
+      const query = strings.join("?").replace(/\s+/g, " ").trim();
+      txQueries.push(`${query} :: ${JSON.stringify(params)}`);
+      if (query.startsWith("SELECT DISTINCT hashtext")) {
+        return Promise.resolve([{ key: 10 }, { key: 20 }]);
+      }
+      return Promise.resolve([]);
+    };
+    const sql = Object.assign(() => Promise.resolve([]), {
+      begin: async <T>(fn: (t: unknown) => Promise<T>) => fn(runTx),
+    }) as unknown as Sql;
+
+    const store = createPgMediaStoreFromClient(sql);
+    await store.releaseSession("sess-release");
+
+    expect(txQueries[0]).toMatch(/^SELECT DISTINCT hashtext\(id\) AS key/);
+    expect(txQueries[0]).toContain("ORDER BY key");
+    expect(txQueries[1]).toBe(
+      'SELECT pg_advisory_xact_lock(1129270860, ?) :: [10]',
+    );
+    expect(txQueries[2]).toBe(
+      'SELECT pg_advisory_xact_lock(1129270860, ?) :: [20]',
+    );
+    expect(txQueries[3]).toMatch(/^UPDATE media_assets SET owner_session_id = NULL/);
+    expect(txQueries[4]).toMatch(/^DELETE FROM media_refs WHERE session_id = \?/);
+  });
 });

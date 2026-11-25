@@ -2323,4 +2323,112 @@ describe("Resume Routes", () => {
       expect(await store.getSuspension("susp-fresh-post")).not.toBeNull();
     });
   });
+
+  describe("io.concealed response redaction", () => {
+    it("strips output and tool details from a successful concealed resume response", async () => {
+      const concealedManifest: RuntimeManifest = {
+        ...TEST_MANIFEST,
+        outputKind: "system",
+        concealed: true,
+      };
+      await store.saveSuspension({
+        id: "susp-concealed",
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        runtimeId: "test-plugin",
+        pluginId: "test-plugin",
+        reason: "Secret roll",
+        resumeSchema: {
+          type: "object",
+          properties: { choice: { type: "string" } },
+          required: ["choice"],
+        },
+        pendingContinuation: {
+          loop: suspendedAgentLoop({
+            manifest: concealedManifest,
+            promptTemplate: "Secret GM prompt",
+          }),
+          lifecycle: { runId: "concealed-run", progressRunId: "concealed-run" },
+          readScopes: [],
+          takenUnder: {
+            playerTurns: 0,
+            pluginVersion: "0.0.0",
+            writes: [],
+          },
+          executionContext: {
+            executionId: crypto.randomUUID(),
+            origin: "player" as const,
+            countPolicy: "complete-player-turn" as const,
+            logicalTurnId: crypto.randomUUID(),
+          },
+          messages: [
+            { role: "system", content: "Secret GM prompt" },
+            {
+              role: "assistant",
+              content: "",
+              toolCalls: [
+                {
+                  id: "tc-suspend-c",
+                  name: "suspend",
+                  arguments: '{"secret":"gm-only"}',
+                },
+              ],
+            },
+            {
+              role: "tool",
+              content: JSON.stringify({ suspended: true, secret: "gm-only" }),
+              toolCallId: "tc-suspend-c",
+            },
+          ],
+          toolCallsSoFar: [
+            {
+              toolCallId: "tc-secret-1",
+              toolName: "secret_tool",
+              pluginId: "test-plugin",
+              runtimeId: "test-plugin",
+              input: { hidden: "secret-arg" },
+              output: { hidden: "secret-result" },
+              durationMs: 1,
+              approvalStatus: "auto-allowed",
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          pendingProposals: [],
+          suspendToolCallId: "tc-suspend-c",
+        },
+        createdAt: new Date().toISOString(),
+      });
+
+      const app = createTestApp(
+        makeDefaultDeps(
+          store,
+          {
+            llmAdapter: {
+              generate: async () =>
+                submittedOutput(
+                  { secretVerdict: "TOP_SECRET_SPOILER" },
+                  { inputTokens: 5, outputTokens: 5 },
+                ),
+            },
+          },
+          concealedManifest,
+        ),
+      );
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-concealed/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { choice: "left" } }),
+        },
+      );
+      expect(res.status).toBe(200);
+      const raw = await res.text();
+      expect(raw).not.toContain("TOP_SECRET_SPOILER");
+      expect(raw).not.toContain("secret-arg");
+      expect(raw).not.toContain("secret-result");
+      const parsed = JSON.parse(raw) as { result: { output: unknown } };
+      expect(parsed.result.output).toBeNull();
+    });
+  });
 });

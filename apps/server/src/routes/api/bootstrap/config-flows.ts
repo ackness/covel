@@ -57,6 +57,7 @@ export type ConfigFlowContextFactory = (args: {
   readonly flowId: string;
   readonly runId: string;
   readonly signal: AbortSignal;
+  readonly runSignal: AbortSignal;
   readonly onLoopbackStarted: (session: LoopbackCallbackSession) => void;
   readonly onLoopbackClosed: (session: LoopbackCallbackSession) => void;
 }) => PluginConfigFlowContext;
@@ -277,7 +278,16 @@ export function createConfigFlowEngine(options?: {
       flowId: run.flowId,
       runId: run.runId,
       signal: buildCallSignal(run, requestSignal),
+      runSignal: run.abortController.signal,
       onLoopbackStarted: (session) => {
+        if (
+          closed ||
+          run.status !== "active" ||
+          run.abortController.signal.aborted
+        ) {
+          void session.close().catch(() => {});
+          return;
+        }
         if (run.loopbackSession && run.loopbackSession !== session) {
           void run.loopbackSession.close().catch(() => {});
         }
@@ -533,6 +543,11 @@ export function createConfigFlowEngine(options?: {
         }
         return result;
       } catch (error) {
+        for (const [key, entry] of [...definitions]) {
+          if (entry.pluginId === pluginId) {
+            definitions.delete(key);
+          }
+        }
         for (const [key, entry] of saved) {
           definitions.set(key, entry);
         }
@@ -563,6 +578,20 @@ export function createConfigFlowEngine(options?: {
         );
       }
       await pruneRuns();
+      if (closed) {
+        throw new ConfigFlowError(
+          409,
+          "flow_engine_closed",
+          "Configuration flow engine is closed",
+        );
+      }
+      if (definitions.get(definitionKey(pluginId, flowId)) !== entry) {
+        throw new ConfigFlowError(
+          409,
+          "flow_run_not_active",
+          `Config flow "${flowId}" for plugin "${pluginId}" was reloaded before starting`,
+        );
+      }
       if (activeRunCount() >= maxConcurrentRuns) {
         throw new ConfigFlowError(
           429,
@@ -589,17 +618,41 @@ export function createConfigFlowEngine(options?: {
         step: { kind: "error", title: "Initializing", message: "Initializing" },
       };
 
-      const ctx = makeRunContext(run, buildContext, requestSignal);
-      let firstStep: ConfigFlowStep;
-      try {
-        firstStep = validateStep(await entry.definition.start(input, ctx));
-      } catch (error) {
-        await closeLoopback(run);
-        throw error;
-      }
-
+      // Reserve the concurrency slot synchronously before awaiting `start()` so
+      // concurrent starts cannot exceed `maxConcurrentRuns` and `close()` /
+      // `replacePlugin()` can immediately abort in-flight starts and loopback listeners.
       runs.set(runId, run);
-      return applyValidatedStep(run, firstStep, buildContext);
+
+      return serializeRun(runId, async () => {
+        const ctx = makeRunContext(run, buildContext, requestSignal);
+        let firstStep: ConfigFlowStep;
+        try {
+          firstStep = validateStep(await entry.definition.start(input, ctx));
+        } catch (error) {
+          await closeLoopback(run);
+          if (runs.get(runId) === run) runs.delete(runId);
+          throw error;
+        }
+
+        if (
+          closed ||
+          run.status !== "active" ||
+          run.abortController.signal.aborted ||
+          runs.get(runId) !== run
+        ) {
+          await closeLoopback(run);
+          if (runs.get(runId) === run) runs.delete(runId);
+          throw new ConfigFlowError(
+            409,
+            closed ? "flow_engine_closed" : "flow_run_not_active",
+            closed
+              ? "Configuration flow engine is closed"
+              : "Configuration flow run was cancelled while starting",
+          );
+        }
+
+        return applyValidatedStep(run, firstStep, buildContext);
+      });
     },
 
     async getRun(

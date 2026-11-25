@@ -15,6 +15,7 @@
  */
 
 import { Hono } from "hono";
+import { MAX_PLAYER_MESSAGE_CHARS } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -51,6 +52,9 @@ turnControlRoutes.get("/:id/execution", async (c) => {
 
 turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   const sessionId = c.req.param("id");
+  const guard = await resolveSessionById(c, sessionId);
+  if (!guard.ok) return guard.response;
+
   const body = await c.req
     .json<{ message?: unknown }>()
     .catch(() => null as { message?: unknown } | null);
@@ -58,8 +62,15 @@ turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   if (!message) {
     return c.json(errorBody("message (non-empty string) is required"), 400);
   }
-  const guard = await resolveSessionById(c, sessionId);
-  if (!guard.ok) return guard.response;
+  if (message.length > MAX_PLAYER_MESSAGE_CHARS) {
+    return c.json(
+      errorBody(
+        `message must be at most ${MAX_PLAYER_MESSAGE_CHARS} characters`,
+        { code: "message_too_long" },
+      ),
+      400,
+    );
+  }
 
   const steered = steerActiveTurn(sessionId, message);
   if ("refused" in steered) {

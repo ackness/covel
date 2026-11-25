@@ -21,6 +21,7 @@ import {
 } from "./execution-steps.js";
 import {
   applyPluginMessageSurface,
+  extractPluginMessageTurnId,
   refreshPluginMessageSurfaces,
 } from "./plugin-message-surface.js";
 import {
@@ -117,10 +118,72 @@ function capLiveMessages(
     assetsByTurn.delete(turnId);
     assetProgressByTurn.delete(turnId);
   }
+  const keptIds = new Set(kept.map((message) => message.id));
+  const removedIds = new Set(
+    dropped.map((message) => message.id).filter((id) => !keptIds.has(id)),
+  );
+  let nextSubmittedBlockIds: Set<string> | undefined;
+  let nextSubmittedBlockValues:
+    Record<string, Record<string, unknown>> | undefined;
+  for (const id of removedIds) {
+    if (state.submittedBlockIds.has(id)) {
+      nextSubmittedBlockIds ??= new Set(state.submittedBlockIds);
+      nextSubmittedBlockIds.delete(id);
+    }
+    if (Object.hasOwn(state.submittedBlockValues, id)) {
+      nextSubmittedBlockValues ??= { ...state.submittedBlockValues };
+      delete nextSubmittedBlockValues[id];
+    }
+  }
+  let pluginMessageData = state.pluginMessageData;
+  if (removedTurns.size > 0) {
+    let dataChanged = false;
+    for (const [pluginId, bucket] of Object.entries(state.pluginMessageData)) {
+      if (!bucket || typeof bucket !== "object") continue;
+      if (
+        typeof bucket.__turnId === "string" &&
+        removedTurns.has(bucket.__turnId)
+      ) {
+        if (!dataChanged) {
+          pluginMessageData = { ...pluginMessageData };
+          dataChanged = true;
+        }
+        delete pluginMessageData[pluginId];
+        continue;
+      }
+      let nextBucket: Record<string, unknown> | undefined;
+      for (const [key, value] of Object.entries(bucket)) {
+        if (removedTurns.has(extractPluginMessageTurnId(key, value))) {
+          nextBucket ??= { ...bucket };
+          delete nextBucket[key];
+        }
+      }
+      if (nextBucket) {
+        if (!dataChanged) {
+          pluginMessageData = { ...pluginMessageData };
+          dataChanged = true;
+        }
+        if (Object.keys(nextBucket).length === 0) {
+          delete pluginMessageData[pluginId];
+        } else {
+          pluginMessageData[pluginId] = nextBucket;
+        }
+      }
+    }
+  }
   return {
     messages: kept,
     assetsByTurn,
     assetProgressByTurn,
+    ...(nextSubmittedBlockIds
+      ? { submittedBlockIds: nextSubmittedBlockIds }
+      : {}),
+    ...(nextSubmittedBlockValues
+      ? { submittedBlockValues: nextSubmittedBlockValues }
+      : {}),
+    ...(pluginMessageData !== state.pluginMessageData
+      ? { pluginMessageData }
+      : {}),
     // Only server timestamps can bound server history.
     olderMessagesCursor: encodePageCursor({
       createdAt: edge.timestamp,
@@ -294,7 +357,7 @@ export function reducer(
       const recovery = {
         ...rest,
         status: action.status ?? current.status,
-        checking: !action.status,
+        checking: !action.status && !action.stalled,
         ...(error ? { error } : {}),
         ...(action.stalled ? { stalled: true } : {}),
       };

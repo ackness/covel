@@ -2004,3 +2004,54 @@ it("clears every first-token timer when a failed transport queues for its fallba
     vi.useRealTimers();
   }
 });
+
+it("resets firstTokenSeen, buffers, and idle/ttfb guards on stream-reset and queue pause", async () => {
+  vi.useFakeTimers();
+  const llm: LLMAdapter = {
+    generate: vi.fn(),
+    async *stream(params) {
+      // Primary target starts emitting tool-argument-delta (arms idleHandle, sets firstTokenSeen)
+      yield {
+        type: "tool-argument-delta",
+        index: 0,
+        id: "call-1",
+        name: "do-work",
+        argumentsDelta: '{"partial":',
+      };
+      // Primary fails and fallback queues longer than idleTimeoutMs
+      const releaseQueue = params.onQueueStart?.();
+      await waitWithSignal(2_500, params.signal);
+      releaseQueue?.(2_500);
+      // Gateway resets the stream for fallback target
+      yield { type: "stream-reset" };
+      // Fallback produces its first token within TTFB (500ms) and then streams
+      // multiple chunks well past the initial TTFB window without being killed.
+      await waitWithSignal(400, params.signal);
+      yield { type: "text-delta", textDelta: "fallback-" };
+      await waitWithSignal(400, params.signal);
+      yield { type: "text-delta", textDelta: "ok" };
+      await waitWithSignal(400, params.signal);
+      yield { type: "done", finishReason: "stop" };
+    },
+  };
+  try {
+    const pending = streamLLMWithRetry({
+      llm,
+      messages: baseMessages,
+      policy: buildRetryPolicy({
+        runtimeTimeoutMs: 10_000,
+        maxRetries: 0,
+        firstTokenTimeoutMs: 600,
+        idleTimeoutMs: 1_000,
+      }),
+      deadline: Date.now() + 10_000,
+    });
+    await vi.advanceTimersByTimeAsync(4_000);
+    const result = await pending;
+    expect(result.response.content).toBe("fallback-ok");
+    expect(result.response.toolCalls).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});

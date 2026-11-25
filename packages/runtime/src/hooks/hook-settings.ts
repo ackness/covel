@@ -1,15 +1,6 @@
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
-
-export function deepFreeze<T>(value: T): T {
-  if (value && typeof value === "object") {
-    for (const inner of Object.values(value as Record<string, unknown>)) {
-      deepFreeze(inner);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
+import { deepFreeze } from "../utils/deep-freeze.js";
 
 /** Capture request/world overrides without merging runtime-specific defaults. */
 export function snapshotUserSettings(

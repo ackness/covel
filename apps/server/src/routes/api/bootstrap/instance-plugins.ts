@@ -17,6 +17,7 @@ import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import { compareText } from "@covel/shared";
 import type { CapabilityKey } from "@covel/shared/permissions";
+import type { HostProfile } from "../../../host-profile.js";
 import type { PermissionService } from "../../../trust/permission-service.js";
 import type { TrustedSourceService } from "../../../trust/trusted-source-service.js";
 import type { BootstrapPluginEntries } from "./plugin-entry.js";
@@ -54,12 +55,21 @@ export function isPluginCapabilityEffectivelyAllowed(
   registry: PluginRegistry | undefined,
   key: CapabilityKey,
   pluginId: string,
+  options?: {
+    readonly profile?: HostProfile;
+    readonly isOperator?: boolean;
+  },
 ): boolean {
   if (!permissionService || !registry) return false;
   const entry = registry.getCurrent(pluginId);
   if (!entry) return false;
 
-  const state = permissionService.evaluateCapabilityForPlugin(key, pluginId);
+  const state = permissionService.evaluateCapabilityForPlugin(
+    key,
+    pluginId,
+    options?.profile,
+    options?.isOperator ?? false,
+  );
   const trustSource = getPluginTrustInfo(pluginId, entry.source).source;
   return trustSource === "builtin"
     ? state.effective !== "deny"
@@ -101,14 +111,20 @@ export function isInstancePluginAllowed(
   }
 
   if (trustedSources?.isDeclarative(pluginId)) {
-    return true;
+    return permissionService.isCapabilityAllowedForPlugin(
+      "plugin.declarative",
+      pluginId,
+    );
   }
 
-  const verdict = permissionService.evaluateRpcApproval({
-    sessionId: INSTANCE_QUERY_SESSION_ID,
-    pluginId,
-    action: COMMUNITY_SERVER_CODE_ACTION,
-  });
+  const verdict = permissionService.evaluateRpcApproval(
+    {
+      sessionId: INSTANCE_QUERY_SESSION_ID,
+      pluginId,
+      action: COMMUNITY_SERVER_CODE_ACTION,
+    },
+    { isOperator: false },
+  );
   return verdict.decision === "allow";
 }
 

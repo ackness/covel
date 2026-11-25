@@ -1,6 +1,10 @@
 import http from "node:http";
 import net, { type AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  configureProviderHostPolicy,
+  PERSONAL_PROVIDER_HOST_POLICY,
+} from "../src/host-policy.js";
 import {
   configureOutboundProxy,
   OUTBOUND_TEST_FETCH_HOOK,
@@ -10,6 +14,22 @@ import {
   fetchWithAuthProxyRetry,
   fetchWithRetry,
 } from "../src/plugin-utils.js";
+
+const { lookupOverride } = vi.hoisted(() => ({
+  lookupOverride: {
+    fn: null as
+      null | (() => Promise<Array<{ address: string; family: number }>>),
+  },
+}));
+
+vi.mock("node:dns/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:dns/promises")>();
+  return {
+    ...actual,
+    lookup: (...args: Parameters<typeof actual.lookup>) =>
+      lookupOverride.fn ? lookupOverride.fn() : actual.lookup(...args),
+  };
+});
 
 describe("fetchWithRetry and fetchWithAuthProxyRetry (net.authProxy)", () => {
   afterEach(async () => {
@@ -92,8 +112,6 @@ describe("fetchWithRetry and fetchWithAuthProxyRetry (net.authProxy)", () => {
         }),
       ).rejects.toThrow(/refusing to follow redirect \(HTTP 302\)/);
     } finally {
-      Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, true);
-      await resetOutboundProxyForTests();
       await new Promise<void>((resolve) => proxy.close(() => resolve()));
       await new Promise<void>((resolve) => target.close(() => resolve()));
     }
@@ -111,5 +129,35 @@ describe("fetchWithRetry and fetchWithAuthProxyRetry (net.authProxy)", () => {
         maxRetries: 0,
       }),
     ).rejects.toThrow(/SSRF policy/i);
+  });
+
+  it("enforces strict non-private DNS pinning when proxy mode is direct or system proxy returns DIRECT", async () => {
+    lookupOverride.fn = async () => [{ address: "10.0.0.42", family: 4 }];
+
+    try {
+      configureProviderHostPolicy(PERSONAL_PROVIDER_HOST_POLICY);
+      Reflect.set(globalThis, OUTBOUND_TEST_FETCH_HOOK, false);
+
+      // Direct mode fallback
+      configureOutboundProxy({ mode: "direct" });
+      await expect(
+        fetchWithAuthProxyRetry("https://private-lan.example/oauth/token", {
+          maxRetries: 0,
+        }),
+      ).rejects.toThrow(/SSRF policy|disallowed address/i);
+
+      // System proxy returning DIRECT
+      configureOutboundProxy({
+        mode: "system",
+        resolveSystemProxy: async () => "DIRECT",
+      });
+      await expect(
+        fetchWithAuthProxyRetry("https://private-lan.example/oauth/token", {
+          maxRetries: 0,
+        }),
+      ).rejects.toThrow(/SSRF policy|disallowed address/i);
+    } finally {
+      lookupOverride.fn = null;
+    }
   });
 });

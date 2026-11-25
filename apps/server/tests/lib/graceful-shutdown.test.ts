@@ -19,7 +19,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup(drain: () => Promise<void>, connected = false, ipc = connected) {
+function setup(
+  drain: () => Promise<void>,
+  connected = false,
+  ipc = connected,
+  options?: { withCloseIdleConnections?: boolean },
+) {
   shutdownProcess.connected = connected;
   shutdownProcess.send = ipc ? vi.fn() : undefined;
   const listeners = new Map<string, (...args: unknown[]) => void>();
@@ -38,10 +43,18 @@ function setup(drain: () => Promise<void>, connected = false, ipc = connected) {
     close: vi.fn((callback?: (error?: Error) => void) => {
       finish = callback!;
     }),
+    ...(options?.withCloseIdleConnections
+      ? { closeIdleConnections: vi.fn() }
+      : {}),
     closeAllConnections: vi.fn(),
   };
   registerGracefulShutdown(server, { drain });
-  return { listeners, exit, server, finish: () => finish() };
+  return {
+    listeners,
+    exit,
+    server,
+    finish: (error?: Error) => finish(error),
+  };
 }
 
 describe("graceful shutdown", () => {
@@ -121,5 +134,38 @@ describe("graceful shutdown", () => {
     state.finish();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(state.exit).toHaveBeenCalledExactlyOnceWith(1);
+  });
+
+  it("still drains resources when server.close fails with ERR_SERVER_NOT_RUNNING", async () => {
+    const drain = vi.fn(async () => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const state = setup(drain);
+    const notRunning = Object.assign(new Error("Server is not running"), {
+      code: "ERR_SERVER_NOT_RUNNING",
+    });
+    state.listeners.get("SIGTERM")!();
+    state.finish(notRunning);
+    await vi.waitFor(() =>
+      expect(state.exit).toHaveBeenCalledExactlyOnceWith(0),
+    );
+    expect(drain).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it("prefers closeIdleConnections before force-closing active sockets", async () => {
+    vi.useFakeTimers();
+    const drain = vi.fn(async () => {});
+    const state = setup(drain, false, false, {
+      withCloseIdleConnections: true,
+    });
+    state.listeners.get("SIGINT")!();
+    expect(state.server.closeIdleConnections).toHaveBeenCalledOnce();
+    expect(state.server.closeAllConnections).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(state.server.closeAllConnections).toHaveBeenCalledOnce();
+    state.finish();
+    await vi.waitFor(() =>
+      expect(state.exit).toHaveBeenCalledExactlyOnceWith(0),
+    );
   });
 });

@@ -11,6 +11,7 @@ import {
 import {
   agentToolsConfigSchema,
   authoringEverySchema,
+  bindingNameSchema,
   contractIdSchema,
   authoringTriggerSchema,
   detachedOptionsSchema,
@@ -20,6 +21,7 @@ import {
   jsonPointerSchema,
   permissionsDeclSchema,
   pluginDataInjectDeclSchema,
+  runtimeJsonSchemaReference,
   runtimeManifestInputSchema,
 } from "./plugin-schemas.js";
 import {
@@ -176,7 +178,7 @@ export const runtimeAuthoringManifestSchema = z
       .strictObject({
         inputs: z
           .record(
-            z.string().min(1),
+            bindingNameSchema,
             z.strictObject({
               from: sourceSchema.describe(
                 "Producer of the value: a runtime in this package, a contract, or a kernel input. A kernel input takes no other field.",
@@ -187,8 +189,7 @@ export const runtimeAuthoringManifestSchema = z
                   "`turn` reads the same execution's upstream result. `committed` reads the latest committed export and needs `recordAs`. Defaults to `turn`.",
                 )
                 .optional(),
-              select: z
-                .string()
+              select: jsonPointerSchema
                 .meta({
                   description:
                     "JSON Pointer applied to the upstream value. Declaring `select` with `scope: committed` is rejected; committed inputs read the complete export.",
@@ -201,14 +202,14 @@ export const runtimeAuthoringManifestSchema = z
                   "`true` stops this runtime when the upstream value is missing or failed. Defaults to `true`. A story runtime (`io.visibility: story`) must set it to `false` for contract inputs.",
                 )
                 .optional(),
-              accepts: z
-                .string()
+              accepts: runtimeJsonSchemaReference
                 .describe(
                   "Schema the bound value must satisfy: a local path or `contract:<contractId>`. It adds to the public contract check.",
                 )
                 .optional(),
               recordAs: z
                 .string()
+                .min(1)
                 .describe(
                   "Export key to read from the producer. Required with `scope: committed`.",
                 )
@@ -223,8 +224,7 @@ export const runtimeAuthoringManifestSchema = z
           .array(pluginDataInjectDeclSchema.omit({ kind: true }))
           .describe("Own plugin data inlined into the agent prompt.")
           .optional(),
-        payloadSchema: z
-          .string()
+        payloadSchema: runtimeJsonSchemaReference
           .describe("Schema that validates the activation payload.")
           .optional(),
         output: z
@@ -249,6 +249,7 @@ export const runtimeAuthoringManifestSchema = z
               .optional(),
             schema: z
               .string()
+              .min(1)
               .describe(
                 "Private schema that validates the runtime's output. Defaults to the schema of a framework output contract, except on a function story runtime, whose return value becomes the story shape afterwards; a story agent without one submits the story schema.",
               )
@@ -261,6 +262,7 @@ export const runtimeAuthoringManifestSchema = z
               .optional(),
             recordAs: z
               .string()
+              .min(1)
               .describe(
                 "Export key under which the output is persisted for later executions. Requires `schema` unless the runtime provides a framework contract; a function story runtime always needs one.",
               )
@@ -356,7 +358,7 @@ export const runtimeAuthoringManifestSchema = z
               )
               .optional(),
             afterTools: z
-              .array(z.string())
+              .array(z.string().min(1))
               .describe(
                 "At least one of these own or builtin business tools must succeed before submission. Implies require: tool-use; does not end the run.",
               )

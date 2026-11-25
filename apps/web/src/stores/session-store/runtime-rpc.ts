@@ -230,6 +230,7 @@ export function finalizeActionExecution(
     return;
   }
   dispatch({ type: "SET_EXECUTING", value: false });
+  dispatch({ type: "SET_ADVANCE", advance: null });
   dispatch({
     type: "FINALIZE_HANGING_RUNTIMES",
     reason: CONNECTION_CLOSED_REASON,

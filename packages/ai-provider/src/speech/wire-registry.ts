@@ -13,8 +13,11 @@ export function registerSpeechWire(
 ): () => void {
   return registerWire("speech", wire, owner);
 }
-export function getSpeechWire(id: string): SpeechWire | null {
-  return getWire("speech", id);
+export function getSpeechWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): SpeechWire | null {
+  return getWire("speech", id, approvedInstanceOwner);
 }
 /** With `owner`, the wire serves only sessions in which that plugin is active. */
 export function registerTranscriptionWire(
@@ -23,8 +26,11 @@ export function registerTranscriptionWire(
 ): () => void {
   return registerWire("transcription", wire, owner);
 }
-export function getTranscriptionWire(id: string): TranscriptionWire | null {
-  return getWire("transcription", id);
+export function getTranscriptionWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): TranscriptionWire | null {
+  return getWire("transcription", id, approvedInstanceOwner);
 }
 
 registerSpeechWire(openAiSpeechWire);

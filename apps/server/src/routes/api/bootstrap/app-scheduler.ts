@@ -85,8 +85,10 @@ export function createAppScheduler(
     options?.defaultTimeoutMs ?? DEFAULT_SCHEDULER_TIMEOUT_MS;
 
   const handlers = new Map<string, RegisteredTask>();
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const recurringTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const onceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const failureCounts = new Map<string, number>();
+  const pluginGenerations = new Map<string, number>();
   const activePlugins = new Set<string>();
   const inFlightControllers = new Map<string, AbortController>();
   const inFlightPromises = new Set<Promise<void>>();
@@ -96,19 +98,43 @@ export function createAppScheduler(
   let closed = false;
 
   const taskKey = (pluginId: string, taskId: string) => `${pluginId}:${taskId}`;
+  const generationOf = (pluginId: string) =>
+    pluginGenerations.get(pluginId) ?? 0;
 
-  const clearTimer = (key: string) => {
-    const existing = timers.get(key);
+  const clearMapTimer = (
+    map: Map<string, ReturnType<typeof setTimeout>>,
+    key: string,
+  ) => {
+    const existing = map.get(key);
     if (existing !== undefined) {
       clearTimeout(existing);
-      timers.delete(key);
+      map.delete(key);
     }
+  };
+  const clearRecurringTimer = (key: string) =>
+    clearMapTimer(recurringTimers, key);
+  const clearOnceTimer = (key: string) => clearMapTimer(onceTimers, key);
+
+  const clearAllTimersForKey = (key: string) => {
+    clearRecurringTimer(key);
+    clearOnceTimer(key);
   };
 
   const clearPluginTimers = (pluginId: string) => {
     const prefix = `${pluginId}:`;
-    for (const [key] of [...timers.entries()]) {
-      if (key.startsWith(prefix)) clearTimer(key);
+    for (const map of [recurringTimers, onceTimers]) {
+      for (const key of [...map.keys()]) {
+        if (key.startsWith(prefix)) clearMapTimer(map, key);
+      }
+    }
+  };
+
+  const abortPluginInFlight = (pluginId: string, reason: Error) => {
+    const prefix = `${pluginId}:`;
+    for (const [key, ac] of [...inFlightControllers.entries()]) {
+      if (key.startsWith(prefix) && !ac.signal.aborted) {
+        ac.abort(reason);
+      }
     }
   };
 
@@ -142,30 +168,67 @@ export function createAppScheduler(
     taskId: string,
     baseIntervalMs: number,
     delayMs: number,
+    expectedGeneration: number,
+    expectedRecord: RegisteredTask,
   ): void {
     const key = taskKey(pluginId, taskId);
-    clearTimer(key);
-    if (closed || !handlers.has(key)) return;
+    clearRecurringTimer(key);
+    if (
+      closed ||
+      generationOf(pluginId) !== expectedGeneration ||
+      handlers.get(key) !== expectedRecord
+    ) {
+      return;
+    }
     const timer = setTimeout(() => {
-      timers.delete(key);
+      if (recurringTimers.get(key) === timer) {
+        recurringTimers.delete(key);
+      }
+      if (
+        closed ||
+        generationOf(pluginId) !== expectedGeneration ||
+        handlers.get(key) !== expectedRecord
+      ) {
+        return;
+      }
       void runTaskNow(pluginId, taskId).then((outcome) => {
-        if (!closed && handlers.has(key) && outcome.status !== "denied") {
-          scheduleRecurring(pluginId, taskId, baseIntervalMs);
+        if (
+          !closed &&
+          generationOf(pluginId) === expectedGeneration &&
+          handlers.get(key) === expectedRecord &&
+          outcome.status !== "denied"
+        ) {
+          scheduleRecurring(
+            pluginId,
+            taskId,
+            baseIntervalMs,
+            expectedGeneration,
+            expectedRecord,
+          );
         }
       });
     }, delayMs);
     timer.unref?.();
-    timers.set(key, timer);
+    recurringTimers.set(key, timer);
   }
 
   function scheduleRecurring(
     pluginId: string,
     taskId: string,
     baseIntervalMs: number,
+    expectedGeneration: number,
+    expectedRecord: RegisteredTask,
   ): void {
     const key = taskKey(pluginId, taskId);
     const delayMs = computeDelayMs(baseIntervalMs, failureCounts.get(key) ?? 0);
-    scheduleNextRun(pluginId, taskId, baseIntervalMs, delayMs);
+    scheduleNextRun(
+      pluginId,
+      taskId,
+      baseIntervalMs,
+      delayMs,
+      expectedGeneration,
+      expectedRecord,
+    );
   }
 
   async function runTaskNow(
@@ -176,7 +239,15 @@ export function createAppScheduler(
     const key = taskKey(pluginId, taskId);
     const registered = handlers.get(key);
     if (!registered) return { status: "missing" };
+    const expectedGeneration = generationOf(pluginId);
     if (!(await isEligible(pluginId))) return { status: "denied" };
+    if (
+      closed ||
+      generationOf(pluginId) !== expectedGeneration ||
+      handlers.get(key) !== registered
+    ) {
+      return { status: "missing" };
+    }
     if (activePlugins.has(pluginId)) {
       skippedOverlap++;
       return { status: "skipped-overlap" };
@@ -213,7 +284,9 @@ export function createAppScheduler(
       }),
     );
     const release = () => {
-      inFlightControllers.delete(key);
+      if (inFlightControllers.get(key) === ac) {
+        inFlightControllers.delete(key);
+      }
       activePlugins.delete(pluginId);
       inFlightPromises.delete(tracker);
     };
@@ -239,11 +312,21 @@ export function createAppScheduler(
       timeoutHandle.unref?.();
 
       await Promise.race([task, aborted]);
-      failureCounts.set(key, 0);
+      if (
+        generationOf(pluginId) === expectedGeneration &&
+        handlers.get(key) === registered
+      ) {
+        failureCounts.set(key, 0);
+      }
       return { status: "ran" };
     } catch (error) {
       failures++;
-      failureCounts.set(key, (failureCounts.get(key) ?? 0) + 1);
+      if (
+        generationOf(pluginId) === expectedGeneration &&
+        handlers.get(key) === registered
+      ) {
+        failureCounts.set(key, (failureCounts.get(key) ?? 0) + 1);
+      }
       console.warn(
         `[app-scheduler] task ${pluginId}/${taskId} failed:`,
         error instanceof Error ? error.message : String(error),
@@ -277,7 +360,7 @@ export function createAppScheduler(
       return () => {
         if (handlers.get(key) === record) {
           handlers.delete(key);
-          clearTimer(key);
+          clearAllTimersForKey(key);
           failureCounts.delete(key);
         }
       };
@@ -287,13 +370,16 @@ export function createAppScheduler(
       const previous = [...handlers.entries()].filter(
         ([, item]) => item.pluginId === pluginId,
       );
-      clearPluginTimers(pluginId);
       for (const [key] of previous) {
         handlers.delete(key);
         failureCounts.delete(key);
       }
       try {
-        return publish();
+        const result = publish();
+        pluginGenerations.set(pluginId, generationOf(pluginId) + 1);
+        clearPluginTimers(pluginId);
+        abortPluginInFlight(pluginId, new Error("Plugin reloaded"));
+        return result;
       } catch (error) {
         for (const [key, item] of [...handlers.entries()]) {
           if (item.pluginId === pluginId) handlers.delete(key);
@@ -312,14 +398,30 @@ export function createAppScheduler(
         deps.registry.getCurrent(pluginId) ?? deps.registry.get(pluginId);
       const specs = entry?.packageManifest?.plugin.contributes?.schedules ?? [];
       if (specs.length === 0) return;
+      const expectedGeneration = generationOf(pluginId);
       if (!(await isEligible(pluginId))) return;
+      if (closed || generationOf(pluginId) !== expectedGeneration) return;
       for (const spec of specs) {
         const key = taskKey(pluginId, spec.id);
-        if (!handlers.has(key)) continue;
+        const record = handlers.get(key);
+        if (!record) continue;
         if (spec.runOnStart) {
-          scheduleNextRun(pluginId, spec.id, spec.intervalMs, 0);
+          scheduleNextRun(
+            pluginId,
+            spec.id,
+            spec.intervalMs,
+            0,
+            expectedGeneration,
+            record,
+          );
         } else {
-          scheduleRecurring(pluginId, spec.id, spec.intervalMs);
+          scheduleRecurring(
+            pluginId,
+            spec.id,
+            spec.intervalMs,
+            expectedGeneration,
+            record,
+          );
         }
       }
     },
@@ -334,24 +436,42 @@ export function createAppScheduler(
         throw new Error("scheduleOnce delayMs must be non-negative");
       }
       const key = taskKey(pluginId, taskId);
-      if (!handlers.has(key)) {
+      const record = handlers.get(key);
+      if (!record) {
         throw new Error(
           `Scheduled task "${taskId}" is not registered for "${pluginId}"`,
         );
       }
+      const expectedGeneration = generationOf(pluginId);
       if (!(await isEligible(pluginId))) {
         throw new Error(
           `Capability "app.scheduler" is not permitted for plugin "${pluginId}"`,
         );
       }
+      if (
+        closed ||
+        generationOf(pluginId) !== expectedGeneration ||
+        handlers.get(key) !== record
+      ) {
+        return;
+      }
       const effectiveDelay = Math.max(delayMs, minIntervalMs);
-      clearTimer(key);
+      clearOnceTimer(key);
       const timer = setTimeout(() => {
-        timers.delete(key);
+        if (onceTimers.get(key) === timer) {
+          onceTimers.delete(key);
+        }
+        if (
+          closed ||
+          generationOf(pluginId) !== expectedGeneration ||
+          handlers.get(key) !== record
+        ) {
+          return;
+        }
         void runTaskNow(pluginId, taskId);
       }, effectiveDelay);
       timer.unref?.();
-      timers.set(key, timer);
+      onceTimers.set(key, timer);
     },
 
     runTaskNow,
@@ -372,8 +492,10 @@ export function createAppScheduler(
 
     async close(): Promise<void> {
       closed = true;
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
+      for (const timer of recurringTimers.values()) clearTimeout(timer);
+      recurringTimers.clear();
+      for (const timer of onceTimers.values()) clearTimeout(timer);
+      onceTimers.clear();
       for (const ac of inFlightControllers.values()) {
         if (!ac.signal.aborted) {
           ac.abort(new Error("Host shutting down"));

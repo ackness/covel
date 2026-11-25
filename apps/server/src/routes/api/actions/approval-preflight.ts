@@ -1,4 +1,7 @@
-import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
+import {
+  evaluateDeclarativeRouteAdmission,
+  refreshDeclarativeEligibility,
+} from "../../../trust/plugin-admission.js";
 import { approvalVerdictResponse } from "../approval-verdict.js";
 import {
   pluginRuntimeManifests,
@@ -93,7 +96,13 @@ export async function runtimeRunsWithoutPrompt(
     c.get("pluginRegistry").get(pluginId)?.source,
   );
   if (trust.autoLoad) return true;
-  if (await refreshDeclarativeEligibility(c.get("trustedSources"), pluginId))
+  if (
+    await refreshDeclarativeEligibility(
+      c.get("trustedSources"),
+      pluginId,
+      c.get("permissionService"),
+    )
+  )
     return true;
   if (requireAccess(c, "plugin.community")) return false;
   const gate = c.get("rpcApprovalGate");
@@ -127,13 +136,14 @@ async function preflightApprovals(
       registry.get(manifest.pluginId)?.source,
     );
     if (trust.autoLoad) continue;
-    if (
-      await refreshDeclarativeEligibility(
-        c.get("trustedSources"),
-        manifest.pluginId,
-      )
-    )
-      continue;
+    const declAdmission = await evaluateDeclarativeRouteAdmission(
+      c,
+      c.get("trustedSources"),
+      c.get("permissionService"),
+      manifest.pluginId,
+    );
+    if (declAdmission.admitted) continue;
+    if (declAdmission.denied) return declAdmission.denied;
     const denied = requireAccess(c, "plugin.community");
     if (denied) return denied;
     if (!refreshed.has(manifest.pluginId)) {

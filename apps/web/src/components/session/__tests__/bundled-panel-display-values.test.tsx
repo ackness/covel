@@ -22,6 +22,12 @@ vi.mock("@/stores/session-store.js", () => ({
       pendingInteractionDrafts: [],
     },
   }),
+  useSessionStructure: () => ({
+    gameState: { characters: session.characters },
+    session: { id: "display-values" },
+    world: null,
+    sessionPlugins: [],
+  }),
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));
 

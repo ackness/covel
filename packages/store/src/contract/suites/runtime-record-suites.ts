@@ -1590,5 +1590,55 @@ export function registerRuntimeRecordStoreSuites(
       const bMessages = await store.listTurnMessages("sess-tag-b");
       expect(bMessages[0]!.compactedAtTurnId).toBeUndefined();
     });
+
+    it("chunks large inArray batches (>500 IDs) in tagTurnMessagesCompacted, retagCompactedTurnMessages, and deleteSessionSummaries", async () => {
+      const sessionId = "sess-chunk-in";
+      const ids: string[] = [];
+      const summaryIds: string[] = [];
+      const count = 520;
+      await store.withTransaction(async (tx) => {
+        for (let i = 0; i < count; i++) {
+          const msgId = `tm-${String(i).padStart(4, "0")}`;
+          const sumId = `sum-${String(i).padStart(4, "0")}`;
+          ids.push(msgId);
+          summaryIds.push(sumId);
+          await tx.appendTurnMessage(
+            makeTurnMessage({
+              id: msgId,
+              sessionId,
+              order: i,
+              content: `msg ${i}`,
+            }),
+          );
+          await tx.saveSessionSummary(
+            makeSessionSummary({
+              id: sumId,
+              sessionId,
+              content: `summary ${i}`,
+            }),
+          );
+        }
+      });
+
+      await store.tagTurnMessagesCompacted(sessionId, ids, "sum-batch-1");
+      const tagged = await store.listTurnMessages(sessionId);
+      expect(tagged).toHaveLength(count);
+      expect(
+        tagged.every((row) => row.compactedAtTurnId === "sum-batch-1"),
+      ).toBe(true);
+
+      await store.retagCompactedTurnMessages(sessionId, "sum-batch-2", [
+        "sum-batch-1",
+        ...summaryIds,
+      ]);
+      const retagged = await store.listTurnMessages(sessionId);
+      expect(
+        retagged.every((row) => row.compactedAtTurnId === "sum-batch-2"),
+      ).toBe(true);
+
+      await store.deleteSessionSummaries(sessionId, summaryIds);
+      expect(await store.listSessionSummaries(sessionId)).toEqual([]);
+    });
   });
 }
+

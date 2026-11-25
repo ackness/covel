@@ -295,4 +295,92 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     // replaced wholesale, never mutated in place).
     expect(before?.value).toEqual({ n: 1 });
   });
+
+  it("restores sessionWriteCounters when turn-message or plugin-data writes roll back", async () => {
+    await store.appendTurnMessage({
+      id: "tm-1",
+      sessionId: "sess-1",
+      turnId: "t1",
+      sourceType: "player",
+      role: "user",
+      content: "first",
+      order: 1,
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    const initialSeq = (await store.listTurnMessagesAfter("sess-1", null, 10))[0]!
+      .writeSeq;
+
+    await expect(
+      store.withTransaction(async (tx) => {
+        await tx.appendTurnMessage({
+          id: "tm-rolled-back",
+          sessionId: "sess-1",
+          turnId: "t2",
+          sourceType: "player",
+          role: "user",
+          content: "rolled back",
+          order: 2,
+          createdAt: "2026-01-01T00:00:02.000Z",
+        });
+        await tx.setPluginData(pluginData({ key: "rolled-back-k" }));
+        throw new Error("rollback counter");
+      }),
+    ).rejects.toThrow("rollback counter");
+
+    await store.appendTurnMessage({
+      id: "tm-2",
+      sessionId: "sess-1",
+      turnId: "t3",
+      sourceType: "player",
+      role: "user",
+      content: "second",
+      order: 2,
+      createdAt: "2026-01-01T00:00:03.000Z",
+    });
+    const secondSeq = (await store.listTurnMessagesAfter("sess-1", null, 10))[1]!
+      .writeSeq;
+    expect(secondSeq).toBe(initialSeq + 1);
+  });
+
+  it("restores sessions.embeddingModelId when lockSessionEmbeddingModel or resetSessionVectorIndex rolls back", async () => {
+    const session = (await store.getSession("sess-1"))!;
+    const target = await store.ensureVectorModel({
+      modelId: "test/embed-rb",
+      provider: "test",
+      modelName: "embed",
+      dim: 2,
+    });
+
+    await expect(
+      store.withTransaction(async (tx) => {
+        if (!supportsVector(tx)) throw new Error("Missing vector capability");
+        await tx.lockSessionEmbeddingModel("sess-1", target);
+        throw new Error("rollback lock");
+      }),
+    ).rejects.toThrow("rollback lock");
+    expect((await store.getSession("sess-1"))?.embeddingModelId).toBeUndefined();
+
+    await store.lockSessionEmbeddingModel("sess-1", target);
+    expect((await store.getSession("sess-1"))?.embeddingModelId).toBe(
+      target.modelRegistryId,
+    );
+
+    await expect(
+      store.withTransaction(async (tx) => {
+        if (!supportsVector(tx)) throw new Error("Missing vector capability");
+        const reset = await tx.resetSessionVectorIndex({
+          sessionId: "sess-1",
+          expectedSessionCreatedAt: session.createdAt,
+          expectedModelRegistryId: target.modelRegistryId,
+          target: null,
+        });
+        expect(reset).toBe(true);
+        throw new Error("rollback reset");
+      }),
+    ).rejects.toThrow("rollback reset");
+    expect((await store.getSession("sess-1"))?.embeddingModelId).toBe(
+      target.modelRegistryId,
+    );
+  });
 });
+

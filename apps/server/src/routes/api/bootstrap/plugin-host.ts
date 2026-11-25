@@ -109,7 +109,7 @@ export async function createPluginHost(args: {
     store,
     getApprovalGate: () => rpc.rpcApprovalGate,
     refreshDeclarativeEligibility: (pluginId) =>
-      refreshDeclarativeEligibility(trust.current, pluginId),
+      refreshDeclarativeEligibility(trust.current, pluginId, trust.permissions),
   });
   const loadRuntimeFn = runtimeLoader.loadRuntimeFn;
 
@@ -117,7 +117,11 @@ export async function createPluginHost(args: {
   // the framework tool registry, per-session character-tool overrides, and
   // the approval-gated executor. The registry remains mutable so the memory
   // system can register its tools in a later stage.
-  const tools = await setupPluginTools({ store, eventDirectory });
+  const tools = await setupPluginTools({
+    store,
+    eventDirectory,
+    getPermissionService: () => trust.permissions,
+  });
   owned.closeTools = () => tools.toolExecutor.close();
 
   const rpc = createBootstrapPluginRpc({
@@ -131,7 +135,7 @@ export async function createPluginHost(args: {
   });
   const appActions = createAppActionRegistry();
   let providerSourcesRef: ProviderSourceHost | undefined;
-  const configFlows = createConfigFlowEngine({
+  const configFlows = (owned.configFlows = createConfigFlowEngine({
     onRunCompleted: (snapshot) =>
       invalidateAndRefreshProviderSources(
         providerSourcesRef,
@@ -140,7 +144,7 @@ export async function createPluginHost(args: {
         "config-flows",
         `flow for "${snapshot.pluginId}"`,
       ),
-  });
+  }));
   const appEvents = createAppEventDispatcher({
     registry,
     store,
@@ -152,14 +156,14 @@ export async function createPluginHost(args: {
       owned.instancePlugins?.activateForEvent(event) ?? Promise.resolve([]),
   });
   linkAppEventDispatcherToBus(eventBus, appEvents);
-  const appScheduler = createAppScheduler({
+  const appScheduler = (owned.appScheduler = createAppScheduler({
     registry,
     store,
     hostId,
     secretVault,
     getPermissionService: () => trust.permissions,
     getTrustedSources: () => trust.current,
-  });
+  }));
   const providerSources = createProviderSourceHost({
     registry,
     store,

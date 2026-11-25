@@ -751,6 +751,38 @@ describe("POST /api/install/plugin", () => {
     expect(body.error).toMatch(/ratio|expansion/i);
   });
 
+  it("rejects a zip bomb whose payload entry spoofs uncompressedSize as 0", async () => {
+    const app = createTestApp();
+    const bombPayload = Buffer.alloc(2 * 1024 * 1024, 0);
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(Buffer.from(VALID_PACKAGE_JSON, "utf-8"), "package.json");
+    zip.addBuffer(Buffer.from(VALID_PLUGIN_MD, "utf-8"), "PLUGIN.md");
+    zip.addBuffer(bombPayload, "payload.bin");
+    const zipBuf = await zipToBuffer(zip);
+
+    // Patch only payload.bin's central-directory uncompressedSize (+24 from PK\x01\x02) to 0.
+    const cdSig = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+    let offset = 0;
+    let patched = false;
+    while ((offset = zipBuf.indexOf(cdSig, offset)) !== -1) {
+      const nameLen = zipBuf.readUInt16LE(offset + 28);
+      const name = zipBuf
+        .subarray(offset + 46, offset + 46 + nameLen)
+        .toString("utf-8");
+      if (name === "payload.bin") {
+        zipBuf.writeUInt32LE(0, offset + 24);
+        patched = true;
+      }
+      offset += 4;
+    }
+    expect(patched).toBe(true);
+
+    const res = await postZip(app, "/api/install/plugin", zipBuf);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/too many bytes|expansion ratio|size budget/i);
+  });
+
   it("rejects non-zip uploads", async () => {
     const app = createTestApp();
     const notZip = Buffer.from("this is plainly not a zip file", "utf-8");

@@ -1,4 +1,8 @@
-import { createFormTool, estimateTokens } from "@covel/plugin-handlers-utils";
+import {
+  createFormTool,
+  estimateTokens,
+  modelFacingJson,
+} from "@covel/plugin-handlers-utils";
 import makeCharacterForm from "../tools/create-character-form.js";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
 import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
@@ -68,7 +72,7 @@ function rosterJson(characters) {
 function fieldLines(characters) {
   let used = 0;
   return characters.map(({ id, fields }) => {
-    const json = JSON.stringify(fields ?? {});
+    const json = JSON.stringify(modelFacingJson(fields ?? {}));
     if (used + json.length > ROSTER_FIELDS_BUDGET)
       return `${id}: fieldsOmitted`;
     used += json.length;

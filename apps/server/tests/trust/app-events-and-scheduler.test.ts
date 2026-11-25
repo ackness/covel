@@ -601,7 +601,7 @@ describe("AppEvents, AppScheduler, and Instance UI Slot Gating", () => {
 
     // L1 hosted ceiling disables plugin.instanceScope fail-closed
     const hostedProfile = deriveHostProfile(
-      { ...readRuntimeEnv(), HOST_PROFILE: "demo" } as never,
+      { ...readRuntimeEnv(), deploymentTier: "demo" },
       { storeBackend: "sqlite" },
     );
     const { api: hostedBooted } = await bootServer(hostedProfile);
@@ -614,5 +614,194 @@ describe("AppEvents, AppScheduler, and Instance UI Slot Gating", () => {
     expect(hostedProj.settingsSection).toEqual([]);
     expect(hostedProj.topbarStatus).toEqual([]);
     expect(hostedProj.appCommands).toEqual([]);
+  });
+
+  it("races hanging AppEvent handlers against timeout and enforces plugin.instanceScope for builtin plugins (H-12, M-08)", async () => {
+    await writePluginDir(
+      builtinDir,
+      "builtin-hung-ev",
+      {
+        apiVersion: 2,
+        scope: "both",
+        contributes: { appEvents: ["AppStarted"] },
+      },
+      {},
+    );
+    await writePluginDir(
+      builtinDir,
+      "builtin-after-ev",
+      {
+        apiVersion: 2,
+        scope: "both",
+        contributes: { appEvents: ["AppStarted"] },
+      },
+      {},
+    );
+
+    const eventsOrder: string[] = [];
+    const profile = deriveHostProfile(readRuntimeEnv(), {
+      storeBackend: "sqlite",
+    });
+    api = await bootstrapApi({
+      pluginsDir: builtinDir,
+      pluginsDirs: [builtinDir, userDir],
+      covelHome,
+      store,
+      storeBackend: "memory",
+      hostProfile: profile,
+      onProviderSourceResolverReady: () => {
+        eventsOrder.push("resolver-ready");
+      },
+      llmAdapter: {
+        generate: async () => ({
+          content: "ok",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }),
+      },
+    });
+    expect(eventsOrder).toEqual(["resolver-ready"]);
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const dispatcher = createAppEventDispatcher({
+      registry: api.registry,
+      store,
+      getPermissionService: () => api!.permissionService,
+      getTrustedSources: () => api!.trustedSources,
+      handlerTimeoutMs: 50,
+    });
+    const ran: string[] = [];
+    dispatcher.register(
+      "builtin-hung-ev",
+      "AppStarted",
+      () => new Promise<void>(() => {}),
+    );
+    dispatcher.register("builtin-after-ev", "AppStarted", () => {
+      ran.push("after-ok");
+    });
+
+    await dispatcher.emit("AppStarted", {
+      hostId: "h",
+      startedAt: new Date().toISOString(),
+    });
+    expect(ran).toEqual(["after-ok"]);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+
+    // On hosted profile where L1 disables plugin.instanceScope, builtin dual-scope
+    // listeners must also be gated out.
+    const hostedProfile = deriveHostProfile(
+      { ...readRuntimeEnv(), deploymentTier: "demo" },
+      { storeBackend: "sqlite" },
+    );
+    expect(hostedProfile.capabilities["plugin.instanceScope"]).toBe("disabled");
+    const { api: hostedBooted } = await bootServer(hostedProfile);
+    const hostedDispatcher = createAppEventDispatcher({
+      registry: hostedBooted.registry,
+      store,
+      getPermissionService: () => hostedBooted.permissionService,
+      getTrustedSources: () => hostedBooted.trustedSources,
+    });
+    const hostedCalls: string[] = [];
+    hostedDispatcher.register("builtin-after-ev", "AppStarted", () => {
+      hostedCalls.push("should-not-run");
+    });
+    await hostedDispatcher.emit("AppStarted", {
+      hostId: "h",
+      startedAt: new Date().toISOString(),
+    });
+    expect(hostedCalls).toEqual([]);
+  });
+
+  it("keeps recurring schedule alive after scheduleOnce and aborts/fences in-flight tasks on replacePlugin", async () => {
+    await writePluginDir(
+      builtinDir,
+      "sched-m06",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        permissions: { scheduler: true },
+        contributes: {
+          schedules: [{ id: "heartbeat", intervalMs: 60_000 }],
+        },
+      },
+      {},
+    );
+    const { api: booted } = await bootServer();
+    const scheduler = createAppScheduler(
+      {
+        registry: booted.registry,
+        store,
+        getPermissionService: () => booted.permissionService,
+        getTrustedSources: () => booted.trustedSources,
+      },
+      { minIntervalMs: 25, defaultTimeoutMs: 5_000 },
+    );
+
+    try {
+      let runs = 0;
+      scheduler.register("sched-m06", "heartbeat", () => {
+        runs += 1;
+      });
+      // Override manifest interval to short value via armPlugin + scheduleOnce:
+      // register with short schedule in registry entry.
+      const entry = booted.registry.getCurrent("sched-m06")!;
+      (
+        entry.packageManifest!.plugin.contributes!.schedules![0] as {
+          intervalMs: number;
+        }
+      ).intervalMs = 45;
+      await scheduler.armPlugin("sched-m06");
+      await scheduler.scheduleOnce("sched-m06", "heartbeat", 10);
+
+      // Wait enough for scheduleOnce + at least 2 recurring ticks.
+      await new Promise((r) => setTimeout(r, 180));
+      expect(runs).toBeGreaterThanOrEqual(3);
+
+      // Now verify replacePlugin aborts in-flight task and fences stale generation.
+      let oldSignalAborted = false;
+      let releaseOld!: () => void;
+      const oldStarted = new Promise<void>((r) => {
+        releaseOld = r;
+      });
+      scheduler.replacePlugin("sched-m06", () => {
+        scheduler.register("sched-m06", "heartbeat", ({ signal }) => {
+          releaseOld();
+          return new Promise<void>((_resolve, reject) => {
+            signal.addEventListener("abort", () => {
+              oldSignalAborted = true;
+              reject(signal.reason);
+            });
+          });
+        });
+      });
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const inFlight = scheduler.runTaskNow("sched-m06", "heartbeat");
+      await oldStarted;
+
+      let v2Runs = 0;
+      scheduler.replacePlugin("sched-m06", () => {
+        scheduler.register("sched-m06", "heartbeat", () => {
+          v2Runs += 1;
+        });
+      });
+
+      const oldOutcome = await inFlight;
+      warnSpy.mockRestore();
+      expect(oldSignalAborted).toBe(true);
+      expect(oldOutcome.status).toBe("failed");
+      // The aborted old-generation failure must NOT pollute v2's failureCount.
+      expect(scheduler.list()).toEqual([
+        { pluginId: "sched-m06", taskId: "heartbeat", failureCount: 0 },
+      ]);
+      expect(
+        (await scheduler.runTaskNow("sched-m06", "heartbeat")).status,
+      ).toBe("ran");
+      expect(v2Runs).toBe(1);
+    } finally {
+      await scheduler.close();
+    }
   });
 });

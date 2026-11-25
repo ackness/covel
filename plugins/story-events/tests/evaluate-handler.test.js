@@ -23,9 +23,10 @@ function makeCtx({
   turnId = "t-1",
   sourceTurnId,
   planned = {},
+  events = { [event.id]: event },
 } = {}) {
   const data = {
-    "_hidden.events": { [event.id]: event },
+    "_hidden.events": { ...events },
     "_hidden.planned": { ...planned },
     revealed: { ...revealed },
   };
@@ -199,5 +200,64 @@ describe("evaluate handler", () => {
     });
     // The pending authored event is never named to planners.
     expect(JSON.stringify(result.value.ledger)).not.toContain("lighthouse");
+  });
+
+  it("skips state mutations and returns no cue when recursionDepth > 0", async () => {
+    const { ctx, writes } = makeCtx();
+    const result = await handler({ ...ctx, recursionDepth: 1 });
+    expect(result.value.cue).toBeNull();
+    expect(writes).toEqual([]);
+  });
+
+  it("ignores pure-reward revealed rows when finding retries or next-turn reminders for payload events", async () => {
+    const pureReward = {
+      id: "bonus-gold",
+      when: { dimension: "location", equals: "harbor" },
+      rewards: [{ id: "r1", kind: "narrative", text: "Extra coin." }],
+    };
+    const { ctx: baseCtx, writes } = makeCtx({
+      location: "harbor",
+      phase: 1,
+      events: {
+        [pureReward.id]: pureReward,
+        [event.id]: event,
+      },
+      revealed: {
+        // Listed first in revealed, has NO payload.
+        "bonus-gold": { lastTurn: 4, lastTurnId: "t-1", count: 1 },
+        "lighthouse-orphan": { lastTurn: 4, lastTurnId: "t-1", count: 1 },
+      },
+    });
+
+    // Retry of sourceTurnId t-1 still finds the payload event despite bonus-gold appearing first.
+    const retryRes = await handler({
+      ...baseCtx,
+      turnId: "t-1b",
+      execution: { sourceTurnId: "t-1" },
+    });
+    expect(retryRes.value.cue?.eventId).toBe("lighthouse-orphan");
+    expect(retryRes.value.cue?.reminder).toBeUndefined();
+
+    // Next turn reminder also finds the payload event instead of stopping on bonus-gold.
+    const reminderRes = await handler({
+      ...baseCtx,
+      turnId: "t-2",
+    });
+    expect(reminderRes.value.cue).toMatchObject({
+      eventId: "lighthouse-orphan",
+      reminder: true,
+    });
+    expect(writes).toEqual([
+      {
+        namespace: "revealed",
+        key: "lighthouse-orphan",
+        value: {
+          lastTurn: 4,
+          lastTurnId: "t-1",
+          count: 1,
+          reminderTurnId: "t-2",
+        },
+      },
+    ]);
   });
 });

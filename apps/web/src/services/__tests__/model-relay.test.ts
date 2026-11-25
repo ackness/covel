@@ -4,16 +4,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   profiles: [] as Array<{ baseUrl: string }>,
   relaySupported: true,
+  providerListeners: new Set<() => void>(),
+  supportedListeners: new Set<(supported: boolean) => void>(),
 }));
 
 vi.mock("@/settings/store", () => ({
   getSettings: () => ({
     get: (key: string) =>
       key === "llm.providers" ? state.profiles : undefined,
+    subscribe: (key: string, handler: () => void) => {
+      if (key === "llm.providers") state.providerListeners.add(handler);
+      return () => {
+        state.providerListeners.delete(handler);
+      };
+    },
   }),
 }));
-vi.mock("@/services/api/health.js", () => ({
+vi.mock("@/services/api/server-capabilities.js", () => ({
   isModelRelaySupported: () => state.relaySupported,
+  onModelRelaySupportedChange: (handler: (supported: boolean) => void) => {
+    state.supportedListeners.add(handler);
+    return () => {
+      state.supportedListeners.delete(handler);
+    };
+  },
 }));
 
 const { modelRelayHeaders, relayEndpoints, relayRefusal } =
@@ -187,5 +201,93 @@ describe("relayEndpoints and the channel header", () => {
     expect(byUrl["/api/model-relay/requests/refused/fail"]).toMatchObject({
       message: expect.stringContaining("http://127.0.0.1:22"),
     });
+  });
+
+  it("closes the SSE stream and aborts in-flight local fetches when local endpoints are removed, and resets the 404 latch", async () => {
+    vi.resetModules();
+    state.providerListeners.clear();
+    state.supportedListeners.clear();
+    state.profiles = [{ baseUrl: "http://127.0.0.1:3425/v1" }];
+    state.relaySupported = true;
+
+    let streamSignal: AbortSignal | undefined;
+    let localSignal: AbortSignal | undefined;
+    let streamController!: ReadableStreamDefaultController<Uint8Array>;
+    let streamCalls = 0;
+
+    vi.stubGlobal("window", { location: { origin: "https://demo.covel.cc" } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/model-relay/stream") {
+          streamCalls += 1;
+          streamSignal = init?.signal ?? undefined;
+          if (streamCalls === 1) {
+            return new Response(
+              new ReadableStream<Uint8Array>({
+                start(c) {
+                  streamController = c;
+                  streamSignal?.addEventListener(
+                    "abort",
+                    () => c.error(new DOMException("Aborted", "AbortError")),
+                    { once: true },
+                  );
+                },
+              }),
+              { headers: { "content-type": "text/event-stream" } },
+            );
+          }
+          // Second stream call returns 404 to trigger the unsupported latch.
+          return new Response(null, { status: 404 });
+        }
+        if (url.startsWith("/api/model-relay/requests/")) {
+          return new Response(null, { status: 204 });
+        }
+        localSignal = init?.signal ?? undefined;
+        return await new Promise<Response>((_resolve, reject) => {
+          localSignal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      }),
+    );
+
+    const mod = await import("../model-relay.js");
+    expect(mod.modelRelayHeaders()["X-Model-Relay"]).toBeTruthy();
+    await vi.waitFor(() => expect(streamCalls).toBe(1));
+
+    // Dispatch a local request that stays in flight until aborted.
+    streamController.enqueue(
+      new TextEncoder().encode(
+        `event: request\ndata: ${JSON.stringify({
+          type: "request",
+          id: "slow-req",
+          url: "http://127.0.0.1:3425/v1/chat/completions",
+          method: "POST",
+          headers: {},
+        })}\n\n`,
+      ),
+    );
+    await vi.waitFor(() => expect(localSignal).toBeDefined());
+
+    // Removing local endpoints aborts both the SSE stream and the in-flight local fetch.
+    state.profiles = [{ baseUrl: "https://api.openai.com/v1" }];
+    for (const listener of state.providerListeners) listener();
+    expect(streamSignal?.aborted).toBe(true);
+    expect(localSignal?.aborted).toBe(true);
+
+    // Re-adding a local endpoint opens a new stream, hits 404 (latching unsupported),
+    // and a subsequent health capability update clears the latch.
+    state.profiles = [{ baseUrl: "http://127.0.0.1:3425/v1" }];
+    for (const listener of state.providerListeners) listener();
+    expect(mod.modelRelayHeaders()["X-Model-Relay"]).toBeTruthy();
+    await vi.waitFor(() => expect(streamCalls).toBe(2));
+    await vi.waitFor(() => expect(mod.modelRelayHeaders()).toEqual({}));
+
+    for (const listener of state.supportedListeners) listener(true);
+    expect(mod.modelRelayHeaders()["X-Model-Relay"]).toBeTruthy();
   });
 });

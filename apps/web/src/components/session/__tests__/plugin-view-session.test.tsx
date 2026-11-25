@@ -19,6 +19,7 @@ import type { UISpecsResponse } from "@/services/api.js";
 import {
   SessionActionsContext,
   SessionStateContext,
+  SessionStructureContext,
   type SessionActions,
 } from "@/stores/session-store/context.js";
 import { initialState } from "@/stores/session-store/reducer.js";
@@ -173,9 +174,18 @@ const actions = {
 function shell(children: ReactNode) {
   return (
     <SessionActionsContext.Provider value={actions}>
-      <SessionStateContext.Provider value={state}>
-        {children}
-      </SessionStateContext.Provider>
+      <SessionStructureContext.Provider
+        value={{
+          session: state.session,
+          world: state.world,
+          sessionPlugins: state.sessionPlugins,
+          gameState: state.gameState,
+        }}
+      >
+        <SessionStateContext.Provider value={state}>
+          {children}
+        </SessionStateContext.Provider>
+      </SessionStructureContext.Provider>
     </SessionActionsContext.Provider>
   );
 }

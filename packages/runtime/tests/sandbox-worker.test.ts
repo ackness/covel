@@ -85,4 +85,41 @@ describe("Tier 1 sandbox compute worker", () => {
       code: "aborted",
     });
   });
+
+  it("ignores non-finite timeoutMs and maxOutputBytes values", async () => {
+    await expect(
+      runSandboxWorker({
+        input: {},
+        timeoutMs: Number.NaN,
+        maxOutputBytes: Number.NaN,
+        code: `return { text: "a".repeat(300 * 1024) };`,
+      }),
+    ).rejects.toMatchObject({
+      code: "output_too_large",
+    });
+  });
+
+  it("terminates hostile thrown objects whose getters spin forever", async () => {
+    await expect(
+      runSandboxWorker({
+        input: {},
+        timeoutMs: 80,
+        code: `throw { get message() { while (true) {} } };`,
+      }),
+    ).rejects.toMatchObject({
+      code: "timeout",
+    });
+  });
+
+  it("queues concurrent executions beyond the worker cap cleanly", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 12 }, (_, idx) =>
+        runSandboxWorker<{ idx: number }, number>({
+          input: { idx },
+          code: `return input.idx * 2;`,
+        }),
+      ),
+    );
+    expect(results).toEqual(Array.from({ length: 12 }, (_, idx) => idx * 2));
+  });
 });

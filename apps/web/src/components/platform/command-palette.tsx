@@ -160,6 +160,9 @@ export function CommandPalette({
     );
   }, [items, query]);
 
+  const effectiveSelectedIndex =
+    filtered.length === 0 ? 0 : Math.min(selectedIndex, filtered.length - 1);
+
   const execute = (item: PaletteItem | undefined) => {
     if (!item) return;
     closeCommandPalette();
@@ -196,19 +199,22 @@ export function CommandPalette({
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
-                setSelectedIndex((prev) =>
-                  filtered.length === 0 ? 0 : (prev + 1) % filtered.length,
+                setSelectedIndex(
+                  filtered.length === 0
+                    ? 0
+                    : (effectiveSelectedIndex + 1) % filtered.length,
                 );
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                setSelectedIndex((prev) =>
+                setSelectedIndex(
                   filtered.length === 0
                     ? 0
-                    : (prev - 1 + filtered.length) % filtered.length,
+                    : (effectiveSelectedIndex - 1 + filtered.length) %
+                        filtered.length,
                 );
               } else if (e.key === "Enter") {
                 e.preventDefault();
-                execute(filtered[selectedIndex]);
+                execute(filtered[effectiveSelectedIndex]);
               }
             }}
             placeholder={t(
@@ -231,7 +237,7 @@ export function CommandPalette({
                   : item.id === "builtin:settings"
                     ? Settings
                     : Terminal;
-              const selected = idx === selectedIndex;
+              const selected = idx === effectiveSelectedIndex;
               return (
                 <button
                   key={item.id}

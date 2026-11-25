@@ -5,6 +5,7 @@ import {
   type PluginCapabilities,
 } from "../schemas/trusted-sources.js";
 import {
+  CAPABILITY_CATALOG,
   CAPABILITY_KEYS,
   isCapabilityKey,
   type CapabilityGrantDecision,
@@ -22,7 +23,7 @@ export type PluginGrantDecisions = Partial<
 
 /**
  * Validated per-plugin persistent capability decisions, canonically ordered by
- * `CAPABILITY_KEYS` and rejecting unknown keys.
+ * `CAPABILITY_KEYS` and rejecting unknown or reserved keys.
  */
 export const pluginGrantDecisionsSchema: z.ZodType<PluginGrantDecisions> = z
   .record(z.string(), pluginCapabilityGrantDecisionSchema)
@@ -33,6 +34,14 @@ export const pluginGrantDecisionsSchema: z.ZodType<PluginGrantDecisions> = z
           code: "custom",
           path: [key],
           message: `Unknown capability key "${key}"`,
+        });
+        continue;
+      }
+      if (CAPABILITY_CATALOG[key].reserved) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `Capability "${key}" is reserved and cannot be assigned a plugin grant`,
         });
       }
     }

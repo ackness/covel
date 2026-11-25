@@ -42,6 +42,8 @@ async function existingKeySet(options: {
   writes: readonly PlannedWrite[];
 }): Promise<ReadonlySet<string>> {
   const existing = new Set<string>();
+  let existingWorldLorebookIds: Set<string> | undefined;
+  let existingCharacterIds: Set<string> | undefined;
   for (const write of options.writes) {
     if (write.kind === "plugin-data" || write.kind === "media-index") {
       const record = await options.store.getPluginData(
@@ -52,19 +54,29 @@ async function existingKeySet(options: {
       );
       if (record) existing.add(pluginWriteIdentity(write)!);
     } else if (write.kind === "lorebook") {
-      const entries = await options.store.listSessionLorebookEntries(
-        options.sessionId,
-      );
-      if (
-        entries.some(
-          (entry) => entry.owner.kind === "world" && entry.id === write.id,
-        )
-      ) {
+      if (!existingWorldLorebookIds) {
+        const entries = await options.store.listSessionLorebookEntries(
+          options.sessionId,
+        );
+        existingWorldLorebookIds = new Set(
+          entries
+            .filter((entry) => entry.owner.kind === "world")
+            .map((entry) => entry.id),
+        );
+      }
+      if (existingWorldLorebookIds.has(write.id)) {
         existing.add(pluginWriteIdentity(write)!);
       }
     } else if (write.kind === "character") {
-      const characters = await options.store.listCharacters(options.sessionId);
-      if (characters.some((character) => character.id === write.key)) {
+      if (!existingCharacterIds) {
+        const characters = await options.store.listCharacters(
+          options.sessionId,
+        );
+        existingCharacterIds = new Set(
+          characters.map((character) => character.id),
+        );
+      }
+      if (existingCharacterIds.has(write.key)) {
         existing.add(pluginWriteIdentity(write)!);
       }
     }

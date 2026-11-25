@@ -154,6 +154,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
     !(await refreshDeclarativeEligibility(
       c.get("trustedSources"),
       pendingForAuth.pluginId,
+      c.get("permissionService"),
     ))
   ) {
     const operatorDenied = requireAccess(c, "plugin.community");
@@ -221,6 +222,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
       const declarative = await refreshDeclarativeEligibility(
         c.get("trustedSources"),
         livePending.pluginId,
+        c.get("permissionService"),
       );
       if (
         declarative &&

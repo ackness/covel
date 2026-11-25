@@ -1829,4 +1829,80 @@ describe("cross-session inFlight isolation, bounded withSnapshot, and approvalSe
       await params.store.close();
     }
   });
+
+  it("preserves and reloads an approved community instance-scoped plugin without any active session", async () => {
+    const { createAppActionRegistry } =
+      await import("../../src/routes/api/bootstrap/app-actions.js");
+    const pluginId = "entry-community-instance-reload";
+    const plugin = writePlugin(
+      pluginId,
+      `export default function(api) {
+        api.registerAppAction("ping", async () => ({ version: 1 }));
+      }`,
+      { source: "community" },
+    );
+    const pluginMdPath = path.join(plugin.discovery.rootPath, "PLUGIN.md");
+    fs.writeFileSync(
+      pluginMdPath,
+      `---\nid: ${pluginId}\nkind: plugin\ndescription: instance reload\nscope: instance\nentry: ./server/index.mjs\ncontributes:\n  appActions: [ping]\n---\n`,
+    );
+    const instancePlugin = {
+      ...plugin,
+      parsed: {
+        ...plugin.parsed,
+        plugin: {
+          ...plugin.parsed.plugin!,
+          scope: "instance" as const,
+          contributes: { appActions: ["ping"] },
+        },
+      },
+    };
+
+    const params = makeParams([instancePlugin]);
+    const appActions = createAppActionRegistry();
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      appActions,
+      development: true,
+      isInstanceServerCodeApproved: () => true,
+    });
+    const actionCtx = {
+      signal: new AbortController().signal,
+      pluginId,
+      action: "ping",
+      http: {} as never,
+    } as Parameters<NonNullable<ReturnType<typeof appActions.get>>["handler"]>[1];
+    try {
+      await entries.ensureInstancePluginEntry(pluginId);
+      const firstAction = appActions.get(pluginId, "ping");
+      expect(firstAction).toBeDefined();
+      expect(await firstAction!.handler({}, actionCtx)).toEqual({
+        version: 1,
+      });
+
+      // Rewrite entry and switch scope from instance to both, then hot-reload
+      // without passing any sessionId (approvalSessions is empty).
+      fs.writeFileSync(
+        path.join(plugin.discovery.rootPath, "server/index.mjs"),
+        `export default function(api) {
+          api.registerAppAction("ping", async () => ({ version: 2 }));
+        }`,
+      );
+      fs.writeFileSync(
+        pluginMdPath,
+        `---\nid: ${pluginId}\nkind: plugin\ndescription: instance reload v2\nscope: both\nentry: ./server/index.mjs\ncontributes:\n  appActions: [ping]\n---\n`,
+      );
+
+      await entries.reload(pluginId);
+
+      const reloadedAction = appActions.get(pluginId, "ping");
+      expect(reloadedAction).toBeDefined();
+      expect(await reloadedAction!.handler({}, actionCtx)).toEqual({
+        version: 2,
+      });
+    } finally {
+      await entries.close();
+      await params.store.close();
+    }
+  });
 });

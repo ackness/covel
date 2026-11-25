@@ -15,7 +15,7 @@ export async function byKey(ctx, namespace) {
   return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
-export function storedEvents(rows) {
+function storedEvents(rows) {
   return rows
     .map((row) => row.value)
     .filter((event) => event && typeof event.id === "string" && event.when);
@@ -45,7 +45,7 @@ export async function loadEvents(ctx) {
 }
 
 /** Query `affinity.tier@1` only for the NPC names referenced by conditions. */
-export async function readAffinity(ctx, names) {
+async function readAffinity(ctx, names) {
   if (!names.length || !ctx.services?.discover) return null;
   try {
     const providers =
@@ -74,7 +74,7 @@ export async function readAffinity(ctx, names) {
 }
 
 /** Query `inventory.bag@2` (paginated) only when an item condition exists. */
-export async function readInventory(ctx, needed) {
+async function readInventory(ctx, needed) {
   if (!needed || !ctx.services?.discover) return null;
   try {
     const providers =
@@ -106,7 +106,7 @@ export async function readInventory(ctx, needed) {
 }
 
 /** Read the active player character's sheet fields from the world view. */
-export function readPlayerFields(ctx) {
+function readPlayerFields(ctx) {
   const characters = ctx.world?.characters;
   if (!Array.isArray(characters) || characters.length === 0) return null;
   const seats = Array.isArray(ctx.world?.seats) ? ctx.world.seats : [];

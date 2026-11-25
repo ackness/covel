@@ -263,4 +263,36 @@ describe("execution recovery notice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Check status" }));
     expect(onRefresh).toHaveBeenCalledOnce();
   });
+
+  it("renders the hydrating notice while hydration is in progress with no observed status yet", () => {
+    setup({
+      ...interrupted,
+      status: null,
+      hydrating: true,
+      checking: true,
+    });
+    expect(screen.getByRole("status")).toBeTruthy();
+    expect(screen.getByText("Restoring your game")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Retry unfinished turn" }),
+    ).toBeNull();
+  });
+
+  it("renders the stalled alert with Check status when hydration fails with null status", () => {
+    const { onRefresh } = setup({
+      ...interrupted,
+      status: null,
+      hydrating: false,
+      checking: false,
+      stalled: true,
+      error: "checkpoint sync timed out",
+    });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Could not confirm the turn")).toBeTruthy();
+    expect(
+      screen.getByText(/automatic checks have stopped/i),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check status" }));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
 });

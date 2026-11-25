@@ -608,6 +608,15 @@ export function presentedToken(c: Context): string | undefined {
   return c.req.query("session_token")?.trim() || undefined;
 }
 
+/** True when the request presents a valid operator token for `profile`. */
+export function isOperatorRequest(
+  c: Context,
+  profile: HostProfile = hostProfileOf(c),
+): boolean {
+  const token = presentedToken(c);
+  return token !== undefined && profile.isOperatorToken(token);
+}
+
 function denialFor(c: Context, action: HostGlobalAction): HostDenial | null {
   const profile = hostProfileOf(c);
   const rule = profile.access[action];
@@ -666,8 +675,7 @@ function capabilityDenialFor(
     return capabilityDisabledDenial(key);
   }
   if (ceiling === "operator-only") {
-    const token = presentedToken(c);
-    return token !== undefined && profile.isOperatorToken(token)
+    return isOperatorRequest(c, profile)
       ? null
       : {
           status: 401,

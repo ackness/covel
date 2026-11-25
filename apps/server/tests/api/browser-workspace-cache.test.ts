@@ -20,6 +20,7 @@ async function setup() {
   const cache = createBrowserWorkspaceCache();
   const sessionLock = createInProcessSessionLock();
   const pluginRegistry = createPluginRegistry();
+  const clearPluginEntrySession = vi.fn();
   const routes = createBrowserWorkspaceRoutes(cache);
   const sessionRoutes = new Hono<SessionRouteEnv>();
   registerSessionDeleteRoute(sessionRoutes);
@@ -30,6 +31,7 @@ async function setup() {
     c.set("sessionLock", sessionLock);
     c.set("pluginRegistry", pluginRegistry);
     c.set("clearBrowserWorkspace", cache.clearSession);
+    c.set("clearPluginEntrySession", clearPluginEntrySession);
     await next();
   });
   app.route("/api/sessions", routes);
@@ -108,7 +110,14 @@ async function setup() {
     return committed.json();
   }
 
-  return { store, cache, request, seed, initialize };
+  return {
+    store,
+    cache,
+    clearPluginEntrySession,
+    request,
+    seed,
+    initialize,
+  };
 }
 
 beforeEach(() => {
@@ -229,5 +238,43 @@ describe("browser workspace cache lifecycle", () => {
     expect((await request("retry", "", "DELETE")).status).toBe(200);
     expect(await store.getSession("retry")).toBeNull();
     expect(cache.get("retry", "incarnation:retry-original")).toBeUndefined();
+  });
+
+  it("evicts browser workspace heads by TTL and LRU capacity", async () => {
+    let clock = 1_000;
+    const cache = createBrowserWorkspaceCache(() => clock);
+    const makeHead = (id: string) => ({
+      incarnation: `inc:${id}`,
+      revision: 1,
+      actionId: "init",
+      checkpoint: {} as Parameters<typeof cache.set>[1]["checkpoint"],
+      commits: new Map(),
+    });
+
+    cache.set("ttl-session", makeHead("ttl-session"));
+    expect(cache.get("ttl-session", "inc:ttl-session")).toBeDefined();
+
+    // Advance past the 30 minute TTL.
+    clock += 30 * 60_000 + 1;
+    expect(cache.get("ttl-session", "inc:ttl-session")).toBeUndefined();
+
+    // Fill beyond the 256-entry LRU bound and touch s-0 so s-1 becomes LRU.
+    for (let i = 0; i < 256; i++) {
+      cache.set(`s-${i}`, makeHead(`s-${i}`));
+    }
+    expect(cache.get("s-0", "inc:s-0")).toBeDefined();
+    cache.set("s-overflow", makeHead("s-overflow"));
+    expect(cache.get("s-1", "inc:s-1")).toBeUndefined();
+    expect(cache.get("s-0", "inc:s-0")).toBeDefined();
+    expect(cache.get("s-overflow", "inc:s-overflow")).toBeDefined();
+  });
+
+  it("invokes clearPluginEntrySession when deleting a session", async () => {
+    const { clearPluginEntrySession, request, seed } = await setup();
+    await seed("clean-me");
+
+    const res = await request("clean-me", "", "DELETE");
+    expect(res.status).toBe(200);
+    expect(clearPluginEntrySession).toHaveBeenCalledWith("clean-me");
   });
 });

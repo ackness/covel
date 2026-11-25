@@ -914,5 +914,113 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
         outcomes[0] ? claimed.value : competing.value,
       );
     });
+
+    it("ignores non-object JSON values in queryPluginData valueFilter across backends", async () => {
+      for (const [key, value] of [
+        ["arr", ["queued"]],
+        ["str", "queued"],
+        ["num", 42],
+        ["nil", null],
+        ["obj", { status: "queued" }],
+      ] as const) {
+        await store.setPluginData({
+          id: `q-nonobj-${key}`,
+          sessionId: "sess-nonobj",
+          pluginId: "provider",
+          namespace: "items",
+          key,
+          value,
+          createdAt: "2026-09-03T00:00:00.000Z",
+          updatedAt: "2026-09-03T00:00:00.000Z",
+        });
+      }
+
+      const byStatus = await store.queryPluginData({
+        namespace: "items",
+        sessionId: "sess-nonobj",
+        valueFilter: { field: "status", values: ["queued"] },
+      });
+      expect(byStatus.map((row) => row.key)).toEqual(["obj"]);
+
+      const byArrayIndex = await store.queryPluginData({
+        namespace: "items",
+        sessionId: "sess-nonobj",
+        valueFilter: { field: "0", values: ["queued"] },
+      });
+      expect(byArrayIndex).toEqual([]);
+    });
+
+    it("enforces identifier NUL rejection, value NUL stripping, and undefined->null normalization on grants, instance data, and server settings", async () => {
+      const now = "2026-09-03T00:00:00.000Z";
+      await expect(
+        store.upsertPluginGrant({
+          pluginId: "bad\u0000id",
+          version: "1.0.0",
+          contentDigest: "abc",
+          grantedCapabilities: {
+            serverCode: false,
+            http: [],
+            hooks: [],
+            tools: [],
+            actions: [],
+            services: [],
+            wires: [],
+            extensions: [],
+            forms: [],
+            datasets: [],
+          },
+          decisions: {},
+          grantedAt: now,
+          updatedAt: now,
+        }),
+      ).rejects.toThrow("U+0000");
+
+      await expect(
+        store.upsertInstanceData({
+          pluginId: "ok",
+          namespace: "bad\u0000ns",
+          key: "k",
+          value: { text: "v" },
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ).rejects.toThrow("U+0000");
+
+      await expect(
+        store.setServerSetting({
+          key: "bad\u0000key",
+          value: "x",
+          updatedAt: now,
+        }),
+      ).rejects.toThrow("U+0000");
+
+      await store.upsertInstanceData({
+        pluginId: "p-nul",
+        namespace: "ns",
+        key: "k1",
+        value: { note: "hi\u0000there" },
+        createdAt: now,
+        updatedAt: now,
+      });
+      expect(await store.getInstanceData("p-nul", "ns", "k1")).toMatchObject({
+        value: { note: "hithere" },
+      });
+
+      await store.setServerSetting({
+        key: "setting.undef",
+        value: undefined,
+        updatedAt: now,
+      });
+      await store.setServerSetting({
+        key: "setting.nul",
+        value: "a\u0000b",
+        updatedAt: now,
+      });
+      const settings = await store.listServerSettings();
+      expect(settings.find((s) => s.key === "setting.undef")?.value).toBeNull();
+      expect(settings.find((s) => s.key === "setting.nul")?.value).toBe("ab");
+    });
   });
 }
+
+

@@ -7,7 +7,7 @@ import {
   type ParsedPluginMd,
 } from "@covel/plugin-loader";
 import type { PackageManifest } from "@covel/plugin-loader";
-import { createEventDirectory } from "../../src/routes/api/bootstrap/event-directory.js";
+import { createEventDirectory } from "@covel/tools";
 
 const tempRoots: string[] = [];
 

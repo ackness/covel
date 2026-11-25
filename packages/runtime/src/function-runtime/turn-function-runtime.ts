@@ -13,6 +13,7 @@ import type {
   RuntimeActivation,
   ExecutionContext,
   InputSlot,
+  ToolCallRecord,
 } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
@@ -21,6 +22,7 @@ import {
   validateOutput,
   getToolContent,
   getPendingProposals,
+  type EmittedEvent,
 } from "@covel/tools";
 import { ownScopeProposals } from "../read-baselines.js";
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
@@ -37,7 +39,7 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
 import type { RootOperationStage } from "../operations/operation-stage.js";
@@ -107,6 +109,10 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly resumedFromSuspensionId?: string;
   /** Uncommitted writes captured by the suspended invocation. */
   readonly pendingProposals?: readonly import("@covel/shared").Proposal[];
+  /** Tool call records captured before suspension so resume preserves them. */
+  readonly priorToolCalls?: readonly ToolCallRecord[];
+  /** Tool-emitted events captured before suspension so resume preserves them. */
+  readonly priorEmittedEvents?: readonly EmittedEvent[];
   /**
    * The run's operation stage. Without it (a resume) the handler cannot call
    * write services.
@@ -142,6 +148,8 @@ export async function executeFunctionRuntime({
   resumeData,
   resumedFromSuspensionId,
   pendingProposals = [],
+  priorToolCalls = [],
+  priorEmittedEvents = [],
   operations,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   const inputs = originalInputs ? freezeInputSlots(originalInputs) : undefined;
@@ -309,6 +317,17 @@ export async function executeFunctionRuntime({
       attachPresentationState(failed, runtimeContext.presentation);
     return failed;
   }
+  const collectToolRecordsAndEvents = (): {
+    allToolCalls: ToolCallRecord[];
+    allToolEvents: EmittedEvent[];
+  } => ({
+    allToolCalls: [...structuredClone(priorToolCalls), ...runtimeTools.records],
+    allToolEvents: [
+      ...structuredClone(priorEmittedEvents),
+      ...runtimeTools.events,
+    ],
+  });
+
   if (handlerOutcome.outcome === "suspended") {
     // A continuation keeps only the handler's own work. Results of its
     // `ctx.recursiveCall`s commit with its success and cannot wait for a
@@ -327,6 +346,7 @@ export async function executeFunctionRuntime({
         run,
         `${manifest.name} cannot suspend after changing another plugin's data through a write service`,
       );
+    const { allToolCalls, allToolEvents } = collectToolRecordsAndEvents();
     const suspensionId = crypto.randomUUID();
     // Keep domain writes uncommitted until resume succeeds. The continuation
     // also owns the original binding snapshots rather than resolving them again.
@@ -342,7 +362,7 @@ export async function executeFunctionRuntime({
         lifecycle: { runId, progressRunId },
         readScopes: [],
         messages: [],
-        toolCallsSoFar: [],
+        toolCallsSoFar: allToolCalls,
         pendingProposals: [
           ...ownScopeProposals(getPendingProposals(output), writeBuffer),
           ...structuredClone(writeBuffer),
@@ -350,7 +370,7 @@ export async function executeFunctionRuntime({
         ...(inputs ? { inputSlots: structuredClone(inputs) } : {}),
         ...(exportSlots ? { exportSlots: structuredClone(exportSlots) } : {}),
         ...(activation ? { activation: structuredClone(activation) } : {}),
-        emittedEvents: [],
+        emittedEvents: allToolEvents,
         executionContext,
         ...(input.actions ? { actions: structuredClone(input.actions) } : {}),
         // A resumed leg reports progress under the suspended execution's scope.
@@ -367,7 +387,7 @@ export async function executeFunctionRuntime({
     };
     const suspended = await finalizeSuspension({ ...deps, hookPipeline }, run, {
       record: suspension,
-      toolCalls: [],
+      toolCalls: allToolCalls,
     });
     if (suspended.status === "suspended")
       attachReadDependencies(suspended, runtimeContext.readDependencies());
@@ -402,25 +422,26 @@ export async function executeFunctionRuntime({
             : {}),
         };
 
+  const { allToolCalls, allToolEvents } = collectToolRecordsAndEvents();
   let effects = materialized.effects;
 
   if (
     !envelopeSchemaError &&
     handlerOutcome.outcome === "success" &&
-    runtimeTools.events.length > 0
+    allToolEvents.length > 0
   ) {
     effects = {
       ...effects,
       events: [
         ...(Array.isArray(effects?.events) ? effects.events : []),
-        ...runtimeTools.events.map((event) =>
+        ...allToolEvents.map((event) =>
           toJsonValueOrDiagnostic(event, "event"),
         ),
       ],
     };
   }
   if (!envelopeSchemaError && handlerOutcome.outcome === "success") {
-    const ui = collectUiBlocks({ ui: effects?.ui }, runtimeTools.records);
+    const ui = collectUiBlocks({ ui: effects?.ui }, allToolCalls);
     if (ui.length > 0)
       effects = { ...effects, ui: ui as import("@covel/shared").JsonValue[] };
   }
@@ -447,7 +468,7 @@ export async function executeFunctionRuntime({
               : { value: structuredClone(handlerOutcome.value) },
         }
       : {}),
-    toolCalls: runtimeTools.records,
+    toolCalls: allToolCalls,
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError
       ? { error: envelopeSchemaError }

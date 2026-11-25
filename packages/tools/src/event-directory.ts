@@ -1,39 +1,33 @@
-import { canDescribeEventPayload } from "@covel/tools";
-import { compareText } from "@covel/shared";
-import type { PackageManifest } from "@covel/plugin-loader";
 /**
- * Session event directory — aggregates the `events` contracts declared by
- * a session's active plugin runtimes so the builtin `emit-event` tool
- * (see `@covel/tools`'s `EventDirectoryLike`) can list known topics,
- * validate emitted payloads against their JSON Schema, and render a
- * locale-aware catalogue for prompt injection.
- *
- * Declarations are re-aggregated on every call (session activation can
- * change between turns) — only the compiled ajv validators are cached,
- * keyed by declaration identity and resolved schema path. A replacement
- * generation gets a fresh validator while captured declarations retain theirs.
+ * Shared session event directory — aggregates `contributes.events` declared by
+ * a session's active plugins so the builtin `emit-event` tool, server routes,
+ * and `test-runtime` share the exact same Ajv2020 validator, containment check,
+ * and prompt catalog rendering.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   Ajv2020,
   type AnySchema,
   type ValidateFunction,
 } from "ajv/dist/2020.js";
-import { resolveI18nText, type PluginEventDecl } from "@covel/shared";
-import { resolveContainedPath } from "../../../world-data/safe-path.js";
+import {
+  compareText,
+  resolveI18nText,
+  type PluginEventDecl,
+} from "@covel/shared";
+import {
+  canDescribeEventPayload,
+  type EventDirectoryLike,
+} from "./builtin/emit-event.js";
 
-export interface EventDirectory {
-  listTopics(sessionId: string): Promise<readonly string[]>;
-  describeTopics?(
-    sessionId: string,
-  ): Promise<readonly { topic: string; schema?: Record<string, unknown> }[]>;
-  validate(
-    sessionId: string,
-    topic: string,
-    data: Record<string, unknown>,
-  ): Promise<{ ok: true } | { ok: false; reason: string }>;
+export interface EventDirectoryManifestLike {
+  readonly pluginId: string;
+  readonly events?: readonly PluginEventDecl[];
+}
+
+export interface EventDirectory extends EventDirectoryLike {
   /**
    * Validate an event a plugin emits itself, for example from its own UI. The
    * topic must be one that plugin declares; `advertise: false` topics are
@@ -48,15 +42,17 @@ export interface EventDirectory {
     | { ok: true }
     | { ok: false; code: "not-declared" | "invalid"; reason: string }
   >;
-  /** Renders the advertised (non-internal) contracts for prompt injection. Empty directory → `""`. */
+  /** Renders the advertised (non-internal) contracts for prompt injection. Empty directory -> `""`. */
   catalogText(sessionId: string, locale: string): Promise<string>;
 }
 
 export interface EventDirectoryDeps {
   readonly registry: {
-    getActivePluginDeclarations(sessionId: string): readonly PackageManifest[];
+    getActivePluginDeclarations(
+      sessionId: string,
+    ): readonly EventDirectoryManifestLike[];
   };
-  /** pluginId → absolute plugin root path. `undefined` when unresolvable. */
+  /** pluginId -> absolute plugin root path. `undefined` when unresolvable. */
   readonly resolvePluginDir: (pluginId: string) => string | undefined;
 }
 
@@ -70,7 +66,44 @@ interface ResolvedEventEntry {
 
 interface LoadedSchema {
   readonly validate: ValidateFunction;
-  readonly raw: AnySchema;
+  readonly formatErrors: () => string;
+  readonly raw: Readonly<Record<string, unknown>>;
+}
+
+function isStrictlyInsideRoot(
+  rootRealPath: string,
+  candidatePath: string,
+): boolean {
+  const rel = path.relative(rootRealPath, candidatePath);
+  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+async function resolveContainedSchemaPath(
+  root: string,
+  relativePath: string,
+): Promise<string | null> {
+  if (path.isAbsolute(relativePath)) return null;
+  const rootRealPath = await realpath(root);
+  const resolved = path.resolve(rootRealPath, relativePath);
+  if (!isStrictlyInsideRoot(rootRealPath, resolved)) return null;
+  try {
+    const realResolved = await realpath(resolved);
+    return isStrictlyInsideRoot(rootRealPath, realResolved)
+      ? realResolved
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function schemaKeyFor(
+  pluginId: string,
+  pluginDir: string | undefined,
+  schemaPath: string,
+): string {
+  return pluginDir
+    ? path.resolve(pluginDir, schemaPath)
+    : `${pluginId}:${schemaPath}`;
 }
 
 function requiredFieldsSummary(raw: AnySchema): string {
@@ -83,9 +116,6 @@ function requiredFieldsSummary(raw: AnySchema): string {
   return required
     .map((name) => {
       const prop = schema.properties?.[name];
-      // Enum-valued field: render the allowed values (JSON.stringify quotes
-      // strings, leaves numbers bare) so the LLM's first emit picks a legal
-      // value instead of guessing and getting ajv-rejected.
       if (prop?.enum) {
         return `${name}: ${prop.enum.map((v) => JSON.stringify(v)).join("|")}`;
       }
@@ -98,16 +128,16 @@ export function createEventDirectory(
   deps: EventDirectoryDeps,
 ): EventDirectory & {
   prepareDeclarations(
-    manifests: readonly PackageManifest[],
+    manifests: readonly EventDirectoryManifestLike[],
     pluginDir: string | undefined,
   ): Promise<void>;
 } {
-  const ajv = new Ajv2020({ allErrors: true, strict: false });
   const schemaCache = new WeakMap<
     PluginEventDecl,
     Map<string, Promise<LoadedSchema>>
   >();
   /** So a cross-plugin topic conflict warns once per (session, topic), not every call. */
+  const MAX_WARNED_CONFLICTS = 2_048;
   const warnedConflicts = new Set<string>();
 
   function collectSessionEvents(
@@ -120,9 +150,11 @@ export function createEventDirectory(
       if (!manifest.events || manifest.events.length === 0) continue;
       const pluginDir = deps.resolvePluginDir(manifest.pluginId);
       for (const decl of manifest.events) {
-        const schemaKey = pluginDir
-          ? path.resolve(pluginDir, decl.schema)
-          : `${manifest.pluginId}:${decl.schema}`;
+        const schemaKey = schemaKeyFor(
+          manifest.pluginId,
+          pluginDir,
+          decl.schema,
+        );
         const existing = byTopic.get(decl.topic);
         if (existing) {
           if (
@@ -131,15 +163,16 @@ export function createEventDirectory(
           ) {
             const warnKey = `${sessionId}:${decl.topic}`;
             if (!warnedConflicts.has(warnKey)) {
+              if (warnedConflicts.size >= MAX_WARNED_CONFLICTS) {
+                const oldest = warnedConflicts.values().next().value;
+                if (oldest !== undefined) warnedConflicts.delete(oldest);
+              }
               warnedConflicts.add(warnKey);
               console.warn(
                 `[event-directory] topic "${decl.topic}" declared with conflicting schemas by "${existing.pluginId}" and "${manifest.pluginId}" — keeping "${existing.pluginId}"'s declaration`,
               );
             }
           }
-          // Session plugin resolution admits one declarer of a topic, so this
-          // is reached only by an active set that did not pass it: first wins
-          // (getActivePluginDeclarations is name-sorted).
           continue;
         }
         byTopic.set(decl.topic, {
@@ -153,7 +186,7 @@ export function createEventDirectory(
     return byTopic;
   }
 
-  async function loadSchema(entry: ResolvedEventEntry): Promise<LoadedSchema> {
+  function loadSchema(entry: ResolvedEventEntry): Promise<LoadedSchema> {
     let declarationCache = schemaCache.get(entry.decl);
     if (!declarationCache) {
       declarationCache = new Map();
@@ -170,11 +203,7 @@ export function createEventDirectory(
     if (!entry.pluginDir) {
       throw new Error(`plugin "${entry.pluginId}" root path is not resolvable`);
     }
-    // Defense-in-depth: the zod manifest schema already rejects absolute
-    // and `..` paths, but every other schema loader (schema-registry,
-    // descriptor) also enforces containment at read time — keep parity so
-    // a future manifest-ingestion path can't silently reopen traversal.
-    const absPath = await resolveContainedPath(
+    const absPath = await resolveContainedSchemaPath(
       entry.pluginDir,
       entry.decl.schema,
     );
@@ -183,18 +212,40 @@ export function createEventDirectory(
         `event schema "${entry.decl.schema}" of plugin "${entry.pluginId}" is missing or escapes the plugin root`,
       );
     }
-    const raw = JSON.parse(await readFile(absPath, "utf-8")) as AnySchema;
+    const raw: unknown = JSON.parse(await readFile(absPath, "utf-8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error(
+        `event schema "${entry.decl.schema}" of plugin "${entry.pluginId}" must be a JSON Schema object`,
+      );
+    }
     // Schema IDs are local to this declaration, never registered across
     // generations or plugins. Local $refs still resolve within the document.
     const compiler = new Ajv2020({ allErrors: true, strict: false });
-    return { validate: compiler.compile(raw), raw };
+    const validate = compiler.compile(raw as AnySchema);
+    return {
+      validate,
+      formatErrors: () => compiler.errorsText(validate.errors),
+      raw: raw as Readonly<Record<string, unknown>>,
+    };
+  }
+
+  async function validateEntry(
+    entry: ResolvedEventEntry,
+    data: Record<string, unknown>,
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    let loaded: LoadedSchema;
+    try {
+      loaded = await loadSchema(entry);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, reason: `schema unreadable: ${message}` };
+    }
+    if (loaded.validate(data)) return { ok: true };
+    return { ok: false, reason: loaded.formatErrors() };
   }
 
   return {
     async prepareDeclarations(manifests, pluginDir) {
-      // Capture schemas before publishing a generation, including failures.
-      // Runtime validation reports unreadable schemas; another generation
-      // must be prepared to retry, rather than changing an admitted contract.
       await Promise.allSettled(
         manifests.flatMap((manifest) =>
           (manifest.events ?? []).map((decl) =>
@@ -202,18 +253,17 @@ export function createEventDirectory(
               pluginId: manifest.pluginId,
               decl,
               pluginDir,
-              schemaKey: pluginDir
-                ? path.resolve(pluginDir, decl.schema)
-                : `${manifest.pluginId}:${decl.schema}`,
+              schemaKey: schemaKeyFor(
+                manifest.pluginId,
+                pluginDir,
+                decl.schema,
+              ),
             }),
           ),
         ),
       );
     },
-    // Only advertised topics are emittable via the builtin emit-event tool.
-    // advertise:false topics are internal — reachable by a plugin's own
-    // function runtime, never surfaced to an agent (keeps the generation gate
-    // from being bypassed by a direct emit). Aligned with catalogText's filter.
+
     async listTopics(sessionId) {
       return [...collectSessionEvents(sessionId).values()]
         .filter((entry) => entry.decl.advertise)
@@ -227,12 +277,7 @@ export function createEventDirectory(
           .map(async (entry) => {
             try {
               const { raw } = await loadSchema(entry);
-              return {
-                topic: entry.decl.topic,
-                ...(typeof raw === "object" && raw !== null
-                  ? { schema: raw as Record<string, unknown> }
-                  : {}),
-              };
+              return { topic: entry.decl.topic, schema: { ...raw } };
             } catch {
               return { topic: entry.decl.topic };
             }
@@ -244,15 +289,7 @@ export function createEventDirectory(
       const entry = collectSessionEvents(sessionId).get(topic);
       if (!entry || !entry.decl.advertise)
         return { ok: false, reason: `unknown topic "${topic}"` };
-      let loaded: LoadedSchema;
-      try {
-        loaded = await loadSchema(entry);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return { ok: false, reason: `schema unreadable: ${message}` };
-      }
-      if (loaded.validate(data)) return { ok: true };
-      return { ok: false, reason: ajv.errorsText(loaded.validate.errors) };
+      return validateEntry(entry, data);
     },
 
     async validateOwn(sessionId, pluginId, topic, data) {
@@ -267,30 +304,16 @@ export function createEventDirectory(
           reason: `plugin "${pluginId}" does not declare topic "${topic}"`,
         };
       const pluginDir = deps.resolvePluginDir(pluginId);
-      let loaded: LoadedSchema;
-      try {
-        loaded = await loadSchema({
+      const verdict = await validateEntry(
+        {
           pluginId,
           decl,
           pluginDir,
-          schemaKey: pluginDir
-            ? path.resolve(pluginDir, decl.schema)
-            : `${pluginId}:${decl.schema}`,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return {
-          ok: false,
-          code: "invalid",
-          reason: `schema unreadable: ${message}`,
-        };
-      }
-      if (loaded.validate(data)) return { ok: true };
-      return {
-        ok: false,
-        code: "invalid",
-        reason: ajv.errorsText(loaded.validate.errors),
-      };
+          schemaKey: schemaKeyFor(pluginId, pluginDir, decl.schema),
+        },
+        data,
+      );
+      return verdict.ok ? verdict : { ...verdict, code: "invalid" };
     },
 
     async catalogText(sessionId, locale) {
@@ -306,22 +329,16 @@ export function createEventDirectory(
         let fields = "";
         let payloadSchema = "";
         try {
-          const raw = (await loadSchema(entry)).raw;
+          const { raw } = await loadSchema(entry);
           fields = requiredFieldsSummary(raw);
-          // A payload the emit-event tool cannot describe (a recursive
-          // definition, for example) keeps its complete shape here.
           if (!canDescribeEventPayload(raw))
             payloadSchema = JSON.stringify(
-              typeof raw === "object" && raw !== null
-                ? Object.fromEntries(
-                    Object.entries(raw).filter(
-                      ([key]) =>
-                        !["$schema", "$id", "title", "description"].includes(
-                          key,
-                        ),
-                    ),
-                  )
-                : raw,
+              Object.fromEntries(
+                Object.entries(raw).filter(
+                  ([key]) =>
+                    !["$schema", "$id", "title", "description"].includes(key),
+                ),
+              ),
             );
         } catch {
           fields = "(schema unavailable)";

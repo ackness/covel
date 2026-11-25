@@ -10,6 +10,7 @@ import { and, eq } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { SqlRunner } from "./sql-runner.js";
+import { assertStoreIdentifiers, withoutNul } from "./without-nul.js";
 import type { DataStore, InstanceDataRecord } from "../types.js";
 
 /** Structural handle to the `instance_data` table. */
@@ -59,7 +60,7 @@ export function sortInstanceData(
 }
 
 function encodeJsonValue(value: unknown): string {
-  return JSON.stringify(value) ?? "null";
+  return JSON.stringify(withoutNul(value)) ?? "null";
 }
 
 function decodeInstanceDataRow(row: InstanceDataRow): InstanceDataRecord {
@@ -83,6 +84,7 @@ export function createSqlInstanceDataRecords(
       namespace: string,
       key: string,
     ): Promise<InstanceDataRecord | null> {
+      assertStoreIdentifiers([pluginId, namespace, key]);
       const row = await runner.selectFirst<InstanceDataRow>(instanceData, {
         where: and(
           eq(instanceData.pluginId, pluginId),
@@ -97,6 +99,9 @@ export function createSqlInstanceDataRecords(
       pluginId: string,
       namespace?: string,
     ): Promise<InstanceDataRecord[]> {
+      assertStoreIdentifiers(
+        namespace !== undefined ? [pluginId, namespace] : pluginId,
+      );
       const where =
         namespace !== undefined
           ? and(
@@ -111,7 +116,10 @@ export function createSqlInstanceDataRecords(
     },
 
     async upsertInstanceData(record: InstanceDataRecord): Promise<void> {
+      assertStoreIdentifiers(record);
       const encodedValue = encodeJsonValue(record.value);
+      const createdAt = withoutNul(record.createdAt);
+      const updatedAt = withoutNul(record.updatedAt);
       await runner.insert(
         instanceData,
         {
@@ -119,8 +127,8 @@ export function createSqlInstanceDataRecords(
           namespace: record.namespace,
           key: record.key,
           value: encodedValue,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
+          createdAt,
+          updatedAt,
         },
         {
           target: [
@@ -130,7 +138,7 @@ export function createSqlInstanceDataRecords(
           ],
           set: {
             value: encodedValue,
-            updatedAt: record.updatedAt,
+            updatedAt,
           },
         },
       );
@@ -141,6 +149,7 @@ export function createSqlInstanceDataRecords(
       namespace: string,
       key: string,
     ): Promise<boolean> {
+      assertStoreIdentifiers([pluginId, namespace, key]);
       const deleted = await runner.deleteReturningCount(
         instanceData,
         and(
@@ -153,6 +162,7 @@ export function createSqlInstanceDataRecords(
     },
 
     async deletePluginInstanceData(pluginId: string): Promise<number> {
+      assertStoreIdentifiers(pluginId);
       return runner.deleteReturningCount(
         instanceData,
         eq(instanceData.pluginId, pluginId),

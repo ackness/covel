@@ -70,69 +70,88 @@ function TopbarStatusBadgeItem({
   const [liveStatus, setLiveStatus] = useState<LiveBadgeStatus | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const refreshStatus = useCallback(async () => {
-    if (spec.dataSource?.namespace) {
-      try {
-        const res = await fetchPluginInstanceData(
-          pluginId,
-          spec.dataSource.namespace,
-        );
-        const match = spec.dataSource.key
-          ? res.entries.find((e) => e.key === spec.dataSource!.key)
-          : res.entries[0];
-        const parsed = parseLiveBadgeStatus(match?.value, fallbackStatus, true);
-        if (parsed) {
-          setLiveStatus(parsed);
-        } else if (match?.value !== undefined) {
-          setLiveStatus({
-            tone: fallbackStatus.tone,
-            text: match.value,
-          });
+  const refreshStatus = useCallback(
+    async (signal?: AbortSignal) => {
+      if (spec.dataSource?.namespace) {
+        try {
+          const res = await fetchPluginInstanceData(
+            pluginId,
+            spec.dataSource.namespace,
+            signal,
+          );
+          if (signal?.aborted) return;
+          const match = spec.dataSource.key
+            ? res.entries.find((e) => e.key === spec.dataSource!.key)
+            : res.entries[0];
+          const parsed = parseLiveBadgeStatus(
+            match?.value,
+            fallbackStatus,
+            true,
+          );
+          if (parsed) {
+            setLiveStatus(parsed);
+          } else if (match?.value !== undefined) {
+            setLiveStatus({
+              tone: fallbackStatus.tone,
+              text: match.value,
+            });
+          }
+          return;
+        } catch {
+          // Leave defaultStatus intact when read fails.
+          if (signal?.aborted) return;
         }
-        return;
-      } catch {
-        // Leave defaultStatus intact when read fails.
       }
-    }
-    if (spec.statusAction) {
-      try {
-        const res = await invokePluginAppAction<Record<string, unknown>>(
-          pluginId,
-          spec.statusAction,
-          { trigger: "poll" },
-        );
-        const parsed = parseLiveBadgeStatus(res.result, fallbackStatus, true);
-        if (parsed) {
-          setLiveStatus(parsed);
+      if (spec.statusAction) {
+        try {
+          const res = await invokePluginAppAction<Record<string, unknown>>(
+            pluginId,
+            spec.statusAction,
+            { trigger: "poll" },
+          );
+          if (signal?.aborted) return;
+          const parsed = parseLiveBadgeStatus(res.result, fallbackStatus, true);
+          if (parsed) {
+            setLiveStatus(parsed);
+          }
+        } catch {
+          // Transient poll failure leaves existing status untouched.
         }
-      } catch {
-        // Transient poll failure leaves existing status untouched.
       }
-    }
-  }, [
-    pluginId,
-    spec.dataSource?.namespace,
-    spec.dataSource?.key,
-    spec.statusAction,
-    fallbackStatus.tone,
-    fallbackStatus.text,
-  ]);
+    },
+    [
+      pluginId,
+      spec.dataSource?.namespace,
+      spec.dataSource?.key,
+      spec.statusAction,
+      fallbackStatus.tone,
+      fallbackStatus.text,
+    ],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    void refreshStatus().catch(() => {});
+    let timer: number | undefined;
+    let controller: AbortController | null = null;
     const pollSec = spec.pollIntervalSec;
-    if (!pollSec) {
-      return () => {
-        cancelled = true;
-      };
-    }
-    const timer = window.setInterval(() => {
-      if (!cancelled) void refreshStatus().catch(() => {});
-    }, pollSec * 1000);
+
+    const runOnce = async () => {
+      controller = new AbortController();
+      await refreshStatus(controller.signal);
+      controller = null;
+      if (!cancelled && pollSec) {
+        timer = window.setTimeout(() => {
+          void runOnce();
+        }, pollSec * 1000);
+      }
+    };
+
+    void runOnce();
+
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
+      controller?.abort();
     };
   }, [refreshStatus, instanceDataVersion, spec.pollIntervalSec]);
 

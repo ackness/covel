@@ -144,6 +144,9 @@ function checkManifest(
       "Generated worlds must contain inline data, not a worldData file reference",
     );
   }
+  if (typeof yamlData.id !== "string" || yamlData.id.trim().length === 0) {
+    errors.push("Generated world manifest must include a non-empty string id");
+  }
   if (errors.length > 0) return { errors };
 
   const validation = validateWorldManifest(yamlData);

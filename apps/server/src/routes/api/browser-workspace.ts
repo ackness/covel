@@ -31,7 +31,7 @@ import {
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { allowsAccess, requireAccess } from "../../host-profile.js";
-import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../trust/plugin-admission.js";
 import { earliestUnfinishedJobSourceStart } from "./plugin-rpc/runtime-job-worker.js";
 
 type Env = {
@@ -111,20 +111,50 @@ function supportsBrowserDelta(
   );
 }
 
-/** One API instance's replay state, released with the session lifecycle. */
-export function createBrowserWorkspaceCache() {
-  const heads = new Map<string, WorkspaceHead>();
+const MAX_WORKSPACE_HEADS = 256;
+const WORKSPACE_HEAD_TTL_MS = 30 * 60_000;
+
+/** One API instance's replay state, released with the session lifecycle or bounded LRU/TTL. */
+export function createBrowserWorkspaceCache(now: () => number = Date.now) {
+  const heads = new Map<
+    string,
+    { readonly head: WorkspaceHead; touchedAt: number }
+  >();
+  const sweepExpired = (current: number): void => {
+    for (const [id, entry] of heads) {
+      if (current - entry.touchedAt > WORKSPACE_HEAD_TTL_MS) {
+        heads.delete(id);
+      }
+    }
+  };
   return {
     get(sessionId: string, incarnation: string): WorkspaceHead | undefined {
-      const head = heads.get(sessionId);
-      if (head && head.incarnation !== incarnation) {
+      const entry = heads.get(sessionId);
+      if (!entry) return undefined;
+      const current = now();
+      if (
+        entry.head.incarnation !== incarnation ||
+        current - entry.touchedAt > WORKSPACE_HEAD_TTL_MS
+      ) {
         heads.delete(sessionId);
         return undefined;
       }
-      return head;
+      entry.touchedAt = current;
+      // Refresh insertion order for LRU eviction.
+      heads.delete(sessionId);
+      heads.set(sessionId, entry);
+      return entry.head;
     },
     set(sessionId: string, head: WorkspaceHead): void {
-      heads.set(sessionId, head);
+      const current = now();
+      sweepExpired(current);
+      heads.delete(sessionId);
+      while (heads.size >= MAX_WORKSPACE_HEADS) {
+        const oldest = heads.keys().next().value;
+        if (oldest === undefined) break;
+        heads.delete(oldest);
+      }
+      heads.set(sessionId, { head, touchedAt: current });
     },
     clearSession(sessionId: string): void {
       heads.delete(sessionId);
@@ -326,11 +356,14 @@ export function createBrowserWorkspaceRoutes(
                 if (!entry) continue;
                 const trust = getPluginTrustInfo(pluginId, entry.source);
                 if (!trust.requiresApproval) continue;
-                const declarative = await refreshDeclarativeEligibility(
+                const declAdmission = await evaluateDeclarativeRouteAdmission(
+                  c,
                   c.get("trustedSources"),
+                  c.get("permissionService"),
                   pluginId,
                 );
-                if (declarative) continue;
+                if (declAdmission.admitted) continue;
+                if (declAdmission.denied) return declAdmission.denied;
                 const operatorDenied = requireAccess(c, "plugin.community");
                 if (operatorDenied) return operatorDenied;
               }
@@ -508,6 +541,9 @@ export function createBrowserWorkspaceRoutes(
             );
             c.get("uiSlots")?.clearSession(sessionId);
             c.get("uiSlots")?.invalidateSession(sessionId);
+            if (checkpoint.session.status !== "active") {
+              c.get("clearPluginEntrySession")?.(sessionId);
+            }
             cache.set(sessionId, newHead(incarnation, checkpoint));
             scheduleMemoryIngest(c.get("memorySystem"), sessionId);
             return c.json({ ok: true, revision: checkpoint.revision });

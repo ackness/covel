@@ -1102,7 +1102,7 @@ async function checkWorldData(
       },
       sessionId: "validate-world",
       worldId: manifest.id,
-      worldsDirs: [path.dirname(worldDir)],
+      worldRoot: worldDir,
       now: new Date(0).toISOString(),
       preflight: { registry: catalogue, executeProjectionHandlers: false },
       locale,

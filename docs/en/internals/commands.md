@@ -111,7 +111,7 @@ pnpm check:prompts    # plugin and template prompts are English; each *.zh.md va
 pnpm prompts:lock     # record an English / *.zh.md pair after both languages changed
 pnpm check:boundaries # public entry points, declared deps, package direction, unused exports,
                       # relative imports from tests into other workspaces
-pnpm deps:check       # Fallow: unused/unlisted deps and unresolved imports (.fallowrc.jsonc)
+pnpm deps:check       # Fallow: unused/unlisted deps, unresolved imports, and circular dependencies (.fallowrc.jsonc)
 pnpm analyze          # Fallow report: dead code, duplication, complexity; exits non-zero
                       # while findings remain, so it is a report, not a gate
 pnpm check:push --full  # every suite; --base <ref> measures from another branch
@@ -123,6 +123,7 @@ pnpm check:push --full  # every suite; --base <ref> measures from another branch
 
 ```bash
 pnpm check:oxlint     # Oxlint; a warning fails it
+pnpm check:env        # every production process.env read is registered in packages/shared/src/env/registry.ts
 pnpm check:manifests  # pnpm validate:plugin on every bundled plugin (static), then plugin:extract --check on
                       # every bundled plugin with an entry (executes the trusted bundled entries)
 pnpm check:schemas    # the generated schema reference matches the Zod schemas (fix with pnpm schemas:generate)

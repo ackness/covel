@@ -880,3 +880,124 @@ describe("a story runtime does not hard-depend on another package", () => {
     ).toEqual([]);
   });
 });
+
+describe("tightened author manifest schemas and generated JSON constraints", () => {
+  const pluginJsonValidator = ajv.compile(
+    JSON.parse(readFileSync(schemaOutputPath("plugin"), "utf8")),
+  );
+
+  it("enforces minProperties on contributes.worldProjections and outputs in plugin-manifest.schema.json", () => {
+    const valid = {
+      id: "sample-plugin",
+      description: "Sample",
+      contributes: {
+        worldProjections: {
+          facts: {
+            from: "covel://world/ir/v1",
+            handler: "server/project.js",
+            outputs: { facts: { namespace: "facts", key: "id" } },
+          },
+        },
+      },
+    };
+    expect(pluginJsonValidator(valid)).toBe(true);
+    expect(
+      pluginJsonValidator({
+        ...valid,
+        contributes: { worldProjections: {} },
+      }),
+    ).toBe(false);
+    expect(
+      pluginJsonValidator({
+        ...valid,
+        contributes: {
+          worldProjections: {
+            facts: {
+              from: "covel://world/ir/v1",
+              handler: "server/project.js",
+              outputs: {},
+            },
+          },
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("rejects invalid contributes.data namespace keys in plugin-manifest.schema.json", () => {
+    expect(
+      pluginJsonValidator({
+        id: "sample-plugin",
+        description: "Sample",
+        contributes: { data: { _reserved: { schema: "schemas/x.json" } } },
+      }),
+    ).toBe(false);
+    expect(
+      pluginJsonValidator({
+        id: "sample-plugin",
+        description: "Sample",
+        contributes: { data: { "bad/ns": { schema: "schemas/x.json" } } },
+      }),
+    ).toBe(false);
+    expect(
+      pluginJsonValidator({
+        id: "sample-plugin",
+        description: "Sample",
+        contributes: { data: { quests: { schema: "schemas/x.json" } } },
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects malformed runtime io bindings, pointers, schema references, and blank afterTools entries", () => {
+    const cases: Array<[string, Record<string, unknown>]> = [
+      [
+        "invalid io.inputs binding key",
+        {
+          schedule: { stage: "post-turn" },
+          io: { inputs: { "123bad": { from: { runtime: "p/a" } } } },
+        },
+      ],
+      [
+        "non-JSON-pointer io.inputs select",
+        {
+          schedule: { stage: "post-turn" },
+          io: {
+            inputs: {
+              prose: { from: { runtime: "p/a" }, select: "missingSlash" },
+            },
+          },
+        },
+      ],
+      [
+        "blank io.inputs accepts",
+        {
+          schedule: { stage: "post-turn" },
+          io: {
+            inputs: {
+              prose: { from: { runtime: "p/a" }, accepts: "" },
+            },
+          },
+        },
+      ],
+      [
+        "blank io.output.recordAs",
+        {
+          schedule: { stage: "post-turn" },
+          io: { output: { recordAs: "" } },
+        },
+      ],
+      [
+        "blank tool name in agent.completion.afterTools",
+        {
+          schedule: { stage: "post-turn" },
+          agent: { completion: { afterTools: [""] } },
+        },
+      ],
+    ];
+    for (const [label, manifest] of cases) {
+      expect(
+        runtimeAuthoringManifestSchema.safeParse(manifest).success,
+        label,
+      ).toBe(false);
+    }
+  });
+});

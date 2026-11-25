@@ -12,8 +12,11 @@ export function registerImageWire(
 ): () => void {
   return registerWire("image", wire, owner);
 }
-export function getImageWire(id: string): ImageWire | null {
-  return getWire("image", id);
+export function getImageWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): ImageWire | null {
+  return getWire("image", id, approvedInstanceOwner);
 }
 
 registerImageWire(openAiImagesWire);

@@ -379,8 +379,13 @@ export async function pingPreset(
   try {
     res = await requestResponse("/api/ai/ping", {
       method: "POST",
+      aiHeaders: "none",
       headers: {
-        ...buildProviderKeysHeader({ bindings: pingBindings(target) }),
+        ...buildProviderKeysHeader({
+          bindings: pingBindings(target),
+          ...("slot" in target ? { slots: [target.slot] } : {}),
+          explicitOnly: true,
+        }),
         ...buildSlotConfigHeaderInternal({
           includeModelRefs:
             "modelRef" in target && target.modelRef ? [target.modelRef] : [],
@@ -431,9 +436,13 @@ export async function listProviderModels(target: {
   try {
     const res = await requestResponse("/api/ai/models", {
       method: "POST",
+      aiHeaders: "none",
       headers: target.source
         ? undefined
-        : buildProviderKeysHeader({ providers: [target.provider] }),
+        : buildProviderKeysHeader({
+            providers: [target.provider],
+            explicitOnly: true,
+          }),
       body: JSON.stringify({
         ...(target.source
           ? {
@@ -481,7 +490,7 @@ export function fetchProviderProtocols(): Promise<
 > {
   providerProtocols ??= request<{ protocols: ProviderProtocolDescriptor[] }>(
     "/api/ai/protocols",
-    { silentErrors: true },
+    { silentErrors: true, aiHeaders: "none" },
   ).then(
     (body) =>
       Array.isArray(body?.protocols)

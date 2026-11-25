@@ -209,13 +209,18 @@ async function stageRewards({
 }
 
 export default async function handler(ctx) {
+  const turn = ctx.logicalTurn ?? 1;
+  // Only top-level turns consume notes, reveal events, or mutate hidden state.
+  if (ctx.recursionDepth > 0) {
+    return noCue([], { turn, revealed: [], planned: [] }, null);
+  }
+
   const { planned, events, eventIds, optionIds } = await loadEvents(ctx);
   const revealed = await byKey(ctx, REVEALED);
   const revealedRows = Object.entries(revealed).map(([key, value]) => ({
     key,
     value,
   }));
-  const turn = ctx.logicalTurn ?? 1;
   const sourceTurnId = ctx.execution?.sourceTurnId ?? ctx.turnId;
   const book = ledger(planned, revealed, turn, ctx.locale);
 
@@ -233,6 +238,12 @@ export default async function handler(ctx) {
     return noCue([], book, buildStoryContextNote(turnNotes, ctx.locale));
   }
 
+  const payloadEventsById = new Map(
+    events
+      .filter((item) => Boolean(item.payload))
+      .map((item) => [item.id, item]),
+  );
+
   const activeOptions = await byKey(ctx, ACTIVE_OPTIONS);
   const selectedOptions = await byKey(ctx, SELECTED_OPTIONS);
   const armed = await byKey(ctx, ARMED);
@@ -241,7 +252,9 @@ export default async function handler(ctx) {
 
   // Retry idempotency: re-deliver whatever this source turn already revealed.
   const repeatedSelection = Object.values(selectedOptions).find(
-    (row) => row?.lastTurnId === sourceTurnId,
+    (row) =>
+      row?.lastTurnId === sourceTurnId ||
+      row?.armedDeliveredTurnId === sourceTurnId,
   );
   if (repeatedSelection) {
     const found = findOptionDefinition(
@@ -270,11 +283,12 @@ export default async function handler(ctx) {
   }
 
   const repeat = revealedRows.find(
-    (row) => row.value?.lastTurnId === sourceTurnId,
+    (row) =>
+      row.value?.lastTurnId === sourceTurnId && payloadEventsById.has(row.key),
   );
   if (repeat) {
-    const event = events.find((item) => item.id === repeat.key);
-    if (event?.payload) {
+    const event = payloadEventsById.get(repeat.key);
+    if (event) {
       return cueResult({
         eventId: event.id,
         title: event.title,
@@ -288,11 +302,13 @@ export default async function handler(ctx) {
   }
 
   const repeatedReminder = revealedRows.find(
-    (row) => row.value?.reminderTurnId === sourceTurnId,
+    (row) =>
+      row.value?.reminderTurnId === sourceTurnId &&
+      payloadEventsById.has(row.key),
   );
   if (repeatedReminder) {
-    const event = events.find((item) => item.id === repeatedReminder.key);
-    if (event?.payload) {
+    const event = payloadEventsById.get(repeatedReminder.key);
+    if (event) {
       return cueResult({
         eventId: event.id,
         title: event.title,
@@ -382,6 +398,13 @@ export default async function handler(ctx) {
       armedOptionEntry.optionId,
     );
     if (found?.option.payload) {
+      const prevSel = selectedOptions[found.option.id];
+      if (prevSel) {
+        await ctx.pluginData.set(SELECTED_OPTIONS, found.option.id, {
+          ...prevSel,
+          armedDeliveredTurnId: sourceTurnId,
+        });
+      }
       // Queue any unclaimed `requireOutcome` rewards so they verify against this
       // turn's narration of the armed option payload.
       await stageRewards({
@@ -406,7 +429,10 @@ export default async function handler(ctx) {
         book,
         isOption: true,
         storyContext: buildStoryContextNote(turnNotes, ctx.locale),
-        selectedOption,
+        selectedOption: {
+          eventId: found.event.id,
+          optionId: found.option.id,
+        },
         proposals,
       });
     }
@@ -451,6 +477,7 @@ export default async function handler(ctx) {
         scopeId: event.id,
         semanticEnabled: true,
         deferSemantic: false,
+        phase: "pre-turn",
       });
       if (inspected.status !== "pending") continue;
       for (const leaf of inspected.pending) {
@@ -481,6 +508,7 @@ export default async function handler(ctx) {
         signals: preTurnSignals,
         turn,
         sourceTurnId,
+        phase: "pre-turn",
       });
     }
   }
@@ -496,6 +524,7 @@ export default async function handler(ctx) {
     evalOptions: {
       semanticEnabled,
       deferSemantic: true,
+      phase: "pre-turn",
     },
   });
   diagnostics.push(...selectDiagnostics);
@@ -504,10 +533,12 @@ export default async function handler(ctx) {
     // A new event takes the turn; without one, last turn's event is given a
     // second time, and only this once.
     const due = revealedRows.find(
-      (row) => row.value?.lastTurn === turn - 1 && !row.value.reminderTurnId,
+      (row) =>
+        row.value?.lastTurn === turn - 1 &&
+        !row.value.reminderTurnId &&
+        payloadEventsById.has(row.key),
     );
-    const last =
-      due && events.find((item) => item.id === due.key && item.payload);
+    const last = due ? payloadEventsById.get(due.key) : undefined;
     if (!last) {
       return noCue(
         [...new Set(diagnostics)],

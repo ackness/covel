@@ -50,7 +50,7 @@ import {
 } from "../../../host-profile.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
-const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
+export const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";

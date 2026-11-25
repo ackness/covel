@@ -104,4 +104,22 @@ describe("enforceHttpPermissions without declarations", () => {
     ).rejects.toThrow(/http permission denied/);
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("enforces live canUseDeclaredHttp policy even for declared origins", async () => {
+    const { utils, fetch } = mockUtils();
+    let allowed = true;
+    const guarded = enforceHttpPermissions(utils, {
+      httpPermissions: perms,
+      runtimeId: "p/rt",
+      canUseDeclaredHttp: () => allowed,
+    });
+    await guarded.fetchWithRetry("https://api.example.com/v1/ok");
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    allowed = false;
+    await expect(
+      guarded.fetchWithRetry("https://api.example.com/v1/blocked"),
+    ).rejects.toThrow(/net\.httpDeclared/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

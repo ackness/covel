@@ -10,6 +10,9 @@ export function registerMusicWire(
 ): () => void {
   return registerWire("music", wire, owner);
 }
-export function getMusicWire(id: string): MusicWire | null {
-  return getWire("music", id);
+export function getMusicWire(
+  id: string,
+  approvedInstanceOwner?: string,
+): MusicWire | null {
+  return getWire("music", id, approvedInstanceOwner);
 }

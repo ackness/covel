@@ -248,13 +248,20 @@ export function createVectorIngestor(deps: {
         dirty: false,
         promise: Promise.resolve(SKIPPED),
       };
+      const runOneSweep = () =>
+        runIngestExclusive
+          ? runIngestExclusive(sessionId, () => runSweep(sessionId))
+          : runSweep(sessionId);
       const run = async (): Promise<IngestResult> => {
         let skipped = true;
         let recall = 0;
         let archival = 0;
         do {
           state.dirty = false;
-          const result = await runSweep(sessionId);
+          // Acquire the exclusive ingest lock per batch rather than across the
+          // entire backfill loop so session deletion, index rebuilds, and
+          // checkpoint overwrites are not starved during cold-start catch-up.
+          const result = await runOneSweep();
           skipped = skipped && result.skipped;
           recall += result.recall;
           archival += result.archival;
@@ -262,10 +269,7 @@ export function createVectorIngestor(deps: {
         } while (state.dirty);
         return { skipped, recall, archival };
       };
-      const coordinatedRun = runIngestExclusive
-        ? () => runIngestExclusive(sessionId, run)
-        : run;
-      state.promise = coordinatedRun()
+      state.promise = run()
         .catch((error: unknown) => {
           warn("coordination", sessionId, error);
           return { skipped: false, recall: 0, archival: 0 };

@@ -106,6 +106,7 @@ pluginRoutes.delete("/:id", accessGuard("host.files"), async (c) => {
       await cancelPackageUpdate(root, id);
       const staged = await stagePackageRemoval(finalDir);
       await removePackageStaging(staged.directory);
+      await c.get("cleanupUninstalledPlugin")?.(id);
     });
   } catch (error) {
     const { status, body } = errorResponse(error);

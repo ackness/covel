@@ -53,12 +53,10 @@ import {
   createWorldModelView,
   forkWorldModelView,
 } from "../function-runtime/world-model-view.js";
-import type {
-  PluginDataReadProbe,
-  PluginDataVisibility,
+import {
+  forkPluginDataVisibility,
+  type PluginDataVisibility,
 } from "../function-runtime/upstream-plugin-data.js";
-import { createReadRecorder } from "../read-dependencies.js";
-import { baselinesFor, createReadBaselineRecorder } from "../read-baselines.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import { DEFAULT_RUNTIME_TIMEOUT_MS } from "../turn-executor/runtime-scaffold.js";
 import { unwrapRetryCause } from "../turn-executor/runtime-finalization.js";
@@ -569,65 +567,6 @@ type BatchClaimDecision =
 interface BatchSlot {
   enterClaim(claim: () => BatchClaimDecision): Promise<BatchClaimDecision>;
   skip(): void;
-}
-
-/**
- * Host-only speculative fork of plugin-data visibility for a sub-agent or
- * delegation boundary. Reads observe the provider's uncommitted same-turn
- * upstream writes (and `upstreamOf` for services), while recorded producer
- * dependencies and baselines merge into `parent` only when `accept()` runs.
- */
-export function forkPluginDataVisibility(
-  parent: PluginDataVisibility,
-  options: {
-    readonly pluginId?: string;
-    readonly runtimeId?: string;
-    readonly runId?: string;
-    readonly assertLive?: () => void;
-    readonly probe?: PluginDataReadProbe;
-  } = {},
-): {
-  readonly visibility: PluginDataVisibility;
-  accept(): void;
-  discard(): void;
-} {
-  const pluginId = options.pluginId ?? parent.pluginId;
-  const runtimeId = options.runtimeId ?? parent.runtimeId;
-  const runId = options.runId ?? parent.runId;
-  const recorder = createReadRecorder();
-  const baselines = createReadBaselineRecorder();
-  let closed = false;
-  const writes =
-    pluginId === parent.pluginId
-      ? parent.writes.length > 0
-        ? parent.writes
-        : (parent.upstreamOf?.(pluginId) ?? parent.writes)
-      : (parent.upstreamOf?.(pluginId) ?? []);
-  const probe = options.probe ?? parent.probe;
-  const visibility: PluginDataVisibility = {
-    pluginId,
-    runtimeId,
-    runId,
-    writes,
-    ...(parent.upstreamOf ? { upstreamOf: parent.upstreamOf } : {}),
-    recorder,
-    baselines,
-    ...(probe ? { probe } : {}),
-  };
-  return {
-    visibility,
-    accept() {
-      if (closed) return;
-      options.assertLive?.();
-      const targetBaselines = parent.baselines ?? baselinesFor(parent.recorder);
-      for (const read of baselines.snapshot()) targetBaselines.observe(read);
-      for (const producer of recorder) parent.recorder.add(producer);
-      closed = true;
-    },
-    discard() {
-      closed = true;
-    },
-  };
 }
 
 /**

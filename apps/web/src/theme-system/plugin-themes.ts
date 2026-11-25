@@ -499,6 +499,9 @@ export class PluginThemeSession {
     this.unsubscribe?.();
     this.style?.remove();
     const entry = registry(this.store);
+    if (entry.current === this || entry.current?.sessionId !== this.sessionId) {
+      this.store.unregister(sessionThemeKey(this.sessionId));
+    }
     if (entry.current !== this) return;
     entry.current = undefined;
     applyThemeLayout(

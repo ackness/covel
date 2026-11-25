@@ -317,3 +317,51 @@ test("PostgreSQL test env reaches Turbo child and uncached test runs twice", () 
     rmSync(parent, { recursive: true, force: true });
   }
 });
+
+test("Turbo plugin consumer tasks cover every bundled plugin subdirectory", () => {
+  const turboConfig = JSON.parse(
+    readFileSync(path.join(repoRoot, "turbo.json"), "utf8"),
+  );
+  const ignoredDirs = new Set(["node_modules", ".turbo", "dist"]);
+  const actualSubdirs = new Set();
+  const pluginsRoot = path.join(repoRoot, "plugins");
+  for (const pluginEntry of readdirSync(pluginsRoot, { withFileTypes: true })) {
+    if (!pluginEntry.isDirectory() || ignoredDirs.has(pluginEntry.name)) {
+      continue;
+    }
+    const pluginDir = path.join(pluginsRoot, pluginEntry.name);
+    for (const child of readdirSync(pluginDir, { withFileTypes: true })) {
+      if (!child.isDirectory() || ignoredDirs.has(child.name)) continue;
+      actualSubdirs.add(child.name);
+    }
+  }
+  assert.ok(
+    actualSubdirs.size > 0,
+    "expected bundled plugins to contain subdirectories",
+  );
+
+  const consumerTasks = [
+    "@covel/plugin-loader#test",
+    "@covel/runtime#test",
+    "@covel/runtime#lint",
+    "@covel/server#test",
+    "@covel/server#lint",
+  ];
+  const globPattern = /^\$TURBO_ROOT\$\/plugins\/\*\/\{([^}]+)\}\/\*\*$/;
+  for (const taskId of consumerTasks) {
+    const inputs = turboConfig.tasks?.[taskId]?.inputs ?? [];
+    const match = inputs
+      .map((entry) =>
+        typeof entry === "string" ? globPattern.exec(entry) : null,
+      )
+      .find(Boolean);
+    assert.ok(match, `${taskId} must declare a plugins/*/{...}/** input glob`);
+    const covered = new Set(match[1].split(","));
+    const missing = [...actualSubdirs].filter((dir) => !covered.has(dir));
+    assert.deepEqual(
+      missing,
+      [],
+      `${taskId} Turbo inputs omit bundled plugin subdirectories: ${missing.join(", ")}`,
+    );
+  }
+});

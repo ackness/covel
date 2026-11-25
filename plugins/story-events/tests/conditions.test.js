@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCondition } from "../lib/conditions.js";
+import {
+  collectConditionRefs,
+  evaluateCondition,
+  hasJudgeLeaf,
+  inspectCondition,
+} from "../lib/conditions.js";
 
 const state = {
   dimensions: {
@@ -233,9 +238,7 @@ describe("cross-plugin deterministic leaves", () => {
 });
 
 describe("four-valued semantic short-circuiting", () => {
-  it("short-circuits judge leaves when deterministic branches already decide the tree", async () => {
-    const { hasJudgeLeaf, inspectCondition } =
-      await import("../lib/conditions.js");
+  it("short-circuits judge leaves when deterministic branches already decide the tree", () => {
     const judgeLeaf = {
       judge: "The protagonist suspects the broker is lying",
       id: "suspect-broker",
@@ -317,5 +320,98 @@ describe("four-valued semantic short-circuiting", () => {
         semanticEnabled: false,
       }),
     ).toEqual({ status: "undecided", pending: [], issues: [] });
+  });
+
+  it("rejects malformed deterministic leaves as undecided instead of routing them to the judge, and unifies locale-map detection", () => {
+    for (const malformed of [
+      { time: "hour" },
+      { item: "Key" },
+      { affinity: "Iron Meg" },
+      { attribute: "fogRot" },
+      { foo: "bar" },
+      { "en-US": "Valid text", id: "reserved-key" },
+    ]) {
+      expect(hasJudgeLeaf(malformed)).toBe(false);
+      expect(collectConditionRefs(malformed).usesJudge).toBe(false);
+      const res = inspectCondition(malformed, state, { scopeId: "bad" });
+      expect(res.status).toBe("undecided");
+      expect(res.pending).toEqual([]);
+    }
+
+    const localeShorthand = {
+      "en-US": "The hero confronts the captain.",
+      "zh-CN": "主角当面质问船长。",
+    };
+    expect(hasJudgeLeaf(localeShorthand)).toBe(true);
+    expect(collectConditionRefs(localeShorthand).usesJudge).toBe(true);
+    const inspected = inspectCondition(localeShorthand, {
+      ...state,
+      locale: "en-US",
+    });
+    expect(inspected.status).toBe("pending");
+    expect(inspected.pending[0]?.question).toBe(
+      "The hero confronts the captain.",
+    );
+  });
+
+  it("treats missing inventory items as quantity 0 for numeric operators without an explicit path", () => {
+    const bagState = {
+      ...state,
+      items: new Map([["silver", { name: "Silver", quantity: 5 }]]),
+    };
+    expect(evaluateCondition({ item: "Gold", lte: 2 }, bagState).met).toBe(
+      true,
+    );
+    expect(evaluateCondition({ item: "Gold", equals: 0 }, bagState).met).toBe(
+      true,
+    );
+    expect(evaluateCondition({ item: "Gold", gte: 1 }, bagState).met).toBe(
+      false,
+    );
+    expect(evaluateCondition({ item: "Gold", gt: 0 }, bagState).met).toBe(
+      false,
+    );
+  });
+
+  it("isolates pre-turn met:false judge caches from audit-phase re-evaluation on the same turn", () => {
+    const leaf = {
+      judge: "The door unlocks.",
+      id: "door",
+      sticky: false,
+    };
+    const turnState = {
+      ...state,
+      turnId: "t-1",
+      sourceTurnId: "t-1",
+      judgments: {
+        "ev#door": {
+          met: false,
+          phase: "pre-turn",
+          turnId: "t-1",
+          sourceTurnId: "t-1",
+        },
+      },
+    };
+    // Pre-turn retry reuses the pre-turn cache.
+    expect(
+      inspectCondition(leaf, turnState, { scopeId: "ev", phase: "pre-turn" })
+        .status,
+    ).toBe("false");
+    // Audit phase must re-evaluate with full post-turn narration.
+    expect(
+      inspectCondition(leaf, turnState, { scopeId: "ev", phase: "audit" })
+        .status,
+    ).toBe("pending");
+    // Same-turn met:true still carries across phases.
+    const trueState = {
+      ...turnState,
+      judgments: {
+        "ev#door": { ...turnState.judgments["ev#door"], met: true },
+      },
+    };
+    expect(
+      inspectCondition(leaf, trueState, { scopeId: "ev", phase: "audit" })
+        .status,
+    ).toBe("true");
   });
 });

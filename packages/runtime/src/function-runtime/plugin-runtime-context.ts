@@ -33,7 +33,10 @@ import type {
   FunctionHandlerContext,
   LoadedRuntime,
 } from "@covel/shared/plugin-runtime";
-import { createWorldModelView } from "./world-model-view.js";
+import {
+  createWorldModelView,
+  forkWorldModelView,
+} from "./world-model-view.js";
 import {
   createFunctionStoreView,
   createPluginDataWriter,
@@ -43,7 +46,10 @@ import {
   type HandlerHelperContext,
 } from "./plugin-handler-helpers.js";
 import type { ExecutionWriteBuffer } from "./execution-write-buffer.js";
-import type { PluginDataVisibility } from "./upstream-plugin-data.js";
+import {
+  forkPluginDataVisibility,
+  type PluginDataVisibility,
+} from "./upstream-plugin-data.js";
 import type { OperationStage } from "../operations/operation-stage.js";
 import {
   createRuntimeMediaContext,
@@ -269,6 +275,12 @@ async function createOrdinaryPluginRuntimeContext({
     ? enforceHttpPermissions(runtimeUtils, {
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
+        ...(deps.canUseDeclaredHttp
+          ? {
+              canUseDeclaredHttp: () =>
+                deps.canUseDeclaredHttp!(manifest.pluginId),
+            }
+          : {}),
       })
     : undefined;
   const mediaOptions = {
@@ -470,28 +482,58 @@ async function createOrdinaryPluginRuntimeContext({
   const runSubagent =
     runner && runId !== undefined
       ? (request: SubagentRequest): Promise<SubagentResult> => {
-          const run = runner
-            .run({
-              caller: {
-                pluginId: manifest.pluginId,
-                runtimeId: manifest.name,
-                depth: 0,
-              },
-              request,
-              world,
-              input,
-              deps,
-              hookPipeline,
-              executionContext,
-              parentCallId: runId,
-              parentSignal: AbortSignal.any([
-                handlerAbort.signal,
-                subagentAbort.signal,
-              ]),
-              parentDeadline: startTime + timeoutMs,
-              ...(operations ? { operations } : {}),
-            })
-            .then((result) => structuredClone(result));
+          const parentSignal = AbortSignal.any([
+            handlerAbort.signal,
+            subagentAbort.signal,
+          ]);
+          const worldFork = world
+            ? forkWorldModelView(world, () => parentSignal.throwIfAborted())
+            : undefined;
+          const visibilityFork = pluginDataVisibility
+            ? forkPluginDataVisibility(pluginDataVisibility, {
+                assertLive: () => parentSignal.throwIfAborted(),
+              })
+            : undefined;
+          const childOperations = operations?.child();
+          const run = (async (): Promise<SubagentResult> => {
+            let accepted = false;
+            try {
+              const result = await runner.run({
+                caller: {
+                  pluginId: manifest.pluginId,
+                  runtimeId: manifest.name,
+                  depth: 0,
+                },
+                request,
+                ...(worldFork ? { world: worldFork.world } : {}),
+                ...(visibilityFork
+                  ? { pluginDataVisibility: visibilityFork.visibility }
+                  : {}),
+                input,
+                deps,
+                hookPipeline,
+                executionContext,
+                parentCallId: runId,
+                parentSignal,
+                parentDeadline: startTime + timeoutMs,
+                ...(childOperations ? { operations: childOperations } : {}),
+              });
+              if (result.ok) {
+                parentSignal.throwIfAborted();
+                worldFork?.accept();
+                visibilityFork?.accept();
+                childOperations?.commit();
+                accepted = true;
+              }
+              return structuredClone(result);
+            } finally {
+              if (!accepted) {
+                childOperations?.discard();
+                visibilityFork?.discard();
+              }
+              worldFork?.discard();
+            }
+          })();
           inFlightSubagents.add(run);
           void run.finally(() => inFlightSubagents.delete(run));
           return run;

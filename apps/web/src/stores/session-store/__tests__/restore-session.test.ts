@@ -298,6 +298,17 @@ describe("restoreSessionState workspace ordering", () => {
       type: "SET_EXECUTION_ERROR",
       error: "offline",
     });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: expect.objectContaining({
+        sessionId: session.id,
+        status: null,
+        hydrating: false,
+        checking: false,
+        stalled: true,
+        error: "offline",
+      }),
+    });
     expect(api.getSessionView).not.toHaveBeenCalled();
     expect(api.listSessionPlugins).not.toHaveBeenCalled();
     expect(api.listSuspensions).not.toHaveBeenCalled();

@@ -49,24 +49,36 @@ export interface ModelRelayLimits {
   readonly connectWaitMs: number;
   /** How long the browser may take to answer with a status and headers. */
   readonly headTimeoutMs: number;
+  /** Maximum idle gap between response body chunks before failing the call. */
+  readonly bodyIdleTimeoutMs: number;
   /** Requests in flight on one channel. */
   readonly maxPendingPerChannel: number;
   /** Size of one request body (the prompt JSON). */
   readonly maxRequestBodyBytes: number;
   /** Size of one response body. */
   readonly maxResponseBytes: number;
+  /** Maximum unread response bytes buffered in memory for one request. */
+  readonly maxBufferedBytesPerRequest: number;
+  /** Maximum unread response bytes buffered in memory across all requests. */
+  readonly maxTotalBufferedBytes: number;
   /** Channels open at once on this server. */
   readonly maxChannels: number;
+  /** Channels one client IP may keep open at once when clientKey is supplied. */
+  readonly maxChannelsPerClient: number;
 }
 
-export const DEFAULT_MODEL_RELAY_LIMITS: ModelRelayLimits = {
+const DEFAULT_MODEL_RELAY_LIMITS: ModelRelayLimits = {
   connectWaitMs: 10_000,
   headTimeoutMs: 15 * 60_000,
+  bodyIdleTimeoutMs: 60_000,
   maxPendingPerChannel: 16,
   maxRequestBodyBytes: 16 * 1024 * 1024,
   maxResponseBytes: 64 * 1024 * 1024,
+  maxBufferedBytesPerRequest: 4 * 1024 * 1024,
+  maxTotalBufferedBytes: 64 * 1024 * 1024,
   // The same ceiling as the event stream's connections.
   maxChannels: 512,
+  maxChannelsPerClient: 4,
 };
 
 /** The answer to a relay post: accepted, or why not. */
@@ -84,6 +96,7 @@ interface Pending {
   state: "head" | "body";
   bytes: number;
   controller?: ReadableStreamDefaultController<Uint8Array>;
+  armBodyIdleTimer(): void;
   resolve(response: Response): void;
   reject(error: Error): void;
   finish(): void;
@@ -94,6 +107,7 @@ interface Channel {
   /** Ends the browser's stream. */
   readonly close: () => void;
   readonly requests: Set<string>;
+  readonly clientKey?: string;
 }
 
 /** Response headers that describe the browser's connection, not the answer. */
@@ -125,6 +139,41 @@ export function createModelRelayRegistry(
   const channels = new Map<string, Channel>();
   const pending = new Map<string, Pending>();
   const waiters = new Map<string, Set<() => void>>();
+
+  const countClientChannels = (clientKey: string): number => {
+    let count = 0;
+    for (const channel of channels.values()) {
+      if (channel.clientKey === clientKey) count += 1;
+    }
+    return count;
+  };
+
+  const canAttachChannel = (channelId: string, clientKey?: string): boolean => {
+    if (channels.has(channelId)) return true;
+    if (channels.size >= config.maxChannels) return false;
+    if (
+      clientKey !== undefined &&
+      countClientChannels(clientKey) >= config.maxChannelsPerClient
+    ) {
+      return false;
+    }
+    return true;
+  };
+
+  const bufferedBytesOf = (entry: Pending): number => {
+    if (entry.state !== "body" || !entry.controller) return 0;
+    const desired = entry.controller.desiredSize;
+    if (desired === null) return 0;
+    return Math.max(0, config.maxBufferedBytesPerRequest - desired);
+  };
+
+  const totalBufferedBytes = (): number => {
+    let total = 0;
+    for (const entry of pending.values()) {
+      total += bufferedBytesOf(entry);
+    }
+    return total;
+  };
 
   const failChannelRequests = (channel: Channel, reason: string) => {
     for (const id of [...channel.requests]) {
@@ -191,16 +240,35 @@ export function createModelRelayRegistry(
     return new Promise<Response>((resolve, reject) => {
       let resolved = false;
       let settled = false;
+      let bodyIdleTimer: ReturnType<typeof setTimeout> | undefined;
+      const clearBodyIdleTimer = () => {
+        if (bodyIdleTimer !== undefined) {
+          clearTimeout(bodyIdleTimer);
+          bodyIdleTimer = undefined;
+        }
+      };
       const finish = () => {
         clearTimeout(headTimer);
+        clearBodyIdleTimer();
         signal?.removeEventListener("abort", onAbort);
         pending.delete(id);
         channel.requests.delete(id);
+      };
+      const armBodyIdleTimer = () => {
+        clearBodyIdleTimer();
+        bodyIdleTimer = setTimeout(() => {
+          channels.get(channelId)?.sink({ type: "cancel", id });
+          entry.reject(
+            relayError("your browser stopped sending the answer in time."),
+          );
+        }, config.bodyIdleTimeoutMs);
+        bodyIdleTimer.unref?.();
       };
       const entry: Pending = {
         channelId,
         state: "head",
         bytes: 0,
+        armBodyIdleTimer,
         resolve: (response) => {
           resolved = true;
           settled = true;
@@ -250,16 +318,24 @@ export function createModelRelayRegistry(
      * Connect a browser's stream to its channel. A second connection under
      * the same ID (a reconnect) replaces the first; requests sent to the
      * first fail, because their answers would arrive nowhere. Undefined when
-     * the server already holds its limit of channels.
+     * the server or client already holds its limit of channels.
      */
     attach(
       channelId: string,
       sink: ModelRelaySink,
       close: () => void = () => {},
+      clientKey?: string,
     ): (() => void) | undefined {
       const previous = channels.get(channelId);
-      if (!previous && channels.size >= config.maxChannels) return undefined;
-      const channel: Channel = { sink, close, requests: new Set() };
+      if (!previous && !canAttachChannel(channelId, clientKey)) {
+        return undefined;
+      }
+      const channel: Channel = {
+        sink,
+        close,
+        requests: new Set(),
+        ...(clientKey !== undefined ? { clientKey } : {}),
+      };
       channels.set(channelId, channel);
       if (previous) {
         // One stream per channel: the older one ends, visibly, so two
@@ -276,8 +352,8 @@ export function createModelRelayRegistry(
     },
 
     /** Whether {@link attach} would accept this channel now. */
-    canAttach(channelId: string): boolean {
-      return channels.has(channelId) || channels.size < config.maxChannels;
+    canAttach(channelId: string, clientKey?: string): boolean {
+      return canAttachChannel(channelId, clientKey);
     },
 
     /** The relay for model calls made on behalf of this channel's browser. */
@@ -312,18 +388,24 @@ export function createModelRelayRegistry(
         response = nullBody
           ? new Response(null, init)
           : new Response(
-              new ReadableStream<Uint8Array>({
-                start: (controller) => {
-                  entry.controller = controller;
+              new ReadableStream<Uint8Array>(
+                {
+                  start: (controller) => {
+                    entry.controller = controller;
+                  },
+                  cancel: () => {
+                    // The reader stopped early: the browser can stop too.
+                    channels
+                      .get(channelId)
+                      ?.sink({ type: "cancel", id: requestId });
+                    entry.finish();
+                  },
                 },
-                cancel: () => {
-                  // The reader stopped early: the browser can stop too.
-                  channels
-                    .get(channelId)
-                    ?.sink({ type: "cancel", id: requestId });
-                  entry.finish();
+                {
+                  highWaterMark: config.maxBufferedBytesPerRequest,
+                  size: (chunk) => chunk.byteLength,
                 },
-              }),
+              ),
               init,
             );
       } catch {
@@ -337,6 +419,7 @@ export function createModelRelayRegistry(
         return "ok";
       }
       entry.state = "body";
+      entry.armBodyIdleTimer();
       entry.resolve(response);
       return "ok";
     },
@@ -355,6 +438,18 @@ export function createModelRelayRegistry(
         entry.reject(relayError("the answer is too large to relay."));
         return "too-large";
       }
+      const nextEntryBuffered = bufferedBytesOf(entry) + bytes.byteLength;
+      if (
+        nextEntryBuffered > config.maxBufferedBytesPerRequest ||
+        totalBufferedBytes() + bytes.byteLength > config.maxTotalBufferedBytes
+      ) {
+        channels.get(channelId)?.sink({ type: "cancel", id: requestId });
+        entry.reject(
+          relayError("the relayed answer buffered too much unread data."),
+        );
+        return "too-large";
+      }
+      entry.armBodyIdleTimer();
       entry.controller?.enqueue(bytes);
       return "ok";
     },

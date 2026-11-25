@@ -437,6 +437,10 @@ export class HookPipeline {
     let result: HookResult<P>;
     const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
 
+    if (reg.runsFor && !(await reg.runsFor(ctx.sessionId))) {
+      return { action: "continue" };
+    }
+
     // Inject a read-only, per-plugin settings accessor bound to *this* handler's
     // plugin, reusing the same session hook scope that carries activePluginIds.
     // `run` already required the scope. Framework hooks (no pluginId) get a

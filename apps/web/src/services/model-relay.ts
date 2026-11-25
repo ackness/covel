@@ -19,7 +19,10 @@
 import { isLocalNetworkBaseUrl, isLoopbackHostUrl } from "@covel/shared";
 import { relayResponseBody } from "./model-relay-body.js";
 import { getSettings } from "@/settings/store";
-import { isModelRelaySupported } from "@/services/api/health.js";
+import {
+  isModelRelaySupported,
+  onModelRelaySupportedChange,
+} from "@/services/api/server-capabilities.js";
 import { parseJsonSseData, readSseStream } from "@/services/sse.js";
 
 const STREAM_URL = "/api/model-relay/stream";
@@ -72,6 +75,41 @@ const channelId = randomChannelId();
 const inflight = new Map<string, AbortController>();
 let running = false;
 let unsupported = false;
+let streamController: AbortController | null = null;
+let lifecycleBound = false;
+
+function abortInflight(): void {
+  for (const controller of inflight.values()) {
+    controller.abort();
+  }
+}
+
+function stopChannel(): void {
+  streamController?.abort();
+  streamController = null;
+  abortInflight();
+}
+
+function bindLifecycleListeners(): void {
+  if (lifecycleBound) return;
+  lifecycleBound = true;
+  const settings = getSettings() as {
+    subscribe?: (key: string, handler: () => void) => () => void;
+  };
+  settings.subscribe?.("llm.providers", () => {
+    unsupported = false;
+    if (relayEndpoints().length === 0) {
+      stopChannel();
+    }
+  });
+  onModelRelaySupportedChange((supported) => {
+    if (supported) {
+      unsupported = false;
+    } else {
+      stopChannel();
+    }
+  });
+}
 
 interface ProviderProfileLike {
   readonly baseUrl?: unknown;
@@ -149,13 +187,28 @@ function relayWanted(): boolean {
  * first use.
  */
 export function modelRelayHeaders(): Record<string, string> {
+  bindLifecycleListeners();
   if (!relayWanted()) return {};
   if (!running) void runChannel();
   return { [CHANNEL_HEADER]: channelId };
 }
 
-const sleep = (ms: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 
 async function post(
   requestId: string,
@@ -318,13 +371,17 @@ async function runChannel(): Promise<void> {
   let backoff = 1_000;
   try {
     while (relayWanted()) {
+      const controller = new AbortController();
+      streamController = controller;
       try {
         const response = await fetch(STREAM_URL, {
           headers: { Accept: "text/event-stream", [CHANNEL_HEADER]: channelId },
           cache: "no-store",
           credentials: "same-origin",
+          signal: controller.signal,
         });
-        // A server without the relay answers 404: stop asking.
+        // A server without the relay answers 404: stop asking until settings or
+        // health capabilities change.
         if (response.status === 404) {
           unsupported = true;
           await response.body?.cancel().catch(() => {});
@@ -344,13 +401,30 @@ async function runChannel(): Promise<void> {
             }
           },
         });
+        if (controller.signal.aborted) return;
       } catch {
-        // Dropped or refused: try again after a pause.
+        // Stream dropped, aborted, or refused: cancel orphaned local fetches
+        // before deciding whether to reconnect.
+        abortInflight();
+        if (controller.signal.aborted) return;
+      } finally {
+        if (streamController === controller) {
+          streamController = null;
+        }
       }
-      await sleep(backoff);
+      if (!relayWanted()) return;
+      const waitController = new AbortController();
+      streamController = waitController;
+      await sleep(backoff, waitController.signal);
+      if (streamController === waitController) {
+        streamController = null;
+      }
       backoff = Math.min(backoff * 2, MAX_BACKOFF_MS);
     }
   } finally {
     running = false;
+    if (relayWanted()) {
+      void runChannel();
+    }
   }
 }

@@ -249,6 +249,41 @@ describe("failed hydration", () => {
     expect(adapter.readEntries()).toEqual({ "ui.locale": "en-US" });
     spy.mockRestore();
   });
+
+  it("notifies cleared values without falsely notifying rolled-back secrets when clearAll partially fails", async () => {
+    const adapter = createMemoryAdapter(
+      { "ui.locale": "en-US" },
+      { openai: "sk-persisted" },
+    );
+    const store = new SettingsStore({
+      ...adapter,
+      saveSecrets: async () => {
+        throw new Error("keys.env write failed");
+      },
+    });
+    store.register(localeEntry);
+    store.register({
+      key: "keys.openai",
+      schema: z.string(),
+      default: "",
+      group: "llm",
+      label: "OpenAI key",
+      backend: "keys",
+      secret: true,
+    });
+    await store.init();
+
+    const localeUpdates: unknown[] = [];
+    const secretUpdates: unknown[] = [];
+    store.subscribe("ui.locale", (v) => localeUpdates.push(v));
+    store.subscribe("keys.openai", (v) => secretUpdates.push(v));
+
+    await expect(store.clearAll()).rejects.toThrow(/keys\.env write failed/);
+    expect(store.get("ui.locale")).toBe("zh-CN");
+    expect(localeUpdates).toEqual(["zh-CN"]);
+    expect(store.get("keys.openai")).toBe("sk-persisted");
+    expect(secretUpdates).not.toContain("");
+  });
 });
 
 describe("versioned persistence", () => {

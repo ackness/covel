@@ -544,31 +544,31 @@ describe("Platform v2 Web UI mounts", () => {
     ).toBeTruthy();
   });
 
-  it("renders FloatingWindowHost filtered strictly by instance vs session scope", () => {
-    const entries = [
-      {
-        pluginId: "demo-platform",
-        specs: [
-          {
-            id: "inst-win",
-            label: "Instance Utility",
-            windowScope: "instance" as const,
-            view: { component: "Stack", children: [] },
-          },
-          {
-            id: "sess-win",
-            label: "Session Utility",
-            windowScope: "session" as const,
-            view: { component: "Stack", children: [] },
-          },
-        ],
-      },
-    ];
+  const WINDOW_ENTRIES = [
+    {
+      pluginId: "demo-platform",
+      specs: [
+        {
+          id: "inst-win",
+          label: "Instance Utility",
+          windowScope: "instance" as const,
+          view: { component: "Stack", children: [] },
+        },
+        {
+          id: "sess-win",
+          label: "Session Utility",
+          windowScope: "session" as const,
+          view: { component: "Stack", children: [] },
+        },
+      ],
+    },
+  ];
 
+  it("renders FloatingWindowHost filtered strictly by instance vs session scope", () => {
     render(
       <>
-        <FloatingWindowHost scope="instance" entries={entries} />
-        <FloatingWindowHost scope="session" entries={entries} />
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
+        <FloatingWindowHost scope="session" entries={WINDOW_ENTRIES} />
       </>,
     );
 
@@ -591,5 +591,251 @@ describe("Platform v2 Web UI mounts", () => {
     expect(
       screen.getByTestId("floating-window-demo-platform:sess-win"),
     ).toBeTruthy();
+  });
+
+  it("preserves typed callback input across same-step polls and cancels active config flow on unmount", async () => {
+    const browserStep = {
+      kind: "browser" as const,
+      stepId: "s-oauth",
+      title: "Authorize Account",
+      authorizeUrl: "https://auth.example/start",
+      completion: "loopback-or-paste" as const,
+      callbackUrl: "http://127.0.0.1:4321/cb",
+    };
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot(browserStep),
+    });
+    mocks.getPluginConfigFlowRun.mockResolvedValue({
+      ok: true,
+      run: makeSnapshot(browserStep),
+    });
+    mocks.cancelPluginConfigFlow.mockResolvedValue({ ok: true });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { unmount } = render(<ConfigFlowDialog />);
+
+    act(() => openPluginConfigFlow("demo-platform", "connect"));
+    const cbInput = (await screen.findByPlaceholderText(
+      "http://127.0.0.1:4321/cb",
+    )) as HTMLInputElement;
+    fireEvent.change(cbInput, {
+      target: { value: "http://127.0.0.1:4321/cb?code=typed" },
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(mocks.getPluginConfigFlowRun).toHaveBeenCalled();
+    expect(cbInput.value).toBe("http://127.0.0.1:4321/cb?code=typed");
+
+    unmount();
+    expect(mocks.cancelPluginConfigFlow).toHaveBeenCalledWith(
+      "demo-platform",
+      "connect",
+      "run-1",
+    );
+  });
+
+  it("rejects non-finite numeric fields in ConfigFlowDialog without submitting NaN", async () => {
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot({
+        kind: "form",
+        stepId: "s-num",
+        title: "Configure Limit",
+        fields: [
+          {
+            name: "timeout",
+            label: "Timeout",
+            type: "number",
+            defaultValue: "not-a-number",
+          },
+        ],
+      }),
+    });
+
+    render(<ConfigFlowDialog />);
+    act(() => openPluginConfigFlow("demo-platform", "connect"));
+    await screen.findByText("Configure Limit");
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(mocks.stepPluginConfigFlow).not.toHaveBeenCalled();
+  });
+
+  it("polls TopbarStatusBadges without overlapping requests while a previous fetch is still in flight", async () => {
+    let resolveFirst!: (val: {
+      ok: true;
+      entries: Array<{ key: string; value: unknown; updatedAt: string }>;
+    }) => void;
+    const firstFetch = new Promise<{
+      ok: true;
+      entries: Array<{ key: string; value: unknown; updatedAt: string }>;
+    }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    mocks.fetchPluginInstanceData
+      .mockReturnValueOnce(firstFetch)
+      .mockResolvedValue({
+        ok: true,
+        entries: [
+          {
+            key: "status",
+            value: { tone: "ok", text: "Updated" },
+            updatedAt: "now",
+          },
+        ],
+      });
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    render(
+      <TopbarStatusBadges
+        entries={[
+          {
+            pluginId: "demo-platform",
+            specs: [
+              {
+                id: "poll-pill",
+                label: "Poll Status",
+                pollIntervalSec: 1,
+                dataSource: {
+                  source: "instance.data",
+                  namespace: "health",
+                  key: "status",
+                },
+                defaultStatus: { tone: "idle", text: "Idle" },
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mocks.fetchPluginInstanceData).toHaveBeenCalledTimes(1),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    // Still only 1 in-flight request because the first poll has not settled yet.
+    expect(mocks.fetchPluginInstanceData).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst({
+        ok: true,
+        entries: [
+          {
+            key: "status",
+            value: { tone: "ok", text: "First" },
+            updatedAt: "now",
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1100);
+    });
+    expect(mocks.fetchPluginInstanceData).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves minimized floating window body, stops dragging on pointercancel, and closes session windows when switching sessions", () => {
+    const { rerender } = render(
+      <>
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
+        <FloatingWindowHost
+          scope="session"
+          entries={WINDOW_ENTRIES}
+          sessionId="sess-a"
+        />
+      </>,
+    );
+
+    act(() => {
+      openPluginWindow("demo-platform", "inst-win");
+      openPluginWindow("demo-platform", "sess-win");
+    });
+
+    const sessWin = screen.getByTestId(
+      "floating-window-demo-platform:sess-win",
+    );
+    const header = sessWin.querySelector("header")!;
+    header.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(header, { clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerCancel(header);
+    const leftBefore = sessWin.style.left;
+    fireEvent.pointerMove(header, { clientX: 250, clientY: 250 });
+    expect(sessWin.style.left).toBe(leftBefore);
+
+    // Minimize hides body via CSS without unmounting the child panel.
+    const minimizeBtn = screen.getAllByRole("button", { name: "Minimize" })[1]!;
+    fireEvent.click(minimizeBtn);
+    expect(
+      screen.getByTestId("mock-panel-demo-platform-sess-win"),
+    ).toBeTruthy();
+
+    // Switching sessions closes session-scoped windows while keeping instance windows open.
+    rerender(
+      <>
+        <FloatingWindowHost scope="instance" entries={WINDOW_ENTRIES} />
+        <FloatingWindowHost
+          scope="session"
+          entries={WINDOW_ENTRIES}
+          sessionId="sess-b"
+        />
+      </>,
+    );
+    expect(
+      screen.queryByTestId("floating-window-demo-platform:sess-win"),
+    ).toBeNull();
+    expect(
+      screen.getByTestId("floating-window-demo-platform:inst-win"),
+    ).toBeTruthy();
+  });
+
+  it("clamps CommandPalette selection when available commands shrink before Enter", async () => {
+    mocks.invokePluginAppAction.mockResolvedValueOnce({ ok: true, result: {} });
+    const cmdA = {
+      id: "demo-platform:a",
+      pluginId: "demo-platform",
+      source: "plugin" as const,
+      sourceLabel: "Demo",
+      name: "alpha",
+      description: "Alpha",
+      scope: "instance" as const,
+      palette: true,
+      appAction: "alpha",
+    };
+    const cmdB = {
+      id: "demo-platform:b",
+      pluginId: "demo-platform",
+      source: "plugin" as const,
+      sourceLabel: "Demo",
+      name: "beta",
+      description: "Beta",
+      scope: "instance" as const,
+      palette: true,
+      appAction: "beta",
+    };
+
+    const { rerender } = render(<CommandPalette appCommands={[cmdA, cmdB]} />);
+    act(() => openCommandPalette());
+    const search = screen.getByPlaceholderText(/Type a command/i);
+    // Builtins (2) + cmdA + cmdB = 4 items; move to index 3 (cmdB).
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+
+    // Remove cmdB while selectedIndex is 3; clamping lands on index 2 (cmdA).
+    rerender(<CommandPalette appCommands={[cmdA]} />);
+    fireEvent.keyDown(search, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(mocks.invokePluginAppAction).toHaveBeenCalledWith(
+        "demo-platform",
+        "alpha",
+        {},
+      );
+    });
   });
 });

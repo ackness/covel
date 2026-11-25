@@ -11,7 +11,6 @@ import {
   releaseSqliteConnection,
 } from "../sqlite/shared-connection.js";
 import { runSqliteTransaction } from "../sqlite/node-sqlite.js";
-import { MEDIA_WRITE_METHODS } from "../store-write-methods.js";
 import {
   createReadStream,
   existsSync,
@@ -23,9 +22,11 @@ import {
 import {
   access,
   mkdir,
+  readdir,
   readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -302,15 +303,54 @@ function initializeSqliteMediaStore(
     );
 
   // Same connection as the DataStore ⇒ same operation gate. Without this a
-  // media write issued while another caller's transaction is open joins that
-  // transaction and is silently lost when it rolls back. Cleanup now performs
-  // its conditional DB deletion inline (rather than recursively calling the
-  // wrapped `delete`), so it can safely hold the gate for its complete sweep.
+  // media read or write issued while another caller's transaction is open
+  // either observes uncommitted writes that later roll back, or joins that
+  // transaction and vanishes on rollback. File I/O in `put`, `get`, and
+  // `openReadStream` stays outside the gate so large reads/uploads never stall
+  // other DB operations; only their DB statements wait for the gate.
   const gate = getConnectionWriteGate(sqlite);
-  const gatedRecord = gate.gateWrites(
-    { recordAsset },
-    new Set(["recordAsset"]),
-  ).recordAsset;
+  const gatedDb = gate.gateWrites(
+    {
+      recordAsset,
+      lookupPath: async (id: string) =>
+        select.get(id) as { path: string } | undefined,
+    },
+    new Set(["recordAsset", "lookupPath"]),
+  );
+  const orphanGraceMs = Math.max(0, options?.orphanFileGraceMs ?? 60_000);
+
+  const sweepOrphanMediaFiles = async (): Promise<void> => {
+    const cutoffMs = Date.now() - orphanGraceMs;
+    const level1 = await readdir(mediaRoot, { withFileTypes: true }).catch(
+      () => [],
+    );
+    for (const d1 of level1) {
+      if (!d1.isDirectory() || !/^[a-f0-9]{2}$/.test(d1.name)) continue;
+      const p1 = join(mediaRoot, d1.name);
+      const level2 = await readdir(p1, { withFileTypes: true }).catch(() => []);
+      for (const d2 of level2) {
+        if (!d2.isDirectory() || !/^[a-f0-9]{2}$/.test(d2.name)) continue;
+        const p2 = join(p1, d2.name);
+        const files = await readdir(p2, { withFileTypes: true }).catch(
+          () => [],
+        );
+        for (const file of files) {
+          if (!file.isFile()) continue;
+          const match = /^([a-f0-9]{64})\.bin$/.exec(file.name);
+          if (!match) continue;
+          const id = match[1]!;
+          if (select.get(id)) continue;
+          const full = join(p2, file.name);
+          const info = await stat(full).catch(() => null);
+          if (!info || info.mtimeMs > cutoffMs) continue;
+          // Re-check inside the held gate right before removing so a put that
+          // registered the row concurrently cannot lose its backing file.
+          if (select.get(id)) continue;
+          await rm(full, { force: true }).catch(() => {});
+        }
+      }
+    }
+  };
 
   const store: MediaStore = {
     // The file is written before the gate is taken, without blocking the
@@ -320,17 +360,40 @@ function initializeSqliteMediaStore(
       const cleanMeta = toMeta(meta);
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      const known = select.get(id) as { path: string } | undefined;
+      const known = await gatedDb.lookupPath(id);
+      let newlyPublishedPath: string | undefined;
       // A row vouches for its file; without one, a file left by an interrupted
       // earlier write is replaced from the caller's verified content as well.
-      if (!known) await publishFile(mediaPath(mediaRoot, id), bytes);
-      else if (!(await isReadable(filePath(known.path))))
+      if (!known) {
+        const target = mediaPath(mediaRoot, id);
+        await publishFile(target, bytes);
+        newlyPublishedPath = target;
+      } else if (!(await isReadable(filePath(known.path)))) {
         await publishFile(filePath(known.path), bytes);
-      return gatedRecord(bytes, id, mime, cleanMeta, initialRef);
+      }
+      try {
+        return await gatedDb.recordAsset(
+          bytes,
+          id,
+          mime,
+          cleanMeta,
+          initialRef,
+        );
+      } catch (error) {
+        if (newlyPublishedPath) {
+          const existsInDb = await gatedDb
+            .lookupPath(id)
+            .catch(() => undefined);
+          if (!existsInDb) {
+            await rm(newlyPublishedPath, { force: true }).catch(() => {});
+          }
+        }
+        throw error;
+      }
     },
 
     async get(ref) {
-      const row = select.get(ref.id) as { path: string } | undefined;
+      const row = await gatedDb.lookupPath(ref.id);
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
       return new Uint8Array(await readFile(filePath(row.path)));
     },
@@ -472,6 +535,7 @@ function initializeSqliteMediaStore(
           if (path === null) continue;
           deletedIds.push(id);
         }
+        await sweepOrphanMediaFiles();
         return finalizeMediaCleanupResult(
           result,
           inventory,
@@ -483,7 +547,7 @@ function initializeSqliteMediaStore(
     },
 
     async openReadStream(ref) {
-      const row = select.get(ref.id) as { path: string } | undefined;
+      const row = await gatedDb.lookupPath(ref.id);
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
       // Node 22+ exposes Readable.toWeb; Covel's engines field requires Node ≥ 22.
       const nodeStream = createReadStream(filePath(row.path));
@@ -495,7 +559,19 @@ function initializeSqliteMediaStore(
     },
   };
 
-  return { ...gate.gateWrites(store, MEDIA_WRITE_METHODS), put: store.put };
+  // Gate every DB-touching read and write method on the shared connection
+  // (matching SqliteStore), while `put`, `get`, and `openReadStream` gate only
+  // their DB statements via `gatedDb` to keep disk I/O off the write gate.
+  const gatedMethods = new Set(
+    Object.keys(store).filter(
+      (name) =>
+        name !== "put" &&
+        name !== "get" &&
+        name !== "openReadStream" &&
+        name !== "close",
+    ),
+  );
+  return gate.gateWrites(store, gatedMethods);
 }
 
 async function isReadable(path: string): Promise<boolean> {

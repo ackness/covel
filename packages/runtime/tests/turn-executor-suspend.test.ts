@@ -1786,4 +1786,78 @@ describe("resumeRuntimePipeline", () => {
     expect(result.status).toBe("failed");
     expect(result.error).toMatch(/Runtime not found/);
   });
+
+  it("preserves pre-suspension toolCalls and emittedEvents across function suspend and resume", async () => {
+    mockToolExecutor.setToolResult("emit-cue", {
+      toolCallId: "tc-emit-cue",
+      name: "emit-cue",
+      result: "emitted:before-suspend",
+      parsedResult: { tag: "before-suspend" },
+      success: true,
+      emittedEvents: [
+        { topic: "cue.emitted", data: { tag: "before-suspend" } },
+      ],
+    });
+    const manifest: RuntimeManifest = {
+      ...makeFunctionManifest(),
+      tools: { plugin: ["emit-cue"] },
+    };
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "",
+      handler: async (ctx) => {
+        if (!ctx.resumedFromSuspensionId) {
+          await ctx.tools!.call("emit-cue", { tag: "before-suspend" });
+          return {
+            outcome: "suspended",
+            reason: "waiting for input",
+            resumeSchema: { type: "object" },
+          };
+        }
+        return {
+          outcome: "success",
+          value: { resumed: true },
+        };
+      },
+    };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm: mockLLM,
+      toolExecutor: mockToolExecutor,
+      store,
+      eventBus,
+    };
+
+    const turnResult = await runTurnPipeline(
+      makeTurnInput({ sessionId: "sess-1", turnId: "turn-m19" }),
+      [manifest],
+      deps,
+    );
+    const suspensions = collectExecutionSuspensions(turnResult);
+    expect(suspensions).toHaveLength(1);
+    const suspension = suspensions[0]!;
+    expect(suspension.pendingContinuation.toolCallsSoFar).toHaveLength(1);
+    expect(
+      (
+        suspension.pendingContinuation.toolCallsSoFar[0] as
+          { toolName?: string } | undefined
+      )?.toolName,
+    ).toBe("emit-cue");
+    expect(suspension.pendingContinuation.emittedEvents).toEqual([
+      { topic: "cue.emitted", data: { tag: "before-suspend" } },
+    ]);
+
+    const resumed = await resumeRuntimePipeline(
+      suspension,
+      { ok: true },
+      manifest,
+      deps,
+    );
+    expect(resumed.status).toBe("success");
+    expect(resumed.toolCalls.map((t) => t.toolName)).toEqual(["emit-cue"]);
+    expect(resumed.effects?.events).toContainEqual({
+      topic: "cue.emitted",
+      data: { tag: "before-suspend" },
+    });
+  });
 });

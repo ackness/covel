@@ -98,6 +98,12 @@ export {
   canDescribeEventPayload,
 } from "./builtin/emit-event.js";
 export type { EventDirectoryLike } from "./builtin/emit-event.js";
+export { createEventDirectory } from "./event-directory.js";
+export type {
+  EventDirectory,
+  EventDirectoryDeps,
+  EventDirectoryManifestLike,
+} from "./event-directory.js";
 export { createDefaultToolRegistry } from "./builtin/default-tools.js";
 export type { DefaultToolRegistryDeps } from "./builtin/default-tools.js";
 

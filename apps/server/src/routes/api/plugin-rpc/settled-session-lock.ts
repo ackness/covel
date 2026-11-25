@@ -153,11 +153,14 @@ export function createSettledSessionLock(args: {
       // to its full settle wait, so only runnable jobs are waited for.
       const runnable = (jobs: readonly SettlingJob[]) =>
         jobs.filter((job) => job.runnable !== false);
+      const observedJobIds = new Set<string>();
       let pollDelay = pollIntervalMs;
       for (;;) {
         options.signal?.throwIfAborted();
-        const pending = runnable(await args.listPendingJobs(sessionId));
+        const beforeLock = await args.listPendingJobs(sessionId);
         options.signal?.throwIfAborted();
+        for (const job of beforeLock) observedJobIds.add(job.jobId);
+        const pending = runnable(beforeLock);
         constrainDeadline(pending);
         if (pending.length > 0) {
           await options.provideCredentials?.(pending);
@@ -179,9 +182,32 @@ export function createSettledSessionLock(args: {
           options.signal,
           async () => {
             options.signal?.throwIfAborted();
-            const listed = await args.listPendingJobs(sessionId);
+            let listed = await args.listPendingJobs(sessionId);
             options.signal?.throwIfAborted();
-            const live = runnable(listed);
+            let live = runnable(listed);
+            // A credential-less settling job may have been enqueued while this
+            // request waited for the lock. Offer this request's credentials
+            // once for those newly arrived jobs before marking them skipped.
+            const newlyArrivedUnrunnable = listed.filter(
+              (job) => job.runnable === false && !observedJobIds.has(job.jobId),
+            );
+            if (
+              newlyArrivedUnrunnable.length > 0 &&
+              options.provideCredentials &&
+              performance.now() < budget.deadline
+            ) {
+              for (const job of newlyArrivedUnrunnable) {
+                observedJobIds.add(job.jobId);
+              }
+              await options.provideCredentials(newlyArrivedUnrunnable);
+              options.signal?.throwIfAborted();
+              listed = await args.listPendingJobs(sessionId);
+              options.signal?.throwIfAborted();
+              live = runnable(listed);
+              if (live.length > 0) {
+                args.wake?.(sessionId);
+              }
+            }
             constrainDeadline(live);
             if (live.length > 0 && performance.now() < budget.deadline)
               return RETRY;

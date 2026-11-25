@@ -41,17 +41,3 @@ export const TRANSACTIONAL_WRITE_METHODS: ReadonlySet<string> = new Set(
       !VECTOR_WRITE_METHODS.has(name) && name !== "resolveSessionVectorTarget",
   ),
 );
-
-/**
- * Mutators of the SQLite mirror media store — same connection, same gate.
- */
-export const MEDIA_WRITE_METHODS: ReadonlySet<string> = new Set([
-  "put",
-  "delete",
-  "recordOwnership",
-  "addRef",
-  "claimAssets",
-  "removeRef",
-  "releaseSession",
-  "cleanup",
-]);

@@ -16,7 +16,7 @@ import {
   type WorldModelView,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 
 import type { ReadRecorder } from "../read-dependencies.js";
 import {

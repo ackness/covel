@@ -10,8 +10,11 @@ import {
 } from "@/stores/plugin-data-store.js";
 
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: { gameState: { characters: [] }, session: { id: "before-story" } },
+  useSessionStructure: () => ({
+    gameState: { characters: [] },
+    session: { id: "before-story" },
+    world: null,
+    sessionPlugins: [],
   }),
 }));
 vi.mock("react-force-graph-2d", () => ({ default: () => null }));

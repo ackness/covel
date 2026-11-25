@@ -3674,4 +3674,92 @@ describe("syncWorldDataForSession dimensionOnly and deferMediaFinalize", () => {
       await rm(worldsDir, { recursive: true, force: true });
     }
   });
+
+  it("prefetches session characters and lorebook once across bulk imports and syncs", async () => {
+    const characters = Array.from({ length: 12 }, (_, idx) => ({
+      id: `npc-${idx}`,
+      name: `Traveler ${idx}`,
+      type: "npc",
+      description: `Member ${idx}`,
+    }));
+    const lorebook = Array.from({ length: 12 }, (_, idx) => ({
+      id: `lore-${idx}`,
+      keys: [`key-${idx}`],
+      content: `Fact ${idx}`,
+      strategy: "selective",
+    }));
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `sources:
+  characters:
+    kind: json
+    path: data/characters.json
+    to: characters
+    key: id
+  lorebook:
+    kind: json
+    path: data/lorebook.json
+    to: lorebook
+    key: id
+`,
+      files: {
+        "data/characters.json": JSON.stringify(characters),
+        "data/lorebook.json": JSON.stringify(lorebook),
+      },
+    });
+    const store = await makeStore([]);
+    const listCharsSpy = vi.spyOn(store, "listCharacters");
+    const listLoreSpy = vi.spyOn(store, "listSessionLorebookEntries");
+    const preflight = {
+      activePlugins: [],
+      registry: registry({}),
+    };
+    try {
+      const synced = await syncWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        dryRun: false,
+        preflight,
+      });
+      expect(synced.upserted).toBe(24);
+      // Bounded constant reads (pre-scan + transaction cache), never O(N) per row.
+      expect(listCharsSpy.mock.calls.length).toBeLessThanOrEqual(4);
+      expect(listLoreSpy.mock.calls.length).toBeLessThanOrEqual(4);
+
+      listCharsSpy.mockClear();
+      listLoreSpy.mockClear();
+
+      // Re-sync with modified entries exercises CAS reads inside ledger checks.
+      await writeFile(
+        path.join(worldsDir, worldId, "data/characters.json"),
+        JSON.stringify(
+          characters.map((c) => ({ ...c, description: `${c.description} v2` })),
+        ),
+      );
+      await writeFile(
+        path.join(worldsDir, worldId, "data/lorebook.json"),
+        JSON.stringify(
+          lorebook.map((l) => ({ ...l, content: `${l.content} v2` })),
+        ),
+      );
+      const updated = await syncWorldDataForSession({
+        store,
+        sessionId: "sess-1",
+        worldId,
+        worldsDirs: [worldsDir],
+        now: NOW,
+        dryRun: false,
+        preflight,
+      });
+      expect(updated.upserted).toBe(24);
+      expect(listCharsSpy.mock.calls.length).toBeLessThanOrEqual(4);
+      expect(listLoreSpy.mock.calls.length).toBeLessThanOrEqual(4);
+    } finally {
+      await store.close();
+      await rm(worldsDir, { recursive: true, force: true });
+    }
+  });
 });
+

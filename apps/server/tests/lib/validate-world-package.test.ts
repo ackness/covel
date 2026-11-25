@@ -1191,4 +1191,38 @@ describe("world validation catalogue ownership", () => {
       "catalogue or pluginsDirs",
     );
   });
+
+  it("validates a dot-prefixed world directory without reading same-id siblings", async () => {
+    const parent = await mkdtemp(
+      path.join(tmpdir(), "covel-world-root-isolation-"),
+    );
+    try {
+      const sibling = path.join(parent, "a-sibling");
+      const target = path.join(parent, ".hidden-world");
+      await mkdir(sibling, { recursive: true });
+      await mkdir(target, { recursive: true });
+      // Sibling has the same world id but an invalid lorebook entry that must
+      // never bleed into validating `target`.
+      await writeFile(path.join(sibling, "world.yaml"), MANIFEST);
+      await writeFile(path.join(sibling, "WORLD.md"), "Sibling lore.");
+      await mkdir(path.join(sibling, "data"), { recursive: true });
+      await writeFile(
+        path.join(sibling, "data/lorebook.yaml"),
+        "- id: bad-sibling\n  content: Missing keys\n  strategy: selective\n",
+      );
+
+      await writeFile(path.join(target, "world.yaml"), MANIFEST);
+      await writeFile(path.join(target, "WORLD.md"), "Target lore.");
+
+      const result = await validateWorldPackage({
+        worldDir: target,
+        pluginsDirs,
+      });
+      expect(result.worldId).toBe("sample-world");
+      expect(result.diagnostics).toEqual([]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
 });
+

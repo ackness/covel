@@ -108,10 +108,14 @@ describe("finalizeActionExecution — stale stream", () => {
 
     finalizeActionExecution(dispatch, "sess-a", { current: "sess-a" });
 
-    expect(dispatch.mock.calls.map(([a]) => a.type)).toEqual([
-      "SET_EXECUTING",
-      "FINALIZE_HANGING_RUNTIMES",
-      "CLEAR_OUTPUT_DRAFTS",
+    expect(dispatch.mock.calls.map(([a]) => a)).toEqual([
+      { type: "SET_EXECUTING", value: false },
+      { type: "SET_ADVANCE", advance: null },
+      {
+        type: "FINALIZE_HANGING_RUNTIMES",
+        reason: "__i18n:session.reasonConnectionClosed__",
+      },
+      { type: "CLEAR_OUTPUT_DRAFTS" },
     ]);
   });
 });

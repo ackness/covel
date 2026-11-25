@@ -1668,4 +1668,49 @@ describe("writeWorldPackage replace", () => {
     ).rejects.toThrow("does not exist");
     expect(await readdir(tmp)).toEqual([]);
   });
+
+  it("rejects manifests missing id in createWorld and writeWorldPackage", async () => {
+    const manifestWithoutId = `name: 无编号世界
+version: 0.1.0
+summary: 缺少 id 的世界。
+defaultLocale: zh-CN
+`;
+    const llmCalls: number[] = [];
+    const result = await createWorld({
+      concept: "Missing id test",
+      llm: {
+        async generate() {
+          llmCalls.push(1);
+          const yaml = llmCalls.length === 1 ? manifestWithoutId : WORLD_YAML;
+          return {
+            content: `===WORLD_YAML===\n${yaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_DIMENSIONS_YAML}\n===END===`,
+            toolCalls: [],
+            finishReason: "stop",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          };
+        },
+      },
+    });
+    expect(result.success).toBe(true);
+    expect(llmCalls.length).toBeGreaterThanOrEqual(2);
+    if (!result.success) throw new Error(result.errors.join("; "));
+    expect(result.id).toBe("test-world");
+
+    await expect(
+      writeWorldPackage(tmp, {
+        ...result,
+        id: "",
+        manifest: { ...result.manifest, id: "" },
+      }),
+    ).rejects.toThrow("Cannot export an invalid generated world");
+    await expect(
+      writeWorldPackage(tmp, {
+        ...result,
+        manifest: { ...result.manifest, id: undefined },
+      }),
+    ).rejects.toThrow("Cannot export an invalid generated world");
+    expect(await readdir(tmp)).toEqual([]);
+  });
 });
+
+

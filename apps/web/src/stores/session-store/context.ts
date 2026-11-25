@@ -94,18 +94,40 @@ export interface SessionContextValue extends SessionActions {
 }
 
 /**
- * State and actions are split across two contexts so that components which
- * only call actions (e.g. interactive block handlers) do not re-render on
- * every progress state change. `useSession()` reads both contexts; prefer `useSessionActions()` in action-only
- * consumers to avoid the high-frequency state subscription.
+ * Low-frequency structural slice of session state (session identity, world,
+ * active plugins, committed gameState). Changes only on session/plugin/commit
+ * transitions — never on per-token streaming `outputDrafts`, `executionSteps`,
+ * or `assetProgressByTurn` updates. Side panels and plugin surfaces subscribe
+ * here instead of `SessionStateContext` so streaming does not re-render them.
+ */
+export type SessionStructureState = Pick<
+  SessionState,
+  "session" | "world" | "sessionPlugins" | "gameState"
+>;
+
+/**
+ * State and actions are split across contexts so that action-only consumers
+ * (`useSessionActions`) and low-frequency structural consumers
+ * (`useSessionStructure`) do not re-render on every progress or token tick.
+ * `useSession()` reads both full state and actions; prefer narrower hooks
+ * whenever high-frequency streaming fields are not needed.
  */
 export const SessionStateContext = createContext<SessionState | null>(null);
+export const SessionStructureContext =
+  createContext<SessionStructureState | null>(null);
 export const SessionActionsContext = createContext<SessionActions | null>(null);
 
 function useSessionState(): SessionState {
   const ctx = useContext(SessionStateContext);
   if (!ctx)
     throw new Error("useSessionState must be used within SessionProvider");
+  return ctx;
+}
+
+export function useSessionStructure(): SessionStructureState {
+  const ctx = useContext(SessionStructureContext);
+  if (!ctx)
+    throw new Error("useSessionStructure must be used within SessionProvider");
   return ctx;
 }
 
@@ -121,3 +143,4 @@ export function useSession(): SessionContextValue {
   const actions = useSessionActions();
   return { state, ...actions };
 }
+

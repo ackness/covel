@@ -7,8 +7,9 @@ vi.mock("@/settings/store", () => ({
     get: () => [{ baseUrl: "http://127.0.0.1:3425/v1" }],
   }),
 }));
-vi.mock("@/services/api/health.js", () => ({
+vi.mock("@/services/api/server-capabilities.js", () => ({
   isModelRelaySupported: () => state.supported,
+  onModelRelaySupportedChange: () => () => {},
 }));
 
 beforeEach(() => {

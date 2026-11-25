@@ -67,7 +67,7 @@ import {
   withoutPictureAttachments,
 } from "./picture-attachments.js";
 import { handleSuspension } from "../resume/suspend-resume-handler.js";
-import { markPrivateDelegation } from "./subagent-delegate.js";
+import { markPrivateDelegation } from "./subagent-delegate-helpers.js";
 import { createCorrectionPolicy } from "./correction-policy.js";
 import { guardAgainstToolLoop } from "./loop-detection.js";
 import {

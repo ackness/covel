@@ -110,39 +110,44 @@ export async function createPgStore(
 
   // The pgvector extension is enabled lazily by pg-vector.ts on first vector
   // operation, so non-vector PG deployments can boot on plain postgres.
-  if (options?.freshSchema) {
-    // Run the destructive DROP+CREATE on a single dedicated connection so the
-    // two statements cannot land on different pool connections and race the
-    // system catalog — concurrent/stale-catalog DROP+CREATE otherwise trips
-    // `pg_type_typname_nsp_index` duplicate-key under rapid schema recreation
-    // (the test harness rebuilds the schema once per test). Production boots
-    // with `freshSchema: false` and is unaffected.
-    const ddl = postgres(databaseUrl, { max: 1 });
-    try {
-      // Also drop the dynamically-created per-model vector tables
-      // (`vec_mem_m{id}`, created lazily by pg-vector.ts). They are NOT in
-      // ALL_TABLE_NAMES, so DROP_ALL_SQL alone would leave them behind — and
-      // since `vector_models.id` is a SERIAL that resets to 1 after the static
-      // schema is recreated, a fresh store would resolve back to `vec_mem_m1`
-      // and find stale rows. A fresh PG store must start empty, exactly like a
-      // fresh MemoryStore/SqliteStore — backend behaviour has to be identical.
-      const vecTables = await ddl<{ tablename: string }[]>`
-        SELECT tablename FROM pg_tables
-        WHERE schemaname = 'public' AND tablename LIKE 'vec_mem_%'
-      `;
-      for (const { tablename } of vecTables) {
-        await ddl.unsafe(`DROP TABLE IF EXISTS ${tablename} CASCADE`);
+  try {
+    if (options?.freshSchema) {
+      // Run the destructive DROP+CREATE on a single dedicated connection so the
+      // two statements cannot land on different pool connections and race the
+      // system catalog — concurrent/stale-catalog DROP+CREATE otherwise trips
+      // `pg_type_typname_nsp_index` duplicate-key under rapid schema recreation
+      // (the test harness rebuilds the schema once per test). Production boots
+      // with `freshSchema: false` and is unaffected.
+      const ddl = postgres(databaseUrl, { max: 1 });
+      try {
+        // Also drop the dynamically-created per-model vector tables
+        // (`vec_mem_m{id}`, created lazily by pg-vector.ts). They are NOT in
+        // ALL_TABLE_NAMES, so DROP_ALL_SQL alone would leave them behind — and
+        // since `vector_models.id` is a SERIAL that resets to 1 after the static
+        // schema is recreated, a fresh store would resolve back to `vec_mem_m1`
+        // and find stale rows. A fresh PG store must start empty, exactly like a
+        // fresh MemoryStore/SqliteStore — backend behaviour has to be identical.
+        const vecTables = await ddl<{ tablename: string }[]>`
+          SELECT tablename FROM pg_tables
+          WHERE schemaname = 'public' AND tablename LIKE 'vec_mem_%'
+        `;
+        for (const { tablename } of vecTables) {
+          await ddl.unsafe(`DROP TABLE IF EXISTS ${tablename} CASCADE`);
+        }
+        await ddl.unsafe(DROP_ALL_SQL);
+        await ddl.unsafe(`DROP TABLE IF EXISTS ${SCHEMA_META_TABLE}`);
+        await bootPgSchema(ddl);
+      } finally {
+        await ddl.end();
       }
-      await ddl.unsafe(DROP_ALL_SQL);
-      await ddl.unsafe(`DROP TABLE IF EXISTS ${SCHEMA_META_TABLE}`);
-      await bootPgSchema(ddl);
-    } finally {
-      await ddl.end();
+    } else {
+      // Checks the recorded schema version before any DDL and serialises the
+      // DDL of servers that start together (see pg-schema-boot.ts).
+      await bootPgSchema(client);
     }
-  } else {
-    // Checks the recorded schema version before any DDL and serialises the
-    // DDL of servers that start together (see pg-schema-boot.ts).
-    await bootPgSchema(client);
+  } catch (error) {
+    await client.end().catch(() => {});
+    throw error;
   }
 
   // Root data methods always run on the pool. `withTransaction` never touches

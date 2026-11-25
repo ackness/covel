@@ -348,8 +348,9 @@ export async function restoreSessionState({
       recovery: {
         sessionId: targetSessionId,
         status: null,
-        hydrating: true,
-        checking: true,
+        hydrating: false,
+        checking: false,
+        stalled: true,
         error: error instanceof Error ? error.message : String(error),
       },
     });

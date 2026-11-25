@@ -57,7 +57,8 @@ export interface SuspensionAbandonDeps {
   readonly eventBus?: EventBus;
   readonly worker?: Pick<RuntimeJobWorker, "wake">;
   /** Hands request-scoped provider services to the jobs this releases. */
-  readonly credentials?: CommitEnqueueContext["credentials"];
+  readonly credentials?: CommitEnqueueContext["credentials"] &
+    Partial<Pick<JobCredentialHandoff, "discard">>;
   /** Player settings sent with the request, merged over the world's. */
   readonly playerSettings?: TurnInput["userSettings"];
 }
@@ -96,6 +97,8 @@ export interface HeldJobsRelease {
   ) => Promise<void>;
   /** Call after the transaction committed. */
   readonly publish: () => Promise<readonly QueuedRuntimeJob[]>;
+  /** Discard any staged request credentials when the transaction rolls back. */
+  readonly discard: () => void;
 }
 
 export function heldJobsRelease(
@@ -140,6 +143,9 @@ export function heldJobsRelease(
       );
       return queued;
     },
+    discard: () => {
+      deps.credentials?.discard?.();
+    },
   };
 }
 
@@ -174,10 +180,15 @@ export async function abandonSuspension(
   const plan = await planSuspensionAbandon(store, suspension);
   const release = heldJobsRelease(deps, suspension.sessionId);
   const now = new Date().toISOString();
-  await store.withTransaction(async (tx) => {
-    await applySuspensionAbandonTx(tx, plan, now);
-    await release.enqueueInTx(tx, plan.releasedRuntimeJobs);
-  });
+  try {
+    await store.withTransaction(async (tx) => {
+      await applySuspensionAbandonTx(tx, plan, now);
+      await release.enqueueInTx(tx, plan.releasedRuntimeJobs);
+    });
+  } catch (error) {
+    release.discard();
+    throw error;
+  }
   await settleAbandonedSuspensionJobs(
     { store, ...(eventBus ? { eventBus } : {}) },
     suspension,

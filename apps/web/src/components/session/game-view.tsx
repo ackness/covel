@@ -581,6 +581,7 @@ export function GameView({
       <FloatingWindowHost
         scope="session"
         entries={sessionPlatformSpecs.window}
+        sessionId={session.id}
       />
       <SettingsDialog
         open={settings.open}

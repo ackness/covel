@@ -1,4 +1,4 @@
-import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../../trust/plugin-admission.js";
 import { pluginFaultHost } from "../plugin-faults.js";
 import { readLockedSession } from "./locked-mutation.js";
 import {
@@ -40,7 +40,7 @@ import {
   SESSION_DELETION_PENDING_KEY,
 } from "./session-guard.js";
 import type { SessionRouteEnv } from "./route-env.js";
-import { requireAccess } from "../../../host-profile.js";
+import { allowsAccess, requireAccess } from "../../../host-profile.js";
 
 type DimensionSession = {
   readonly activePlugins: readonly string[];
@@ -159,19 +159,24 @@ export function registerSessionPluginRoutes(
       );
     }
     await c.get("trustedSources")?.verifyAll();
+    const allowCommunityCode = allowsAccess(c, "plugin.community");
     const view = buildSessionPluginView(guard.session, pluginRegistry, {
       paused: c.get("pluginFaults")?.latched(id),
       isEntryPublished: c.get("isPluginEntryPublished"),
       trustedSources: c.get("trustedSources"),
       permissionService: c.get("permissionService"),
       isServerCodeApproved: (pluginId) =>
+        allowCommunityCode &&
         hasServerCodeGrant(c.get("rpcApprovalGate"), guard.session, pluginId),
       authorized: authorizedSessionPluginIds(
         pluginRegistry,
         c.get("rpcApprovalGate"),
         guard.session,
         c.get("trustedSources"),
-        { permissionService: c.get("permissionService") },
+        {
+          permissionService: c.get("permissionService"),
+          allowCommunityCode,
+        },
       ),
     });
     return c.json({
@@ -213,6 +218,7 @@ export function registerSessionPluginRoutes(
         undefined,
         c.get("eventBus"),
       );
+      const allowCommunityCode = allowsAccess(c, "plugin.community");
       const view = buildSessionPluginView(session, registry, {
         paused: faults.latched(id),
         authorized: authorizedSessionPluginIds(
@@ -220,11 +226,15 @@ export function registerSessionPluginRoutes(
           c.get("rpcApprovalGate"),
           session,
           c.get("trustedSources"),
-          { permissionService: c.get("permissionService") },
+          {
+            permissionService: c.get("permissionService"),
+            allowCommunityCode,
+          },
         ),
         trustedSources: c.get("trustedSources"),
         permissionService: c.get("permissionService"),
         isServerCodeApproved: (candidate) =>
+          allowCommunityCode &&
           hasServerCodeGrant(c.get("rpcApprovalGate"), session, candidate),
         isEntryPublished: c.get("isPluginEntryPublished"),
       });
@@ -242,6 +252,22 @@ export function registerSessionPluginRoutes(
     const pluginId = c.req.param("pluginId");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
+    if (guard.session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+      return c.json(
+        errorBody("Session deletion is in progress; retry DELETE", {
+          code: "session_deleting",
+        }),
+        409,
+      );
+    }
+    if (guard.session.status !== "active") {
+      return c.json(
+        errorBody(`Session is ${guard.session.status}; mutation refused`, {
+          code: "session_not_active",
+        }),
+        409,
+      );
+    }
     const pluginEntry = pluginRegistry.get(pluginId);
     if (!pluginEntry) {
       return c.json(
@@ -252,17 +278,20 @@ export function registerSessionPluginRoutes(
       );
     }
 
-    const declarative = await refreshDeclarativeEligibility(
-      c.get("trustedSources"),
-      pluginId,
-    );
     const trust = getPluginTrustInfo(pluginId, pluginEntry.source);
-    if (trust.source === "community" && declarative) {
-      const declarativeDenied = c
-        .get("permissionService")
-        ?.requireCapabilityForPlugin(c, "plugin.declarative", pluginId);
-      if (declarativeDenied) return declarativeDenied;
+    const declarativeAdmission =
+      trust.source === "community"
+        ? await evaluateDeclarativeRouteAdmission(
+            c,
+            c.get("trustedSources"),
+            c.get("permissionService"),
+            pluginId,
+          )
+        : { admitted: false as const };
+    if (!declarativeAdmission.admitted && declarativeAdmission.denied) {
+      return declarativeAdmission.denied;
     }
+    const declarative = declarativeAdmission.admitted;
     if (trust.source === "community" && !declarative) {
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
@@ -312,13 +341,21 @@ export function registerSessionPluginRoutes(
       }
 
       await c.get("trustedSources")?.verifyAll();
-      if (
-        trust.source === "community" &&
-        !c.get("trustedSources")?.isDeclarative(pluginId)
-      ) {
-        const operatorDenied = requireAccess(c, "plugin.community");
-        if (operatorDenied) return operatorDenied;
+      if (trust.source === "community") {
+        const lockedDeclarative = await evaluateDeclarativeRouteAdmission(
+          c,
+          c.get("trustedSources"),
+          c.get("permissionService"),
+          pluginId,
+          { refresh: false },
+        );
+        if (!lockedDeclarative.admitted) {
+          if (lockedDeclarative.denied) return lockedDeclarative.denied;
+          const operatorDenied = requireAccess(c, "plugin.community");
+          if (operatorDenied) return operatorDenied;
+        }
       }
+      const allowCommunityCode = allowsAccess(c, "plugin.community");
       const selection = readSessionPluginSelection(session);
       const requested = [
         pluginId,
@@ -346,7 +383,10 @@ export function registerSessionPluginRoutes(
             c.get("rpcApprovalGate"),
             session,
             c.get("trustedSources"),
-            { permissionService: c.get("permissionService") },
+            {
+              permissionService: c.get("permissionService"),
+              allowCommunityCode,
+            },
           ),
         },
       );
@@ -448,6 +488,7 @@ export function registerSessionPluginRoutes(
             activePlugins: active,
             registry: pluginRegistry,
             canExecuteProjection: (projectionPluginId: string) =>
+              allowCommunityCode &&
               hasServerCodeGrant(
                 c.get("rpcApprovalGate"),
                 session,
@@ -519,7 +560,10 @@ export function registerSessionPluginRoutes(
             c.get("rpcApprovalGate"),
             session,
             c.get("trustedSources"),
-            { permissionService: c.get("permissionService") },
+            {
+              permissionService: c.get("permissionService"),
+              allowCommunityCode: allowsAccess(c, "plugin.community"),
+            },
           ),
         },
       );

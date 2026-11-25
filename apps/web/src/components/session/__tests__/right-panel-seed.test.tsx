@@ -28,8 +28,11 @@ const context = vi.hoisted(() => ({ plugins: [] as SessionPlugin[] }));
 vi.mock("@/services/api.js", () => api);
 vi.mock("@/stores/session-store.js", () => ({
   useSessionActions: () => ({ upsertInteractionDraft: () => {} }),
-  useSession: () => ({
-    state: { sessionPlugins: context.plugins, gameState: {} },
+  useSessionStructure: () => ({
+    session: null,
+    world: null,
+    sessionPlugins: context.plugins,
+    gameState: {},
   }),
 }));
 vi.mock("../world-document-panel.js", () => ({

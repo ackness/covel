@@ -10,6 +10,7 @@ import type {
   TurnDigest,
   TurnInput,
 } from "@covel/shared";
+import { deepFreeze } from "../utils/deep-freeze.js";
 
 /** Construct once at the source DAG boundary; detached workers reuse this value. */
 export function buildTurnDigest(
@@ -86,9 +87,5 @@ export function snapshotPlayerInput(
 }
 
 export function freezeSnapshot<T>(value: T): T {
-  if (value !== null && typeof value === "object") {
-    for (const child of Object.values(value)) freezeSnapshot(child);
-    Object.freeze(value);
-  }
-  return value;
+  return deepFreeze(value);
 }

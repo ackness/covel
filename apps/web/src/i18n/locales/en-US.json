@@ -1747,6 +1747,7 @@
           "description": "Reserved capability for allowlisted local subprocess bridges such as stdio tools."
         }
       },
+      "reservedBadge": "Reserved",
       "pluginsTitle": "Per-plugin grants (L3)",
       "pluginsDescription": "Persistent grants bind to each community package's content digest and capability snapshot. Explicit denials override trusted-source auto-approval and survive updates until cleared.",
       "pluginsOperatorRequired": "Enter an operator token above to inspect per-plugin capability audits and persistent grants on this host.",
@@ -3039,12 +3040,15 @@
     "openExternalFailed": "Could not open external URL",
     "webviewNotAllowed": "Webviews are not permitted in this slot.",
     "flowLoading": "Starting configuration flow...",
+    "flowDialogDescription": "Plugin configuration flow",
     "fieldRequired": "{{field}} is required",
+    "fieldInvalidNumber": "{{field}} must be a valid number",
     "flowSubmit": "Continue",
     "openInBrowser": "Open authorization page",
     "waitingCallback": "Waiting for authorization callback...",
     "pasteCallbackUrl": "Or paste the redirected callback URL",
     "codeCopied": "Code copied",
+    "copyFailed": "Could not copy to clipboard",
     "openVerificationPage": "Open verification page",
     "pollingAuthorization": "Waiting for authorization confirmation...",
     "importTooLarge": "Content exceeds {{maxBytes}} bytes",

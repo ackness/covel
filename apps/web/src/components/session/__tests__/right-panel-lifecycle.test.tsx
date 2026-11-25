@@ -24,8 +24,11 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/toast-channel.js", () => ({ emitToast: mocks.toast }));
 vi.mock("@/stores/session-store.js", () => ({
-  useSession: () => ({
-    state: { sessionPlugins: mocks.plugins, gameState: {} },
+  useSessionStructure: () => ({
+    session: null,
+    world: null,
+    sessionPlugins: mocks.plugins,
+    gameState: {},
   }),
   useSessionActions: () => ({
     upsertInteractionDraft: mocks.upsertInteractionDraft,

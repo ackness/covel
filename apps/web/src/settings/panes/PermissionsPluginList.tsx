@@ -26,7 +26,7 @@ interface PermissionsPluginListProps {
     pluginId: string,
     decisions: PluginGrantDecisions,
     expectedDigest?: string,
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   readonly onRevokeGrants: (pluginId: string) => Promise<void>;
 }
 
@@ -363,7 +363,9 @@ function PluginGrantCard({
                     plugin.pluginId,
                     nextDecisions,
                     plugin.contentDigest ?? undefined,
-                  ).then(() => onDangerChange(plugin.pluginId, false));
+                  ).then((saved) => {
+                    if (saved) onDangerChange(plugin.pluginId, false);
+                  });
                 }}
               >
                 {t("settings.permissions.grantServerCode", "Grant server code")}

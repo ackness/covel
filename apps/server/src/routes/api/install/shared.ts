@@ -184,7 +184,8 @@ export async function readAllEntries(
       const entries: ExtractedEntry[] = [];
       const paths = new Set<string>();
       let entryCount = 0;
-      let totalUncompressed = 0;
+      let declaredTotalUncompressed = 0;
+      let actualTotalUncompressed = 0;
       let settled = false;
 
       const finish = (fn: () => void) => {
@@ -197,14 +198,19 @@ export async function readAllEntries(
           zf.close();
           rejectFn(httpError(status, message));
         });
+      const ratioOf = (bytes: number) =>
+        buffer.length > 0 ? bytes / buffer.length : 0;
 
       // This reader only consumes the uploaded Buffer: parser failures are
       // invalid archive input, rather than filesystem or persistence failures.
       zf.on("error", (e) => fail(400, e.message));
       zf.on("end", () =>
         finish(() => {
-          const ratio =
-            buffer.length > 0 ? totalUncompressed / buffer.length : 0;
+          const effectiveTotal = Math.max(
+            declaredTotalUncompressed,
+            actualTotalUncompressed,
+          );
+          const ratio = ratioOf(effectiveTotal);
           if (ratio > LIMITS.maxExpansionRatio) {
             rejectFn(
               httpError(
@@ -265,11 +271,19 @@ export async function readAllEntries(
           });
           return;
         }
-        totalUncompressed += uncompressed;
-        if (totalUncompressed > LIMITS.maxUncompressedBytes) {
+        declaredTotalUncompressed += uncompressed;
+        if (declaredTotalUncompressed > LIMITS.maxUncompressedBytes) {
           fail(
             400,
             `zip uncompressed size exceeds ${LIMITS.maxUncompressedBytes} bytes`,
+          );
+          return;
+        }
+        const declaredRatio = ratioOf(declaredTotalUncompressed);
+        if (declaredRatio > LIMITS.maxExpansionRatio) {
+          fail(
+            400,
+            `zip expansion ratio ${declaredRatio.toFixed(1)}x exceeds limit ${LIMITS.maxExpansionRatio}x`,
           );
           return;
         }
@@ -285,10 +299,38 @@ export async function readAllEntries(
           const chunks: Buffer[] = [];
           let seen = 0;
           readStream.on("data", (chunk: Buffer) => {
+            if (settled) return;
+            const prevSeen = seen;
             seen += chunk.length;
-            if (seen > LIMITS.maxUncompressedBytes) {
+            actualTotalUncompressed += chunk.length;
+            // Charge any decompressed bytes exceeding the central-directory
+            // header so a spoofed `uncompressedSize` cannot evade the shared
+            // collection budget.
+            const excess = seen - Math.max(prevSeen, uncompressed);
+            if (excess > 0 && budget) {
+              try {
+                budget.consume(excess);
+              } catch (error) {
+                readStream.destroy();
+                finish(() => {
+                  zf.close();
+                  rejectFn(error);
+                });
+                return;
+              }
+            }
+            if (actualTotalUncompressed > LIMITS.maxUncompressedBytes) {
               readStream.destroy();
               fail(400, "entry exceeds size budget mid-stream");
+              return;
+            }
+            const actualRatio = ratioOf(actualTotalUncompressed);
+            if (actualRatio > LIMITS.maxExpansionRatio) {
+              readStream.destroy();
+              fail(
+                400,
+                `zip expansion ratio ${actualRatio.toFixed(1)}x exceeds limit ${LIMITS.maxExpansionRatio}x`,
+              );
               return;
             }
             chunks.push(chunk);

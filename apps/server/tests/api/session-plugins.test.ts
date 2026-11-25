@@ -30,7 +30,10 @@ import { type DataStore } from "@covel/store";
 import { createMemoryStore } from "@covel/store/memory";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
-import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
+import {
+  sessionApprovalScope,
+  SESSION_DELETION_PENDING_KEY,
+} from "../../src/routes/api/session/session-guard.js";
 import {
   resolveSessionPluginSet,
   runnablePluginIds,
@@ -1489,6 +1492,48 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         },
       );
       expect(res.status).toBe(404);
+    });
+
+    it("rejects ended and deletion-pending sessions before queuing approvals or loading community code", async () => {
+      await store.updateSession(SESSION_ID, { status: "ended" });
+      const endedSession = (await store.getSession(SESSION_ID))!;
+      const endedRes = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
+        { method: "PUT" },
+      );
+      expect(endedRes.status).toBe(409);
+      expect(await endedRes.json()).toMatchObject({
+        code: "session_not_active",
+      });
+      expect(
+        rpcApprovalGate.listPending(
+          SESSION_ID,
+          sessionApprovalScope(endedSession, "optional-plugin"),
+        ),
+      ).toEqual([]);
+
+      await store.updateSession(SESSION_ID, {
+        status: "active",
+        metadata: {
+          ...endedSession.metadata,
+          [SESSION_DELETION_PENDING_KEY]: "deleting-nonce",
+        },
+      });
+      const deletingSession = (await store.getSession(SESSION_ID))!;
+      const deletingRes = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
+        { method: "PUT" },
+      );
+      expect(deletingRes.status).toBe(409);
+      expect(await deletingRes.json()).toMatchObject({
+        code: "session_deleting",
+      });
+      expect(
+        rpcApprovalGate.listPending(
+          SESSION_ID,
+          sessionApprovalScope(deletingSession, "optional-plugin"),
+        ),
+      ).toEqual([]);
     });
   });
 });

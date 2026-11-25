@@ -94,3 +94,27 @@ it("serializes reloads and drains accepted work before releasing dependencies", 
   expect(write.mock.calls[1]?.[0]).toMatchObject(world(2));
   expect(fixtures.load).toHaveBeenCalledTimes(2);
 });
+
+it("handles FSWatcher error events cleanly without crashing the server", async () => {
+  const { EventEmitter } = await import("node:events");
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const emitter = new EventEmitter();
+  const close = vi.fn();
+  fixtures.watch.mockImplementation(() => Object.assign(emitter, { close }));
+  const watcher = createWorldFileWatcher(
+    path.resolve("fixture-worlds"),
+    {
+      getWorld: async () => null,
+      upsertWorld: vi.fn(),
+      listSessions: async () => [],
+    } as unknown as DataStore,
+    { emit: vi.fn() } as unknown as EventBus,
+    createInProcessSessionLock(),
+  );
+  watcher.start();
+  expect(() => emitter.emit("error", new Error("EPERM"))).not.toThrow();
+  expect(close).toHaveBeenCalledOnce();
+  expect(warnSpy).toHaveBeenCalled();
+  await watcher.stop();
+});

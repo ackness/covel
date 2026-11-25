@@ -1,4 +1,4 @@
-import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../../trust/plugin-admission.js";
 import {
   approvalVerdictResponse,
   hasServerCodeGrant,
@@ -88,15 +88,29 @@ export async function dispatchPluginEvent(
     );
   }
 
+  const bridgeDenied = c
+    .get("permissionService")
+    ?.requireCapabilityForPlugin(c, "session.bridgeWrite", body.pluginId);
+  if (bridgeDenied) return bridgeDenied;
+
   // Approval gate — same trust rule as the other kinds: trust comes from the
   // discovery source, and a community plugin needs the server-code grant
   // before a per-event grant.
   const entry = pluginRegistry.get(body.pluginId);
-  const declarative = await refreshDeclarativeEligibility(
-    c.get("trustedSources"),
-    body.pluginId,
-  );
   const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
+  const declAdmission =
+    trustInfo.source === "community"
+      ? await evaluateDeclarativeRouteAdmission(
+          c,
+          c.get("trustedSources"),
+          c.get("permissionService"),
+          body.pluginId,
+        )
+      : { admitted: false as const };
+  if (!declAdmission.admitted && declAdmission.denied) {
+    return declAdmission.denied;
+  }
+  const declarative = declAdmission.admitted;
   if (trustInfo.source === "community" && !declarative) {
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
@@ -108,25 +122,43 @@ export async function dispatchPluginEvent(
     trustInfo.source === "community" &&
     !declarative &&
     !hasServerCodeGrant(gate, session, body.pluginId);
-  const verdict = gate.evaluate({
+  const emitterAction = needsServerCodeGrant
+    ? COMMUNITY_SERVER_CODE_ACTION
+    : `event:${body.topic}`;
+  const emitterEvalInput = {
     sessionId,
     sessionScope: approvalScope,
     pluginId: body.pluginId,
-    action: needsServerCodeGrant
-      ? COMMUNITY_SERVER_CODE_ACTION
-      : `event:${body.topic}`,
+    action: emitterAction,
     payload: data,
     trustLevel: trustInfo.source,
     description: needsServerCodeGrant
       ? `Load server-side code for community plugin ${body.pluginId}`
       : `Emit event ${body.topic}`,
-  });
-  const verdictResponse = approvalVerdictResponse(c, verdict, {
-    message: (limit) =>
+  };
+  const queueFullVerdictOptions = {
+    message: (limit: number) =>
       `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
     code: "queue_full",
-  });
-  if (verdictResponse) return verdictResponse;
+  } as const;
+  if (
+    trustInfo.source === "community" &&
+    !gate.hasGrant(
+      sessionId,
+      body.pluginId,
+      emitterAction,
+      approvalScope,
+      data,
+    )
+  ) {
+    const verdict = gate.evaluate(emitterEvalInput);
+    const verdictResponse = approvalVerdictResponse(
+      c,
+      verdict,
+      queueFullVerdictOptions,
+    );
+    if (verdictResponse) return verdictResponse;
+  }
 
   const subscribers = activeRuntimes.filter(
     (runtime) =>
@@ -137,18 +169,23 @@ export async function dispatchPluginEvent(
     { readonly scope: string; readonly declarative: boolean }
   >();
   const checkedSubscriberRuntimes = new Set<string>();
+  const subscriberEvalInputs = new Map<
+    string,
+    Parameters<typeof gate.evaluate>[0]
+  >();
   for (const runtime of subscribers) {
     const source = getPluginTrustInfo(
       runtime.pluginId,
       pluginRegistry.get(runtime.pluginId)?.source,
     ).source;
     if (source !== "community") continue;
-    if (
-      await refreshDeclarativeEligibility(
-        c.get("trustedSources"),
-        runtime.pluginId,
-      )
-    ) {
+    const subDecl = await evaluateDeclarativeRouteAdmission(
+      c,
+      c.get("trustedSources"),
+      c.get("permissionService"),
+      runtime.pluginId,
+    );
+    if (subDecl.admitted) {
       checkedSubscriberApprovals.set(runtime.pluginId, {
         scope: sessionApprovalScope(session, runtime.pluginId),
         declarative: true,
@@ -156,6 +193,7 @@ export async function dispatchPluginEvent(
       checkedSubscriberRuntimes.add(runtime.name);
       continue;
     }
+    if (subDecl.denied) return subDecl.denied;
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);
@@ -165,29 +203,32 @@ export async function dispatchPluginEvent(
       session,
       runtime.pluginId,
     );
-    const subscriberVerdict = gate.evaluate({
+    const subscriberAction = needsServerCode
+      ? COMMUNITY_SERVER_CODE_ACTION
+      : `runtime:${runtime.name}`;
+    const evalInput = {
       sessionId,
       sessionScope: scope,
       pluginId: runtime.pluginId,
-      action: needsServerCode
-        ? COMMUNITY_SERVER_CODE_ACTION
-        : `runtime:${runtime.name}`,
+      action: subscriberAction,
       payload: data,
       trustLevel: source,
       description: needsServerCode
         ? `Load server-side code for community plugin ${runtime.pluginId}`
         : runtime.description,
-    });
-    const subscriberVerdictResponse = approvalVerdictResponse(
-      c,
-      subscriberVerdict,
-      {
-        message: (limit) =>
-          `approval queue is full (limit ${limit}); try again after resolving pending approvals`,
-        code: "queue_full",
-      },
-    );
-    if (subscriberVerdictResponse) return subscriberVerdictResponse;
+    };
+    if (
+      !gate.hasGrant(sessionId, runtime.pluginId, subscriberAction, scope, data)
+    ) {
+      const subscriberVerdict = gate.evaluate(evalInput);
+      const subscriberVerdictResponse = approvalVerdictResponse(
+        c,
+        subscriberVerdict,
+        queueFullVerdictOptions,
+      );
+      if (subscriberVerdictResponse) return subscriberVerdictResponse;
+    }
+    subscriberEvalInputs.set(runtime.name, evalInput);
     checkedSubscriberApprovals.set(runtime.pluginId, {
       scope,
       declarative: false,
@@ -198,6 +239,15 @@ export async function dispatchPluginEvent(
   // their origin.
   const eventId = crypto.randomUUID();
   if (subscribers.length === 0) {
+    if (trustInfo.source === "community") {
+      const finalVerdict = gate.evaluate(emitterEvalInput);
+      const finalVerdictResponse = approvalVerdictResponse(
+        c,
+        finalVerdict,
+        queueFullVerdictOptions,
+      );
+      if (finalVerdictResponse) return finalVerdictResponse;
+    }
     return c.json({
       status: "ok",
       eventId,
@@ -226,13 +276,13 @@ export async function dispatchPluginEvent(
       }
       if (
         trustInfo.source === "community" &&
-        !declarative &&
-        (!hasServerCodeGrant(gate, live, body.pluginId) ||
+        ((!declarative && !hasServerCodeGrant(gate, live, body.pluginId)) ||
           !gate.hasGrant(
             sessionId,
             body.pluginId,
             `event:${body.topic}`,
             approvalScope,
+            data,
           ))
       ) {
         throw new SessionApprovalScopeChangedError();
@@ -269,8 +319,25 @@ export async function dispatchPluginEvent(
             runtime.pluginId,
             `runtime:${runtime.name}`,
             liveScope,
+            data,
           )
         ) {
+          throw new SessionApprovalScopeChangedError();
+        }
+      }
+      // Consume one-time grants only after every live emitter and subscriber
+      // grant has been verified under sessionLock.
+      if (trustInfo.source === "community") {
+        const consumed = gate.evaluate(emitterEvalInput);
+        if (consumed.status !== "allow") {
+          throw new SessionApprovalScopeChangedError();
+        }
+      }
+      for (const runtime of liveSubscribers) {
+        const evalInput = subscriberEvalInputs.get(runtime.name);
+        if (!evalInput) continue;
+        const consumed = gate.evaluate(evalInput);
+        if (consumed.status !== "allow") {
           throw new SessionApprovalScopeChangedError();
         }
       }

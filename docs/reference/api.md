@@ -1305,7 +1305,7 @@ GitHub 插件安装和更新预览始终返回 `capabilities` 与 `trustedSource
 | `runtime-outputs`     | `?runtimeId=`、`?pluginId=`、`?since=`、`?limit=`   |
 | `interaction-records` | `?type=`、`?source=`、`?targetPluginId=`、`?limit=` |
 
-- `runtime-outputs` 列表按 `timestamp` 降序返回。
+- `runtime-outputs` 列表按 `timestamp` 降序返回；`?limit=` 上限为 500（超出时截断到 500）。
 - `full-prompt` 从 `turn_messages` 重建历史，只是尽力而为：不含 system prompt 和注入段。
 - runtime 声明了 `io.concealed` 时，前两个端点返回的记录里 `results` 是空数组，`metaData.toolCallList` 各项的 `input` / `output` 是 `null`。
 
@@ -1575,7 +1575,7 @@ fork 和社区插件的授权：
 `POST /api/media?sessionId=<id>`（上传图片）：
 
 - body 是文件的原始字节，`Content-Type` 是文件的 MIME。
-- 只接受 `image/*`，大小不超过 20MB。
+- 只接受 `image/*`，大小不超过 20MB（超出返回 `413` `limit_exceeded`）。
 - 字节必须以 PNG、JPEG、GIF、WebP、AVIF 或 BMP 的文件头开头，否则返回 400。
 - 入库的 MIME 取自文件头判定的类型，不取请求头。
 - 图片按内容寻址入库，并记下会话的所有权和引用。
@@ -4485,6 +4485,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - 不带 `id` 的消息每次都会得到新 ID，重复提交就会重复追加。
 - 整批写入在会话锁和一个存储事务内执行。任何一条新消息写入失败，整批回滚。
 - 会话必须是 `active` 状态。
+- 每批最多 1,000 条消息，单条 `content` 最长 200,000 字符，`id` 非空且最长 200 字符，`createdAt` 必须是合法的时间戳字符串；超出或格式不合法返回 `400`。
 - 限流：同一客户端对同一路径每分钟最多 60 次，超出返回 `429`（`code: "rate_limit_exceeded"`）。
 
 ### 插件数据（Plugin Data）

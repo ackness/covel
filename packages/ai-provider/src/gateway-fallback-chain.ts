@@ -286,6 +286,9 @@ function buildSourceProviderResolution(
     ...base,
     protocol: attempt.protocol,
     config: nextConfig,
+    ...(attempt.approvedInstanceOwner !== undefined
+      ? { approvedInstanceOwner: attempt.approvedInstanceOwner }
+      : {}),
     envKeyAllowed: false,
   };
 }

@@ -79,12 +79,13 @@ export async function createPinnedDispatcher(
  * validate-to-connect DNS-rebinding gap), keep-alive reuse stays cheap, and
  * a mocked `fetch` in tests never triggers real DNS.
  */
-export function createConnectPinnedDispatcher(): Agent {
+export function createConnectPinnedDispatcher(
+  trustedProviderPath = true,
+): Agent {
   return new Agent({
     connect: {
       lookup(hostname, options, callback) {
-        // Core provider path — the user's own configured baseUrl.
-        resolveAllowedAddresses(hostname, true).then(
+        resolveAllowedAddresses(hostname, trustedProviderPath).then(
           (addresses) => {
             if (options.all) {
               callback(null, [...addresses]);

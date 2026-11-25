@@ -476,4 +476,260 @@ describe("assess + evaluate end-to-end plugin lifecycle", () => {
     expect(store.dump("active_options")).toEqual({});
     expect(store.dump("claimed_rewards")["fork-choice:opt-a:ra"]).toBeDefined();
   });
+
+  it("writes __turnId on message surface records and keeps payload-event options hidden until revealed", async () => {
+    const spoiledEvent = {
+      id: "secret-visitor",
+      when: "The keeper mentions the midnight visitor.",
+      payload: "A hooded figure knocks at the lighthouse door.",
+      options: [
+        {
+          id: "open-door",
+          text: "Unbolt the door for the hooded visitor.",
+          payload: "The visitor steps inside.",
+        },
+      ],
+    };
+    const store = makeStore({
+      "_hidden.events": { [spoiledEvent.id]: spoiledEvent },
+    });
+    const runAgent = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      output: {
+        verdicts: [
+          {
+            key: "secret-visitor#0",
+            met: true,
+            confidence: "high",
+            evidence: "The keeper spoke of a midnight visitor.",
+          },
+        ],
+        matchedOptionId: null,
+      },
+    });
+
+    // Turn 1 audit: event is armed for next turn, NOT yet revealed -> options stay hidden.
+    const t1 = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-1",
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 1,
+      recursionDepth: 0,
+      playerMessage: "Who comes at midnight?",
+      world: { dimensions: {} },
+      inputs: {
+        narrative: {
+          value: [
+            {
+              kind: "narration",
+              text: "He whispers about a midnight visitor.",
+            },
+          ],
+        },
+        operations: { value: [] },
+      },
+      agents: { run: runAgent },
+      pluginData: store.pluginData,
+    });
+    expect(t1.value.armed).toEqual(["secret-visitor"]);
+    expect(t1.value.unlockedOptions).toEqual([]);
+    expect(store.dump("active_options")).toEqual({});
+
+    // Turn 2 pre-turn reveals the event, then Turn 2 audit unlocks its option with `__turnId`.
+    const t2Eval = await evaluateHandler({
+      sessionId: "s-1",
+      turnId: "t-2",
+      pluginId: "story-events",
+      runtimeId: "story-events/evaluate",
+      locale: "en-US",
+      logicalTurn: 2,
+      playerMessage: "I wait by the lamp.",
+      inputs: {},
+      pluginData: store.pluginData,
+    });
+    expect(t2Eval.value.cue?.eventId).toBe("secret-visitor");
+
+    const t2Assess = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-2",
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 2,
+      recursionDepth: 0,
+      playerMessage: "I wait by the lamp.",
+      world: { dimensions: {} },
+      inputs: {
+        narrative: {
+          value: [{ kind: "narration", text: "A knock echoes at the door." }],
+        },
+        operations: { value: [] },
+      },
+      agents: { run: runAgent },
+      pluginData: store.pluginData,
+    });
+    expect(t2Assess.value.unlockedOptions).toEqual(["open-door"]);
+    expect(store.dump("message")["t-2"]?.__turnId).toBe("t-2");
+    expect(store.dump("message")["t-2"]?.turnId).toBeUndefined();
+  });
+
+  it("preserves pending requireOutcome records when semanticJudge is disabled or fails, and verifies requireOutcome on pure-reward events", async () => {
+    const pureOutcomeEvent = {
+      id: "vault-prize",
+      when: { dimension: "location", equals: "vault" },
+      rewards: [
+        {
+          id: "emerald",
+          kind: "narrative",
+          text: "You pocket the harbor emerald.",
+          requireOutcome: true,
+        },
+      ],
+    };
+    const pendingEntry = {
+      rewardKey: "vault-prize::emerald",
+      eventId: "vault-prize",
+      rewardId: "emerald",
+      turn: 1,
+      turnId: "t-1",
+      sourceTurnId: "t-1",
+    };
+
+    // 1. Disabled semantic judge preserves pending entry instead of deleting it.
+    const disabledStore = makeStore({
+      "_hidden.events": { [pureOutcomeEvent.id]: pureOutcomeEvent },
+      "_hidden.pending_options": { "vault-prize::emerald": pendingEntry },
+    });
+    const disabledRes = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-1",
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 1,
+      recursionDepth: 0,
+      userSettings: { semanticJudge: false },
+      playerMessage: "Grab the emerald.",
+      world: { dimensions: { location: { value: "vault", version: 1 } } },
+      inputs: { narrative: { value: [] }, operations: { value: [] } },
+      agents: { run: vi.fn() },
+      pluginData: disabledStore.pluginData,
+    });
+    expect(disabledRes.value.rewardsGranted).toEqual([]);
+    expect(
+      disabledStore.dump("_hidden.pending_options")["vault-prize::emerald"],
+    ).toBeDefined();
+    expect(disabledStore.dump("claimed_rewards")).toEqual({});
+
+    // 2. Transient judge failure preserves pending entry so a retry can still verify it.
+    const retryStore = makeStore({
+      "_hidden.events": { [pureOutcomeEvent.id]: pureOutcomeEvent },
+      "_hidden.pending_options": { "vault-prize::emerald": pendingEntry },
+    });
+    const flakyAgent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "timeout", message: "transient" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        output: {
+          verdicts: [
+            {
+              key: "outcome:vault-prize::emerald",
+              met: true,
+              confidence: "high",
+              evidence: "Narrative confirmed you took the emerald.",
+            },
+          ],
+          matchedOptionId: null,
+        },
+      });
+    const failedTry = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-1",
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 1,
+      recursionDepth: 0,
+      playerMessage: "Grab the emerald.",
+      world: { dimensions: { location: { value: "vault", version: 1 } } },
+      inputs: {
+        narrative: { value: [{ kind: "narration", text: "You pocket it." }] },
+        operations: { value: [] },
+      },
+      agents: { run: flakyAgent },
+      pluginData: retryStore.pluginData,
+    });
+    expect(failedTry.value.rewardsGranted).toEqual([]);
+    expect(
+      retryStore.dump("_hidden.pending_options")["vault-prize::emerald"],
+    ).toBeDefined();
+
+    // Retry of the same sourceTurnId verifies and grants it cleanly.
+    const secondTry = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-1b",
+      execution: { sourceTurnId: "t-1" },
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 1,
+      recursionDepth: 0,
+      playerMessage: "Grab the emerald.",
+      world: { dimensions: { location: { value: "vault", version: 1 } } },
+      inputs: {
+        narrative: { value: [{ kind: "narration", text: "You pocket it." }] },
+        operations: { value: [] },
+      },
+      agents: { run: flakyAgent },
+      pluginData: retryStore.pluginData,
+    });
+    expect(secondTry.value.rewardsGranted).toEqual(["vault-prize::emerald"]);
+    expect(retryStore.dump("_hidden.pending_options")).toEqual({});
+
+    // 3. Pure-reward event with requireOutcome=true does NOT grant when judge says met=false.
+    const deniedStore = makeStore({
+      "_hidden.events": { [pureOutcomeEvent.id]: pureOutcomeEvent },
+    });
+    const denyAgent = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      output: {
+        verdicts: [
+          {
+            key: "outcome:vault-prize::emerald",
+            met: false,
+            confidence: "high",
+            evidence: "The trap slammed shut before you could reach it.",
+          },
+        ],
+        matchedOptionId: null,
+      },
+    });
+    const denied = await assessHandler({
+      sessionId: "s-1",
+      turnId: "t-2",
+      pluginId: "story-events",
+      runtimeId: "story-events/assess",
+      locale: "en-US",
+      logicalTurn: 2,
+      recursionDepth: 0,
+      playerMessage: "Reach for the emerald.",
+      world: { dimensions: { location: { value: "vault", version: 1 } } },
+      inputs: {
+        narrative: {
+          value: [{ kind: "narration", text: "The grille slams shut." }],
+        },
+        operations: { value: [] },
+      },
+      agents: { run: denyAgent },
+      pluginData: deniedStore.pluginData,
+    });
+    expect(denied.value.rewardsGranted).toEqual([]);
+    expect(deniedStore.dump("claimed_rewards")).toEqual({});
+  });
 });

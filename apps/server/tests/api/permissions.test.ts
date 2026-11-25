@@ -541,4 +541,401 @@ describe("permissions governance API (/api/permissions/*)", () => {
       code: "capability_denied_by_grant",
     });
   });
+
+  it("rejects reserved exec.localBridge mutations and enforces plugin.globalAutoEnable across L1/L2", async () => {
+    await mkdir(path.join(builtinDir, "helper-auto"), { recursive: true });
+    await writeFile(
+      path.join(builtinDir, "helper-auto", "PLUGIN.md"),
+      md({
+        id: "helper-auto",
+        description: "Optional auto-enabled helper",
+        globalSessionDefault: "optional",
+      }),
+    );
+    await packageFixture(userDir, {
+      manifest: baselineManifest,
+      files: { "server.js": baselineCode },
+      trusted: false,
+      snapshot: null,
+    });
+    await bootServer();
+
+    // Reserved capability rejects policy changes and persistent grants.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "exec.localBridge": "ask" },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await req(`/api/permissions/plugins/${fixtureId}/grants`, "PUT", {
+          decisions: { "exec.localBridge": "allow" },
+        })
+      ).status,
+    ).toBe(400);
+
+    // Personal tier with default L2 allow auto-enables optional helpers on new sessions.
+    const sAuto = await req("/api/sessions", "POST", { locale: "en-US" });
+    expect(sAuto.status).toBe(201);
+    const sAutoBody = (await sAuto.json()) as { activePlugins: string[] };
+    expect(sAutoBody.activePlugins).toContain("helper-auto");
+
+    // Denying plugin.globalAutoEnable at L2 stops automatic helper attachment.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "plugin.globalAutoEnable": "deny" },
+        })
+      ).status,
+    ).toBe(200);
+    const sDenied = await req("/api/sessions", "POST", { locale: "en-US" });
+    expect(sDenied.status).toBe(201);
+    const sDeniedBody = (await sDenied.json()) as { activePlugins: string[] };
+    expect(sDeniedBody.activePlugins).not.toContain("helper-auto");
+
+    // Hosted tier disables plugin.globalAutoEnable at L1 even when L2 policy is cleared.
+    expect(
+      (await req("/api/permissions/policy", "PUT", { policy: null })).status,
+    ).toBe(200);
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.stubEnv("COVEL_MEDIA_TOKEN_SECRET", "media-secret");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "operator-secret");
+    await bootServer();
+    const sHosted = await req(
+      "/api/sessions",
+      "POST",
+      { locale: "en-US" },
+      { Authorization: "Bearer operator-secret" },
+    );
+    expect(sHosted.status).toBe(201);
+    const sHostedBody = (await sHosted.json()) as { activePlugins: string[] };
+    expect(sHostedBody.activePlugins).not.toContain("helper-auto");
+  });
+
+  it("enforces session.bridgeWrite on plugin-rpc and plugin-data writes and runtime.highRiskTools on tool execution", async () => {
+    await mkdir(path.join(builtinDir, "bridge-probe"), { recursive: true });
+    await writeFile(
+      path.join(builtinDir, "bridge-probe", "PLUGIN.md"),
+      md({
+        id: "bridge-probe",
+        description: "Bridge and tool probe",
+        entry: "./server.js",
+        contributes: {
+          actions: ["ping"],
+          tools: ["risky-write", "safe-read"],
+        },
+      }),
+    );
+    await writeFile(
+      path.join(builtinDir, "bridge-probe", "server.js"),
+      `export default (covel) => {
+        const tk = covel.toolkit;
+        covel.registerRpc("ping", async () => ({ pong: true }));
+        covel.registerTool(tk.tool({
+          name: "risky-write",
+          description: "Non-idempotent write tool",
+          parameters: tk.z.object({}),
+          execute: async () => ({ mutated: true }),
+        }));
+        covel.registerTool(tk.tool({
+          name: "safe-read",
+          description: "Read-only query tool",
+          annotations: { readOnly: true, idempotent: true, concurrencySafe: true },
+          parameters: tk.z.object({}),
+          execute: async () => ({ ok: true }),
+        }));
+      };`,
+    );
+    await bootServer();
+    const toolCtx = {
+      sessionId: "s-bridge",
+      turnId: "t-1",
+      pluginId: "bridge-probe",
+      runtimeId: "bridge-probe",
+    };
+    // Register helper route before Hono builds its router matcher on first request.
+    api!.app.post("/__test-exec-tool", async (c) => {
+      const { name } = (await c.req.json()) as { name: string };
+      const res = await c.get("toolExecutor").execute(
+        { toolCallId: `tc-${name}`, name, arguments: "{}" },
+        toolCtx,
+      );
+      return c.json(res);
+    });
+    await seedSession("s-bridge", ["bridge-probe"]);
+
+    // Baseline: bridge writes and tools succeed.
+    expect(
+      (
+        await req("/api/sessions/s-bridge/plugin-rpc", "POST", {
+          kind: "action",
+          pluginId: "bridge-probe",
+          action: "ping",
+          payload: {},
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await req(
+          "/api/sessions/s-bridge/plugin-data/bridge-probe/notes/k1",
+          "PUT",
+          { value: { hello: 1 } },
+        )
+      ).status,
+    ).toBe(200);
+
+    // Deny session.bridgeWrite at L2 -> blocks plugin RPC and plugin-data PUT/DELETE.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "session.bridgeWrite": "deny" },
+        })
+      ).status,
+    ).toBe(200);
+    const rpcBlocked = await req("/api/sessions/s-bridge/plugin-rpc", "POST", {
+      kind: "action",
+      pluginId: "bridge-probe",
+      action: "ping",
+      payload: {},
+    });
+    expect(rpcBlocked.status).toBe(403);
+    expect(await rpcBlocked.json()).toMatchObject({
+      code: "capability_denied_by_policy",
+    });
+
+    const dataPutBlocked = await req(
+      "/api/sessions/s-bridge/plugin-data/bridge-probe/notes/k2",
+      "PUT",
+      { value: { hello: 2 } },
+    );
+    expect(dataPutBlocked.status).toBe(403);
+    expect(await dataPutBlocked.json()).toMatchObject({
+      code: "capability_denied_by_policy",
+    });
+
+    const dataDelBlocked = await req(
+      "/api/sessions/s-bridge/plugin-data/bridge-probe/notes/k1",
+      "DELETE",
+    );
+    expect(dataDelBlocked.status).toBe(403);
+
+    // Deny runtime.highRiskTools at L2 -> blocks non-idempotent tool while keeping read-only tool allowed.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "runtime.highRiskTools": "deny" },
+        })
+      ).status,
+    ).toBe(200);
+    const deniedTool = (await (
+      await req("/__test-exec-tool", "POST", { name: "risky-write" })
+    ).json()) as { success: boolean; approvalStatus?: string; result: string };
+    expect(deniedTool.success).toBe(false);
+    expect(deniedTool.approvalStatus).toBe("policy-denied");
+    expect(deniedTool.result).toContain("runtime.highRiskTools");
+
+    const allowedTool = (await (
+      await req("/__test-exec-tool", "POST", { name: "safe-read" })
+    ).json()) as { success: boolean; approvalStatus?: string };
+    expect(allowedTool.success).toBe(true);
+    expect(allowedTool.approvalStatus).toBe("auto-allowed");
+  });
+
+  it("enforces operator-only plugin.communityCode on hosted session reads and live net.httpDeclared in function runtimes", async () => {
+    vi.stubEnv("COVEL_TRUSTED_SOURCES", "example/plugins");
+    await packageFixture(userDir, {
+      manifest: {
+        description: "HTTP function runtime",
+        permissions: {
+          http: [{ origin: "https://api.declared.test", methods: ["GET"] }],
+        },
+        runtime: {
+          schedule: { trigger: { type: "manual" } },
+          permissions: {
+            http: [{ origin: "https://api.declared.test", methods: ["GET"] }],
+          },
+          function: { handler: "./handler.mjs" },
+        },
+      },
+      files: {
+        "handler.mjs": `export default async (ctx) => {
+          await ctx.utils.fetchWithRetry("https://api.declared.test/ping");
+          return { output: { fetched: true } };
+        };`,
+      },
+      trusted: true,
+    });
+    const fetchSpy = vi.fn(async () => new Response("ok", { status: 200 }));
+    await closeTestApi(api);
+    api = await bootstrapApi({
+      pluginsDir: builtinDir,
+      pluginsDirs: [builtinDir, userDir],
+      store,
+      storeBackend: "memory",
+      hostProfile: deriveHostProfile(readRuntimeEnv(), {
+        storeBackend: "sqlite",
+      }),
+      pluginUtils: {
+        validateBaseUrl: () => ({ ok: true }),
+        fetchWithRetry: fetchSpy as never,
+      },
+      llmAdapter: {
+        generate: async () => ({
+          content: "ok",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }),
+      },
+    });
+    await seedSession("s-http", [fixtureId]);
+
+    // Default net.httpDeclared=allow lets the function runtime reach its declared origin.
+    const okRpc = await req("/api/sessions/s-http/plugin-rpc", "POST", {
+      kind: "runtime",
+      pluginId: fixtureId,
+      runtimeId: fixtureId,
+      payload: {},
+    });
+    expect(okRpc.status, await okRpc.clone().text()).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Denying net.httpDeclared at L2 immediately blocks the function runtime's declared HTTP call.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "net.httpDeclared": "deny" },
+        })
+      ).status,
+    ).toBe(200);
+    const blockedRpc = await req("/api/sessions/s-http/plugin-rpc", "POST", {
+      kind: "runtime",
+      pluginId: fixtureId,
+      runtimeId: fixtureId,
+      payload: {},
+    });
+    expect(blockedRpc.status).toBe(200);
+    const blockedBody = (await blockedRpc.json()) as {
+      runtimeResults?: Array<{ status: string; error?: string }>;
+    };
+    const runtimeOutcome = blockedBody.runtimeResults?.[0];
+    expect(runtimeOutcome?.status).toBe("failed");
+    expect(runtimeOutcome?.error).toContain("net.httpDeclared");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Hosted tier: plugin.communityCode is operator-only, so non-operator session reads
+    // never treat a trusted-source community plugin as authorized or serverCodeApproved.
+    expect(
+      (await req("/api/permissions/policy", "PUT", { policy: null })).status,
+    ).toBe(200);
+    vi.stubEnv("DEPLOYMENT_TIER", "demo");
+    vi.stubEnv("COVEL_MEDIA_TOKEN_SECRET", "media-secret");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "operator-secret");
+    await bootServer();
+    const created = await req(
+      "/api/sessions",
+      "POST",
+      { locale: "en-US", plugins: [fixtureId] },
+      { Authorization: "Bearer operator-secret" },
+    );
+    expect(created.status).toBe(201);
+    const { id: hostedSessionId, ownerToken } = (await created.json()) as {
+      id: string;
+      ownerToken: string;
+    };
+
+    const nonOpPlugins = (await (
+      await req(`/api/sessions/${hostedSessionId}/plugins`, "GET", undefined, {
+        "x-session-token": ownerToken,
+      })
+    ).json()) as SessionPluginsResponse;
+    const nonOpItem = nonOpPlugins.items.find((p) => p.id === fixtureId);
+    expect(nonOpItem?.serverCodeApproved).toBe(false);
+    expect(nonOpItem?.active).toBe(false);
+
+    const opPlugins = (await (
+      await req(`/api/sessions/${hostedSessionId}/plugins`, "GET", undefined, {
+        "x-session-token": ownerToken,
+        Authorization: "Bearer operator-secret",
+      })
+    ).json()) as SessionPluginsResponse;
+    const opItem = opPlugins.items.find((p) => p.id === fixtureId);
+    expect(opItem?.serverCodeApproved).toBe(true);
+  });
+
+  it("enforces plugin.declarative L2 ask and deny across action preflight, runtime RPC, and session fork", async () => {
+    await packageFixture(userDir, {
+      manifest: {
+        description: "Declarative agent runtime",
+        runtime: {
+          schedule: { trigger: { type: "manual" } },
+        },
+      },
+      trusted: false,
+      snapshot: null,
+    });
+    await bootServer();
+    await seedSession("s-decl-exec", [fixtureId]);
+
+    // L2 deny blocks runtime RPC directly even when the declarative plugin is already active.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "plugin.declarative": "deny" },
+        })
+      ).status,
+    ).toBe(200);
+    const rpcDenied = await req("/api/sessions/s-decl-exec/plugin-rpc", "POST", {
+      kind: "runtime",
+      pluginId: fixtureId,
+      runtimeId: fixtureId,
+      payload: {},
+    });
+    expect(rpcDenied.status).toBe(403);
+    expect(await rpcDenied.json()).toMatchObject({
+      code: "capability_denied_by_policy",
+    });
+
+    // Session fork excludes a denied declarative plugin from the child session.
+    const snapRes = await req("/api/sessions/s-decl-exec/snapshots", "POST", {
+      label: "before-fork",
+    });
+    expect(snapRes.status).toBe(201);
+    const snapJson = (await snapRes.json()) as {
+      id?: string;
+      snapshot?: { id: string };
+    };
+    const snapshotId = snapJson.snapshot?.id ?? snapJson.id;
+    expect(snapshotId).toBeTruthy();
+    const forkRes = await req("/api/sessions/s-decl-exec/fork", "POST", {
+      fromSnapshotId: snapshotId,
+    });
+    expect(forkRes.status, await forkRes.clone().text()).toBe(201);
+    const forked = (await forkRes.json()) as {
+      id?: string;
+      sessionId?: string;
+    };
+    const childId = forked.sessionId ?? forked.id;
+    expect(childId).toBeTruthy();
+    const childSession = await store.getSession(childId!);
+    expect(childSession?.activePlugins).not.toContain(fixtureId);
+
+    // L2 ask does not silently auto-admit declarative plugins without approval.
+    expect(
+      (
+        await req("/api/permissions/policy", "PUT", {
+          policy: { "plugin.declarative": "ask" },
+        })
+      ).status,
+    ).toBe(200);
+    await seedSession("s-decl-ask");
+    const askEnable = await req(
+      `/api/sessions/s-decl-ask/plugins/${fixtureId}`,
+      "PUT",
+    );
+    expect(askEnable.status).toBe(202);
+  });
 });

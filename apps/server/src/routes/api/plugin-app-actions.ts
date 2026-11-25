@@ -48,7 +48,10 @@ export interface PluginAppActionRoutesDeps {
   readonly permissionService: PermissionService;
   readonly trustedSources: TrustedSourceService;
   readonly providerSources?: ProviderSourceHost;
+  readonly actionTimeoutMs?: number;
 }
+
+const DEFAULT_APP_ACTION_TIMEOUT_MS = 30_000;
 
 export function createPluginAppActionRoutes(
   deps: PluginAppActionRoutesDeps,
@@ -64,6 +67,7 @@ export function createPluginAppActionRoutes(
     permissionService,
     trustedSources,
     providerSources,
+    actionTimeoutMs = DEFAULT_APP_ACTION_TIMEOUT_MS,
   } = deps;
 
   const app = new Hono();
@@ -101,7 +105,6 @@ export function createPluginAppActionRoutes(
       );
       if (accessError) return accessError;
 
-      await instancePlugins.activateForEvent(`onAppAction:${action}`);
       if (!instancePlugins.isActivated(pluginId)) {
         await instancePlugins.activate(pluginId);
       }
@@ -171,22 +174,64 @@ export function createPluginAppActionRoutes(
         httpPermissions: packageHttpPermissions(entry),
       });
 
-      const signal = c.req.raw.signal;
-      const result = await registered.handler(parsedInput, {
-        signal,
-        pluginId,
-        action,
-        ...pickPluginInstanceSurfaceFields(surface),
-        ...(appScheduler
-          ? {
-              scheduler: {
-                scheduleOnce: (taskId, delayMs) =>
-                  appScheduler.scheduleOnce(pluginId, taskId, delayMs),
-              },
-            }
-          : {}),
-        http: withCallSignal(surface.http, signal),
-      });
+      const timeoutAc = new AbortController();
+      let timedOut = false;
+      const timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        timeoutAc.abort(
+          new DOMException(
+            `App action "${action}" timed out after ${actionTimeoutMs}ms`,
+            "TimeoutError",
+          ),
+        );
+      }, actionTimeoutMs);
+      timeoutHandle.unref?.();
+      const signal = AbortSignal.any([c.req.raw.signal, timeoutAc.signal]);
+
+      let result: unknown;
+      try {
+        const task = Promise.resolve().then(() =>
+          registered.handler(parsedInput, {
+            signal,
+            pluginId,
+            action,
+            ...pickPluginInstanceSurfaceFields(surface),
+            ...(appScheduler
+              ? {
+                  scheduler: {
+                    scheduleOnce: (taskId, delayMs) =>
+                      appScheduler.scheduleOnce(pluginId, taskId, delayMs),
+                  },
+                }
+              : {}),
+            http: withCallSignal(surface.http, signal),
+          }),
+        );
+        const aborted = new Promise<never>((_resolve, reject) => {
+          const onAbort = () => reject(signal.reason);
+          if (signal.aborted) {
+            reject(signal.reason);
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
+        // Prevent late unhandled rejections when the timeout/request abort wins the race.
+        void task.catch(() => {});
+        result = await Promise.race([task, aborted]);
+      } catch (error) {
+        if (timedOut) {
+          return c.json(
+            errorBody(
+              `App action "${action}" timed out after ${actionTimeoutMs}ms`,
+              { code: "app_action_timeout" },
+            ),
+            504,
+          );
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
 
       let validatedOutput = result;
       if (registered.options.outputSchema) {

@@ -26,7 +26,7 @@ const api = vi.hoisted(() => ({
   listMessagesPage: vi.fn(),
 }));
 vi.mock("@/services/api.js", () => api);
-const { useExecutionRecovery, MAX_UNKNOWN_CHECKS } =
+const { useExecutionRecovery, MAX_UNKNOWN_CHECKS, MAX_ERROR_CHECKS } =
   await import("../execution-recovery.js");
 const { useExecutionRecoveryActions } =
   await import("../execution-recovery-actions.js");
@@ -654,6 +654,33 @@ describe("a status the server could not check (F-203)", () => {
       result.current.state.executionSteps.map((step) => step.status),
     ).not.toContain("failed");
     expect(workspace.hydrate).not.toHaveBeenCalled();
+  });
+
+  it("caps consecutive network errors during recovery polling and marks stalled", async () => {
+    vi.useFakeTimers();
+    setVisibilityForTest();
+    api.getSessionExecution.mockRejectedValue(new Error("network offline"));
+    const { result } = setup({
+      executionRecovery: {
+        sessionId: "s",
+        status: null,
+        hydrating: false,
+        checking: true,
+      },
+    });
+
+    await act(async () => vi.advanceTimersByTimeAsync(250_000));
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(MAX_ERROR_CHECKS);
+    expect(result.current.executionRecovery).toMatchObject({
+      sessionId: "s",
+      status: null,
+      checking: false,
+      stalled: true,
+      error: "network offline",
+    });
+
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(api.getSessionExecution).toHaveBeenCalledTimes(MAX_ERROR_CHECKS);
   });
 });
 

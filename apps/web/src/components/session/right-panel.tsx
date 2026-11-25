@@ -39,7 +39,10 @@ import {
   pluginPanelKey,
   selectedPluginPanelIndex,
 } from "@/lib/plugin-panel-tabs.js";
-import { useSession, useSessionActions } from "@/stores/session-store.js";
+import {
+  useSessionActions,
+  useSessionStructure,
+} from "@/stores/session-store.js";
 import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 import { useThemeLayout } from "@/theme-system/use-theme-layout.js";
@@ -149,7 +152,7 @@ function SessionRightPanel({
     specsError,
     retrySpecs,
   } = panelState;
-  const { state: sessionState } = useSession();
+  const sessionState = useSessionStructure();
   // The raw Database tab shows narrator-only rows, so it is opt-in.
   const [developerView] = useSetting<boolean>("ui.developerView");
   const { upsertInteractionDraft } = useSessionActions();

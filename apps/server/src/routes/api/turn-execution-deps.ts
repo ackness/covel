@@ -6,6 +6,8 @@ import {
   type TurnExecutorDeps,
 } from "@covel/runtime";
 import type { Context } from "hono";
+import { hostProfileOf, isOperatorRequest } from "../../host-profile.js";
+import { isPluginCapabilityEffectivelyAllowed } from "./bootstrap/instance-plugins.js";
 import { pluginDatasetsLoader } from "./bootstrap/runtime-loader.js";
 
 /**
@@ -25,6 +27,10 @@ export function buildTurnExecutorDeps(
   const eventDirectory = c.get("eventDirectory");
   const hookPipeline = c.get("hookPipeline");
   const executionSignal = c.get("requestWork")?.signal;
+  const permissionService = c.get("permissionService");
+  const pluginRegistry = c.get("pluginRegistry");
+  const profile = hostProfileOf(c);
+  const isOperator = isOperatorRequest(c, profile);
 
   const promptDiagnostics = c.get("promptDiagnostics");
   return {
@@ -37,7 +43,7 @@ export function buildTurnExecutorDeps(
       : {}),
     ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
-    loadPluginDatasets: pluginDatasetsLoader(c.get("pluginRegistry")),
+    loadPluginDatasets: pluginDatasetsLoader(pluginRegistry),
     llm: c.get("llmAdapter"),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(gateway ? { gateway } : {}),
@@ -46,6 +52,18 @@ export function buildTurnExecutorDeps(
       ? { extensions: c.get("pluginExtensions") }
       : {}),
     ...(utils ? { utils } : {}),
+    ...(permissionService && pluginRegistry
+      ? {
+          canUseDeclaredHttp: (pluginId: string) =>
+            isPluginCapabilityEffectivelyAllowed(
+              permissionService,
+              pluginRegistry,
+              "net.httpDeclared",
+              pluginId,
+              { profile, isOperator },
+            ),
+        }
+      : {}),
     ...(mediaStore ? { mediaStore } : {}),
     toolExecutor: c.get("toolExecutor"),
     resolveModel: c.get("resolveModel"),

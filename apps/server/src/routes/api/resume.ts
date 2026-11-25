@@ -67,10 +67,13 @@ import {
 import {
   CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
+  concealOperationsOf,
+  concealRuntimeResult,
   DEFAULT_LOCALE,
   type RuntimeManifest,
   type SuspensionSummary,
 } from "@covel/shared";
+import { registeredConcealedRuntimeIds } from "./concealed-runtimes.js";
 import type { EventBus } from "@covel/events";
 import {
   errorBody,
@@ -417,60 +420,68 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           locale: liveSession.locale ?? DEFAULT_LOCALE,
           ...(userSettings ? { userSettings } : {}),
         };
-        const outcome = await commitExecution({
-          extraInTx: async (tx) => {
-            if (releasedJobs.length > 0)
-              queuedRuntimeJobs.push(
-                ...(await queueReleasedRuntimeJobs(
-                  tx,
-                  {
-                    ...enqueueContext,
-                    session: liveSession,
-                    credentials: requestCredentialHandoff(c),
-                  },
-                  releasedJobs,
-                )),
-              );
-          },
-          // A resume saves no suspension that ends another turn: under the
-          // session lock the only new one is the resumed runtime's own (it
-          // cannot start a nested run that suspends), its claimed record is
-          // resolved before that is saved, and its single commit unit drops
-          // no continuation. Should one appear, the commit rolls back rather
-          // than lose the jobs that turn held back.
-          enqueueReleasedJobsInTx: refuseReleasedJobs,
-          memorySystem: c.get("memorySystem"),
-          imageFlowRuntimeIds: (
-            await resolveMediaImageFlow({
-              store,
-              host: c.get("pluginExtensions"),
-              pluginRegistry,
-              sessionId,
-              settings: hookScope.settings,
-            })
-          )?.assetRuntimeIds,
-          signal: c.get("requestWork")?.signal,
-          completion: {
-            kind: "resume",
-            turnId: suspension.turnId,
-            suspensionId: suspension.id,
-            pluginId: effectiveManifest.pluginId,
-            runtimeId: effectiveManifest.name,
-          },
-          mediaStore: resumeDeps.mediaStore,
-          onFinalized: (outcome) => {
-            if (outcome.status === "committed") ownClaim = undefined;
-          },
-          store,
-          execution,
-          ...(hookPipeline ? { hookPipeline } : {}),
-          ...(eventBus ? { eventBus } : {}),
-          emitter,
-        });
+        const credentials = requestCredentialHandoff(c);
+        let outcome: Awaited<ReturnType<typeof commitExecution>>;
+        try {
+          outcome = await commitExecution({
+            extraInTx: async (tx) => {
+              if (releasedJobs.length > 0)
+                queuedRuntimeJobs.push(
+                  ...(await queueReleasedRuntimeJobs(
+                    tx,
+                    {
+                      ...enqueueContext,
+                      session: liveSession,
+                      credentials,
+                    },
+                    releasedJobs,
+                  )),
+                );
+            },
+            // A resume saves no suspension that ends another turn: under the
+            // session lock the only new one is the resumed runtime's own (it
+            // cannot start a nested run that suspends), its claimed record is
+            // resolved before that is saved, and its single commit unit drops
+            // no continuation. Should one appear, the commit rolls back rather
+            // than lose the jobs that turn held back.
+            enqueueReleasedJobsInTx: refuseReleasedJobs,
+            memorySystem: c.get("memorySystem"),
+            imageFlowRuntimeIds: (
+              await resolveMediaImageFlow({
+                store,
+                host: c.get("pluginExtensions"),
+                pluginRegistry,
+                sessionId,
+                settings: hookScope.settings,
+              })
+            )?.assetRuntimeIds,
+            signal: c.get("requestWork")?.signal,
+            completion: {
+              kind: "resume",
+              turnId: suspension.turnId,
+              suspensionId: suspension.id,
+              pluginId: effectiveManifest.pluginId,
+              runtimeId: effectiveManifest.name,
+            },
+            mediaStore: resumeDeps.mediaStore,
+            onFinalized: (outcome) => {
+              if (outcome.status === "committed") ownClaim = undefined;
+            },
+            store,
+            execution,
+            ...(hookPipeline ? { hookPipeline } : {}),
+            ...(eventBus ? { eventBus } : {}),
+            emitter,
+          });
+        } catch (commitError) {
+          credentials.discard();
+          throw commitError;
+        }
 
         // A record the buffered proposals write changed while the runtime
         // ran (the commit compared them first and wrote nothing): void it.
         if (outcome.code === "suspension-data-changed") {
+          credentials.discard();
           ownClaim = undefined;
           return voidOutdatedSuspension(
             c,
@@ -480,6 +491,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           );
         }
         if (outcome.status !== "committed") {
+          credentials.discard();
           await releaseClaim();
           const detail =
             outcome.error ??
@@ -488,12 +500,23 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
               .join("; ");
           const message = `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`;
           logRequestError(c, "[resume] commit failed", new Error(message));
-          return c.json(errorBody(message), 500);
+          return c.json(
+            errorBody(
+              effectiveManifest?.concealed
+                ? `Resume failed: ${CONCEALED_FAILURE_MESSAGE}`
+                : message,
+            ),
+            500,
+          );
         }
         const events = outcome.events;
         await announceDeferredRuntimeJobs(c, queuedRuntimeJobs);
 
-        return c.json({ result, events });
+        const concealedIds = registeredConcealedRuntimeIds(pluginRegistry);
+        const visibleResult = effectiveManifest?.concealed
+          ? concealRuntimeResult(result)
+          : concealOperationsOf(result, concealedIds);
+        return c.json({ result: visibleResult, events });
       });
     });
   } catch (err: unknown) {
