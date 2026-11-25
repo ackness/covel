@@ -35,7 +35,12 @@ import {
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { envOverriddenProviders } from "../lib/env-key-overrides.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
-import { checkSessionOwner } from "./api/session/session-guard.js";
+import {
+  checkSessionOwner,
+  SESSION_INCARNATION_CHANGED_CODE,
+  SESSION_INCARNATION_KEY,
+  sessionIncarnationIdentity,
+} from "./api/session/session-guard.js";
 import {
   accessGuard,
   allowsAccess,
@@ -224,16 +229,38 @@ export function createMiscApiRoutes(
       }
       const denied = checkSessionOwner(c, initialSession);
       if (denied) return denied;
-      return c.json(
-        await buildUiSpecsResponse({
-          sessionId,
-          session: initialSession,
-          registry,
-          store,
-          permissionService: options?.permissionService,
-          trustedSources: options?.trustedSources,
-        }),
-      );
+      const expectedIncarnation =
+        typeof initialSession.metadata?.[SESSION_INCARNATION_KEY] ===
+          "string" && initialSession.metadata[SESSION_INCARNATION_KEY]
+          ? sessionIncarnationIdentity(initialSession)
+          : undefined;
+      const payload = await buildUiSpecsResponse({
+        sessionId,
+        session: initialSession,
+        registry,
+        store,
+        permissionService: options?.permissionService,
+        trustedSources: options?.trustedSources,
+      });
+      const liveSession = await store.getSession(sessionId);
+      let incarnationMatches = liveSession !== null;
+      if (incarnationMatches && expectedIncarnation) {
+        try {
+          incarnationMatches =
+            sessionIncarnationIdentity(liveSession!) === expectedIncarnation;
+        } catch {
+          incarnationMatches = false;
+        }
+      }
+      if (!incarnationMatches) {
+        return c.json(
+          errorBody("Session was replaced while the request was reading", {
+            code: SESSION_INCARNATION_CHANGED_CODE,
+          }),
+          409,
+        );
+      }
+      return c.json(payload);
     }
     return c.json(
       await buildUiSpecsResponse({

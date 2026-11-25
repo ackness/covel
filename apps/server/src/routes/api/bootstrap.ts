@@ -118,14 +118,16 @@ export async function bootstrapApi(
       memorySystem,
       getPermissionService: () => trust.permissions,
     });
+    owned.runtimeJobWorker = jobs.runtimeJobWorker;
+    owned.runtimeJobCredentials = jobs.runtimeJobCredentials;
     // Subscribes to the event bus, after the runtime-job worker.
-    const uiSlots = createUiSlotHost({
+    const uiSlots = (owned.uiSlots = createUiSlotHost({
       store,
       pluginRegistry: registry,
       eventBus,
       extensionHost: host.extensions,
       services: host.services,
-    });
+    }));
     const { app, applicationWork } = mountApiRoutes({
       config,
       storage,
@@ -156,6 +158,9 @@ export async function bootstrapApi(
         host.providerSources.invalidateAll();
       }
     });
+    // Bind provider-source resolution into the AI stack BEFORE startup hooks,
+    // scheduled activation, or background runtime-job recovery can fire.
+    config.onProviderSourceResolverReady?.(host.providerSources.resolver);
     const instancePlugins = (owned.instancePlugins =
       createInstancePluginRegistry({
         registry,
@@ -223,6 +228,16 @@ export async function bootstrapApi(
 
     const { toolExecutor, prepareToolsForSession } = host.tools;
     const { pluginEntries } = activation;
+    const closeQuietly = async (
+      label: string,
+      fn: () => Promise<unknown> | unknown,
+    ): Promise<void> => {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(`[bootstrap] failed to ${label} during shutdown:`, err);
+      }
+    };
     return {
       memorySystem,
       trustedSources,
@@ -241,19 +256,30 @@ export async function bootstrapApi(
       startupMaintenance,
       closeTools: () => toolExecutor.close(),
       closePluginEntries: async () => {
-        jobs.runtimeJobCredentials.clear();
-        await host.appEvents
-          .emit("BeforeShutdown", { hostId, reason: "shutdown" })
-          .catch(() => {});
-        await host.appScheduler.close();
-        await host.configFlows.close();
-        await uiSlots.close();
-        await pluginEntries.close();
+        await closeQuietly("clear runtime job credentials", () =>
+          jobs.runtimeJobCredentials.clear(),
+        );
+        await closeQuietly("emit BeforeShutdown", () =>
+          host.appEvents.emit("BeforeShutdown", {
+            hostId,
+            reason: "shutdown",
+          }),
+        );
+        await closeQuietly("close app scheduler", () =>
+          host.appScheduler.close(),
+        );
+        await closeQuietly("close config flows", () =>
+          host.configFlows.close(),
+        );
+        await closeQuietly("close ui slots", () => uiSlots.close());
+        await closeQuietly("close plugin entries", () => pluginEntries.close());
         if (owned.ephemeralConfigDir) {
-          await rm(owned.ephemeralConfigDir, {
-            recursive: true,
-            force: true,
-          }).catch(() => {});
+          await closeQuietly("remove ephemeral instance config directory", () =>
+            rm(owned.ephemeralConfigDir!, {
+              recursive: true,
+              force: true,
+            }),
+          );
         }
       },
       prepareToolsForSession,

@@ -36,11 +36,13 @@ export const runtimeOutputRoutes = new Hono<Env>();
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+const MAX_LIST_LIMIT = 500;
+
 function parseLimit(raw: string | undefined): number | undefined {
   if (!raw) return undefined;
   const n = Number.parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) return undefined;
-  return n;
+  return Math.min(n, MAX_LIST_LIMIT);
 }
 
 // ── Routes ─────────────────────────────────────────────────────────

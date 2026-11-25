@@ -296,6 +296,23 @@ export function createWorldFileWatcher(
             scheduleReload(directoryName);
           },
         );
+        const activeWatcher = watcher;
+        if (typeof activeWatcher.on === "function") {
+          activeWatcher.on("error", (err) => {
+            console.warn(
+              `[world-watcher] Watcher error for ${worldsDir}; disabling watcher:`,
+              err,
+            );
+            if (watcher === activeWatcher) {
+              watcher = null;
+            }
+            try {
+              activeWatcher.close();
+            } catch {
+              // Best-effort close on errored FSWatcher.
+            }
+          });
+        }
 
         console.log(`[world-watcher] Watching ${worldsDir} for changes`);
       } catch (err) {

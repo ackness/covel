@@ -24,17 +24,28 @@ export const messageRoutes = new Hono<Env>();
 // entries with an allowed role. Without this, a non-array `messages` iterated
 // junk into history and an arbitrary `role` (e.g. system) was persisted verbatim
 // into the prompt-assembled history from untrusted input.
+const MAX_SYNC_MESSAGES = 1_000;
+const MAX_SYNC_MESSAGE_CONTENT_CHARS = 200_000;
+const MAX_SYNC_ID_CHARS = 200;
+
 const syncMessageSchema = z.object({
-  id: z.string().optional(),
+  id: z.string().min(1).max(MAX_SYNC_ID_CHARS).optional(),
   role: z.enum(["user", "assistant", "system", "tool"]),
-  content: z.string(),
+  content: z.string().max(MAX_SYNC_MESSAGE_CONTENT_CHARS),
   turnId: z.unknown().optional(),
   runtimeId: z.unknown().optional(),
   block: z.unknown().optional(),
-  createdAt: z.string().optional(),
+  createdAt: z
+    .string()
+    .max(64)
+    .refine(
+      (value) => !Number.isNaN(Date.parse(value)),
+      "createdAt must be a valid timestamp",
+    )
+    .optional(),
 });
 const syncBodySchema = z.object({
-  messages: z.array(syncMessageSchema),
+  messages: z.array(syncMessageSchema).max(MAX_SYNC_MESSAGES),
 });
 
 // Flatten stored metadata into top-level fields for frontend consumption.

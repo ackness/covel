@@ -579,7 +579,7 @@ describe("function terminals", () => {
 describe("suspension terminal", () => {
   const takenUnder = expect.objectContaining({ playerTurns: 0 });
 
-  it("keeps toolCalls empty on a function suspension and snapshots its continuation", async () => {
+  it("preserves pre-suspension toolCalls on a function suspension and snapshots its continuation", async () => {
     const h = harness({ toolExecutor: toolExecutor() });
     const runtime = manifest({
       runtimeType: "function",
@@ -602,9 +602,18 @@ describe("suspension terminal", () => {
       );
       const result = turn.runtimeResults[0]!;
       const [record] = collectExecutionSuspensions(turn);
+      const expectedToolCall = expect.objectContaining({
+        pluginId: runtime.pluginId,
+        runtimeId: runtime.name,
+        turnId: TURN,
+        toolName: "probe-tool",
+        input: {},
+        output: { ok: true },
+        approvalStatus: "auto-allowed",
+      });
       expect(result).toMatchObject({
         status: "suspended",
-        toolCalls: [],
+        toolCalls: [expectedToolCall],
         output: {
           suspended: true,
           suspensionId: record!.id,
@@ -635,7 +644,7 @@ describe("suspension terminal", () => {
           lifecycle: { runId: result.runId, progressRunId: result.runId },
           readScopes: [],
           messages: [],
-          toolCallsSoFar: [],
+          toolCallsSoFar: [expectedToolCall],
           pendingProposals: [],
           inputSlots: {},
           exportSlots: {},

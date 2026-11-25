@@ -799,14 +799,29 @@ export async function createBootstrapPluginEntries(
           approvedSession = candidate;
           break;
         }
+      const instanceApproved =
+        approvedSession === undefined &&
+        (await params.isInstanceServerCodeApproved?.(pluginId)) === true;
       const next = await preparePluginReload(discovery, [
         ...(params.pluginRegistry?.getAll().values() ?? []),
       ]);
       await params.prepareDeclarations?.(next.entry);
+      const syncReloadScopeMetadata = () => {
+        const nextPlugin = next.entry.packageManifest?.plugin;
+        packageScopes.set(pluginId, nextPlugin?.scope ?? "session");
+        if (
+          nextPlugin?.scope === "both" &&
+          nextPlugin.activationEvents?.length
+        ) {
+          lazyDualScopeEntries.add(pluginId);
+        } else {
+          lazyDualScopeEntries.delete(pluginId);
+        }
+      };
       const generation = crypto.randomUUID();
       // Deferred approval must import the same fresh graph as an approved reload.
       entryGenerations.set(next.entryDefinition, generation);
-      if (!approvedSession) {
+      if (!approvedSession && !instanceApproved) {
         // Publish unapproved definitions as metadata. Old registrations must
         // disappear when a formerly declarative package gains server code.
         const previousScope = activeScopes.get(pluginId);
@@ -838,6 +853,7 @@ export async function createBootstrapPluginEntries(
           discoveryMap.set(pluginId, next.discovery);
           manifestCache.set(pluginId, next.definition.manifests);
           entryDefinitions.set(pluginId, next.entryDefinition);
+          syncReloadScopeMetadata();
           params.failedDiscoveryMap?.delete(pluginId);
           publishGeneration?.();
           activeScopes.delete(pluginId);
@@ -886,11 +902,13 @@ export async function createBootstrapPluginEntries(
       // The modules that entry, handlers and guards import relatively reload
       // with them; without this they would keep the code of the first import.
       trackReloadGeneration(generation, next.discovery.rootPath);
+      const reloadCaller: ActivationCaller =
+        approvedSession ?? INSTANCE_ACTIVATION;
       const batch = await prepareEntry(
         pluginId,
         next.entryDefinition,
         generation,
-        [approvedSession],
+        [reloadCaller],
       );
       const previousEntry = params.pluginRegistry?.get(pluginId);
       const previousScope = activeScopes.get(pluginId);
@@ -900,20 +918,25 @@ export async function createBootstrapPluginEntries(
             discovery: next.discovery,
             definition: next.definition,
             generation,
-            sessionIds: [
-              ...new Set([
-                approvedSession,
-                ...(approvalSessions.get(pluginId) ?? []),
-              ]),
-            ],
+            sessionIds: approvedSession
+              ? [
+                  ...new Set([
+                    approvedSession,
+                    ...(approvalSessions.get(pluginId) ?? []),
+                  ]),
+                ]
+              : [...(approvalSessions.get(pluginId) ?? [])],
           });
         await serialize(async () => {
-          if (
-            closed ||
-            !(await isCommunityServerCodeApproved?.(approvedSession, pluginId))
-          )
-            throw new Error("Plugin reload approval was revoked");
           if (closed) throw new Error("plugin entries are closed");
+          const stillApproved = approvedSession
+            ? (await isCommunityServerCodeApproved?.(
+                approvedSession,
+                pluginId,
+              )) === true
+            : (await params.isInstanceServerCodeApproved?.(pluginId)) === true;
+          if (!stillApproved)
+            throw new Error("Plugin reload approval was revoked");
           try {
             params.tools.replacePlugin(pluginId, () =>
               params.hookPipeline.replacePlugin(pluginId, () =>
@@ -936,13 +959,16 @@ export async function createBootstrapPluginEntries(
             params.failedDiscoveryMap?.delete(pluginId);
             manifestCache.set(pluginId, next.definition.manifests);
             entryDefinitions.set(pluginId, next.entryDefinition);
+            syncReloadScopeMetadata();
             publishRuntimeGeneration?.();
             activeScopes.set(pluginId, batch);
             invokedPluginIds.add(pluginId);
-            const sessions =
-              approvalSessions.get(pluginId) ?? new Set<string>();
-            sessions.add(approvedSession);
-            approvalSessions.set(pluginId, sessions);
+            if (approvedSession) {
+              const sessions =
+                approvalSessions.get(pluginId) ?? new Set<string>();
+              sessions.add(approvedSession);
+              approvalSessions.set(pluginId, sessions);
+            }
             failedAt.delete(pluginId);
             artifactRevision += 1;
           } catch (error) {

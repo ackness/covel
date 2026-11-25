@@ -230,4 +230,84 @@ describe("browser workspace cache lifecycle", () => {
     expect(await store.getSession("retry")).toBeNull();
     expect(cache.get("retry", "incarnation:retry-original")).toBeUndefined();
   });
+
+  it("evicts browser workspace heads by TTL and LRU capacity", async () => {
+    let clock = 1_000;
+    const cache = createBrowserWorkspaceCache(() => clock);
+    const makeHead = (id: string) => ({
+      incarnation: `inc:${id}`,
+      revision: 1,
+      actionId: "init",
+      checkpoint: {} as Parameters<typeof cache.set>[1]["checkpoint"],
+      commits: new Map(),
+    });
+
+    cache.set("ttl-session", makeHead("ttl-session"));
+    expect(cache.get("ttl-session", "inc:ttl-session")).toBeDefined();
+
+    // Advance past the 30 minute TTL.
+    clock += 30 * 60_000 + 1;
+    expect(cache.get("ttl-session", "inc:ttl-session")).toBeUndefined();
+
+    // Fill beyond the 256-entry LRU bound and touch s-0 so s-1 becomes LRU.
+    for (let i = 0; i < 256; i++) {
+      cache.set(`s-${i}`, makeHead(`s-${i}`));
+    }
+    expect(cache.get("s-0", "inc:s-0")).toBeDefined();
+    cache.set("s-overflow", makeHead("s-overflow"));
+    expect(cache.get("s-1", "inc:s-1")).toBeUndefined();
+    expect(cache.get("s-0", "inc:s-0")).toBeDefined();
+    expect(cache.get("s-overflow", "inc:s-overflow")).toBeDefined();
+  });
+
+  it("invokes clearPluginEntrySession when deleting a session", async () => {
+    const store = createMemoryStore();
+    const sessionLock = createInProcessSessionLock();
+    const pluginRegistry = createPluginRegistry();
+    const clearPluginEntrySession = vi.fn();
+    const sessionRoutes = new Hono<SessionRouteEnv>();
+    registerSessionDeleteRoute(sessionRoutes);
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("storeBackend", "memory");
+      c.set("sessionLock", sessionLock);
+      c.set("pluginRegistry", pluginRegistry);
+      c.set("clearPluginEntrySession", clearPluginEntrySession);
+      await next();
+    });
+    app.route("/api/sessions", sessionRoutes);
+    await store.upsertWorld({
+      id: "world",
+      name: "World",
+      description: "",
+      createdAt: NOW,
+    });
+    await store.createSession({
+      id: "clean-me",
+      worldId: "world",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      activePlugins: [],
+      locale: "zh-CN",
+      metadata: {
+        sessionIncarnationNonce: "inc",
+        ownerTokenHash: hashSessionOwnerToken(OWNER),
+      },
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+
+    const res = await app.request("/api/sessions/clean-me", {
+      method: "DELETE",
+      headers: { "x-session-token": OWNER },
+    });
+    expect(res.status).toBe(200);
+    expect(clearPluginEntrySession).toHaveBeenCalledWith("clean-me");
+  });
 });

@@ -259,6 +259,10 @@ async function executeResumedRuntime(
         exports: pendingContinuation.exportSlots,
         activation: pendingContinuation.activation,
         pendingProposals: pendingContinuation.pendingProposals as Proposal[],
+        priorToolCalls: pendingContinuation.toolCallsSoFar as ToolCallRecord[],
+        priorEmittedEvents:
+          (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ??
+          [],
         executionContext: resumeExecutionContext,
         createRecursiveCall: () => async () => {
           throw new Error(

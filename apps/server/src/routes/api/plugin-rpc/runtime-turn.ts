@@ -381,56 +381,63 @@ export function createPluginRpcRuntimeTurnRunner(
     const { followUps, completeInTx } = opts.commitSteps;
     // What the landed transaction queued; a retried one replaces it.
     let queued = NO_FOLLOW_UPS;
-    const outcome = await commitExecution({
-      // Runners built without `heldJobs` are the background job worker, whose
-      // runs reject suspension before commit, and the dimension-settlement
-      // retry. A commit of theirs that would release held-back jobs rolls
-      // back instead of losing them.
-      enqueueReleasedJobsInTx: release?.enqueueInTx ?? refuseReleasedJobs,
-      memorySystem: ctx.memorySystem,
-      imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(
-        hookScope.settings,
-      ),
-      signal: opts.executionSignal,
-      completion:
-        opts.completionKind === "detached"
-          ? { kind: "detached", turnId: turnResult.turnId }
-          : {
-              kind: "turn",
-              turnId: turnResult.turnId,
-              durationMs: turnResult.durationMs,
-            },
-      onFinalized: async (outcome) => {
-        // Commit failures must not report success. Surface each one as a
-        // `proposal.failed` trace event (manual/background turns have no live
-        // action stream; the /debug timeline and subscription channel carry it).
-        for (const fp of outcome.failedProposals) {
-          await emitter.emit("proposal.failed", {
-            proposalId: fp.proposal.id,
-            proposalType: fp.proposal.type,
-            runtimeId: fp.proposal.source.runtimeId,
-            pluginId: fp.proposal.source.pluginId,
-            error: fp.error,
-          });
-        }
-      },
-      store: ctx.store,
-      execution,
-      activePluginIds: hookScope.activePluginIds,
-      ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-      eventBus: ctx.eventBus,
-      emitter,
-      extraInTx: async (tx, isolation) => {
-        queued = await followUps(tx, turnResult, isolation);
-        await completeInTx?.(tx, turnResult, isolation, queued);
-      },
-      ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
-      // MediaRef canonicalization / ownership for published export values.
-      ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
-    });
+    let outcome: Awaited<ReturnType<typeof commitExecution>>;
+    try {
+      outcome = await commitExecution({
+        // Runners built without `heldJobs` are the background job worker, whose
+        // runs reject suspension before commit, and the dimension-settlement
+        // retry. A commit of theirs that would release held-back jobs rolls
+        // back instead of losing them.
+        enqueueReleasedJobsInTx: release?.enqueueInTx ?? refuseReleasedJobs,
+        memorySystem: ctx.memorySystem,
+        imageFlowRuntimeIds: await ctx.resolveImageFlowRuntimeIds?.(
+          hookScope.settings,
+        ),
+        signal: opts.executionSignal,
+        completion:
+          opts.completionKind === "detached"
+            ? { kind: "detached", turnId: turnResult.turnId }
+            : {
+                kind: "turn",
+                turnId: turnResult.turnId,
+                durationMs: turnResult.durationMs,
+              },
+        onFinalized: async (outcome) => {
+          // Commit failures must not report success. Surface each one as a
+          // `proposal.failed` trace event (manual/background turns have no live
+          // action stream; the /debug timeline and subscription channel carry it).
+          for (const fp of outcome.failedProposals) {
+            await emitter.emit("proposal.failed", {
+              proposalId: fp.proposal.id,
+              proposalType: fp.proposal.type,
+              runtimeId: fp.proposal.source.runtimeId,
+              pluginId: fp.proposal.source.pluginId,
+              error: fp.error,
+            });
+          }
+        },
+        store: ctx.store,
+        execution,
+        activePluginIds: hookScope.activePluginIds,
+        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        eventBus: ctx.eventBus,
+        emitter,
+        extraInTx: async (tx, isolation) => {
+          queued = await followUps(tx, turnResult, isolation);
+          await completeInTx?.(tx, turnResult, isolation, queued);
+        },
+        ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
+        // MediaRef canonicalization / ownership for published export values.
+        ...(ctx.deps.mediaStore ? { mediaStore: ctx.deps.mediaStore } : {}),
+      });
+    } catch (commitError) {
+      release?.discard();
+      throw commitError;
+    }
 
     const committed = outcome.status === "committed";
     if (committed) await release?.publish();
+    else release?.discard();
     const conflict = outcome.failedProposals.find(
       (item) =>
         item.proposal.type === "dimension.update" &&

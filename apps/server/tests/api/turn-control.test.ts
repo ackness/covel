@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
+import { MAX_PLAYER_MESSAGE_CHARS } from "@covel/shared";
 import { createMemoryStore } from "@covel/store/memory";
 import type { DataStore } from "@covel/store";
 import {
@@ -207,7 +208,7 @@ describe("steer/abort routes", () => {
     const noSession = await app.request("/api/sessions/nope/steer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "hi" }),
+      body: JSON.stringify({}),
     });
     expect(noSession.status).toBe(404);
 
@@ -217,6 +218,16 @@ describe("steer/abort routes", () => {
       body: JSON.stringify({}),
     });
     expect(badBody.status).toBe(400);
+
+    const tooLong = await app.request("/api/sessions/sess-r/steer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "a".repeat(MAX_PLAYER_MESSAGE_CHARS + 1),
+      }),
+    });
+    expect(tooLong.status).toBe(400);
+    expect(await tooLong.json()).toMatchObject({ code: "message_too_long" });
 
     const abortNoTurn = await app.request("/api/sessions/sess-r/abort", {
       method: "POST",

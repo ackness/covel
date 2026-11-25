@@ -229,4 +229,50 @@ describe("settled session lock", () => {
       }),
     ).resolves.toBe("nested");
   });
+
+  it("offers credentials once to a newly arrived unrunnable job before skipping it (M-18)", async () => {
+    const { raw, lock, setPending } = setup();
+    let release!: () => void;
+    let entered!: () => void;
+    const acquired = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = raw.withLock("session", async () => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      // Enqueued while waiter was blocked on the lock, with no credentials yet.
+      setPending([{ jobId: "raced-no-creds", runnable: false }]);
+    });
+    await acquired;
+
+    const onSkipped = vi.fn();
+    const provideCredentials = vi.fn((jobs: readonly SettlingJob[]) => {
+      if (jobs.some((j) => j.jobId === "raced-no-creds")) {
+        // Providing this waiter's request credentials makes the job runnable.
+        setPending([{ jobId: "raced-no-creds", runnable: true }]);
+      }
+    });
+    const next = vi.fn(async () => "settled-after-handoff");
+    const result = lock.withLock(
+      "session",
+      { provideCredentials, onSkipped },
+      next,
+    );
+    await Promise.resolve();
+    release();
+    await held;
+
+    // Wait until credentials were offered and the waiter released the lock to let the worker run.
+    await vi.waitFor(() => expect(provideCredentials).toHaveBeenCalled());
+    expect(next).not.toHaveBeenCalled();
+    expect(onSkipped).not.toHaveBeenCalled();
+
+    // Worker finishes the job and clears pending.
+    await raw.withLock("session", async () => setPending([]));
+    await expect(result).resolves.toBe("settled-after-handoff");
+    expect(next).toHaveBeenCalledOnce();
+    expect(onSkipped).not.toHaveBeenCalled();
+  });
 });

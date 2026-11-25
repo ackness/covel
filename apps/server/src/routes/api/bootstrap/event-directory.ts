@@ -108,6 +108,7 @@ export function createEventDirectory(
     Map<string, Promise<LoadedSchema>>
   >();
   /** So a cross-plugin topic conflict warns once per (session, topic), not every call. */
+  const MAX_WARNED_CONFLICTS = 2_048;
   const warnedConflicts = new Set<string>();
 
   function collectSessionEvents(
@@ -131,6 +132,10 @@ export function createEventDirectory(
           ) {
             const warnKey = `${sessionId}:${decl.topic}`;
             if (!warnedConflicts.has(warnKey)) {
+              if (warnedConflicts.size >= MAX_WARNED_CONFLICTS) {
+                const oldest = warnedConflicts.values().next().value;
+                if (oldest !== undefined) warnedConflicts.delete(oldest);
+              }
               warnedConflicts.add(warnKey);
               console.warn(
                 `[event-directory] topic "${decl.topic}" declared with conflicting schemas by "${existing.pluginId}" and "${manifest.pluginId}" — keeping "${existing.pluginId}"'s declaration`,

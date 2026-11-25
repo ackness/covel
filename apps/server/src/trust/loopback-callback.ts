@@ -132,6 +132,26 @@ function normalizeCallbackPath(rawPath: string): string {
   return rawPath;
 }
 
+const LOOPBACK_IPV4_HOST_RE = /^(?:localhost|127\.0\.0\.1)(?::(\d+))?$/i;
+const LOOPBACK_IPV6_HOST_RE = /^\[::1\](?::(\d+))?$/i;
+
+function isValidLoopbackHostHeader(
+  rawHost: string | undefined,
+  expectedPort: number,
+): boolean {
+  if (typeof rawHost !== "string") return false;
+  const trimmed = rawHost.trim();
+  if (!trimmed || trimmed !== rawHost) return false;
+  const match =
+    LOOPBACK_IPV4_HOST_RE.exec(trimmed) ?? LOOPBACK_IPV6_HOST_RE.exec(trimmed);
+  if (!match) return false;
+  const rawPort = match[1];
+  if (rawPort !== undefined && Number(rawPort) !== expectedPort) {
+    return false;
+  }
+  return true;
+}
+
 export async function startLoopbackCallbackSession(
   options: StartLoopbackCallbackOptions,
 ): Promise<LoopbackCallbackSession> {
@@ -176,6 +196,7 @@ export async function startLoopbackCallbackSession(
     }
   };
 
+  let server: http.Server | undefined;
   let ipv6Server: http.Server | undefined;
 
   const closeServer = (): Promise<void> => {
@@ -207,6 +228,16 @@ export async function startLoopbackCallbackSession(
         Connection: "close",
       });
       res.end("Gone");
+      return;
+    }
+
+    if (!isValidLoopbackHostHeader(req.headers.host, boundPort)) {
+      res.writeHead(403, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        Connection: "close",
+      });
+      res.end("Invalid host");
       return;
     }
 
@@ -263,19 +294,31 @@ export async function startLoopbackCallbackSession(
       query[k] = v;
     }
 
+    let finalized = false;
+    let fallbackCloseTimer: ReturnType<typeof setTimeout> | undefined;
+    const finalizeCallback = (): void => {
+      if (finalized) return;
+      finalized = true;
+      if (fallbackCloseTimer !== undefined) {
+        clearTimeout(fallbackCloseTimer);
+        fallbackCloseTimer = undefined;
+      }
+      resolveWait({ callbackUrl, query });
+      void closeServer();
+    };
+    fallbackCloseTimer = setTimeout(finalizeCallback, 250);
+    fallbackCloseTimer.unref?.();
+    res.once("close", finalizeCallback);
+
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
-      "Content-Security-Policy": "default-src 'none'",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Frame-Options": "DENY",
       Connection: "close",
     });
-    res.end(COMPLETE_HTML, () => {
-      resolveWait({ callbackUrl, query });
-      void closeServer();
-    });
+    res.end(COMPLETE_HTML, finalizeCallback);
   };
-
-  const server = http.createServer(handleRequest);
 
   const onAbort = (): void => {
     if (!settled) {
@@ -294,16 +337,18 @@ export async function startLoopbackCallbackSession(
   try {
     const candidatePorts =
       Array.isArray(options.ports) && options.ports.length > 0
-        ? [...options.ports, 0]
-        : [0];
+        ? [...options.ports, 0, 0, 0]
+        : [0, 0, 0];
     let lastBusyError: unknown;
     for (let i = 0; i < candidatePorts.length; i++) {
       const candidate = candidatePorts[i]!;
+      const isLast = i === candidatePorts.length - 1;
+      const v4 = http.createServer(handleRequest);
+      let candidatePort: number;
       try {
-        boundPort = await listenOn(server, "127.0.0.1", candidate);
-        break;
+        candidatePort = await listenOn(v4, "127.0.0.1", candidate);
       } catch (error) {
-        const isLast = i === candidatePorts.length - 1;
+        await closeHttpServer(v4);
         if (!isLast && isNodeErrno(error, ["EADDRINUSE", "EACCES"])) {
           lastBusyError = error;
           continue;
@@ -314,20 +359,34 @@ export async function startLoopbackCallbackSession(
           { cause: error ?? lastBusyError },
         );
       }
+
+      // Bind the companion ::1 listener on the exact same port so IPv6-first
+      // `localhost` redirects cannot land on another process holding [::1]:port.
+      const v6 = http.createServer(handleRequest);
+      try {
+        await listenOn(v6, "::1", candidatePort, { ipv6Only: true });
+        server = v4;
+        ipv6Server = v6;
+        boundPort = candidatePort;
+        break;
+      } catch (v6Error) {
+        await closeHttpServer(v6);
+        if (isNodeErrno(v6Error, ["EADDRINUSE", "EACCES"]) && !isLast) {
+          await closeHttpServer(v4);
+          lastBusyError = v6Error;
+          continue;
+        }
+        // IPv6 unsupported/unavailable on host (or final ephemeral fallback):
+        // continue with the IPv4 listener alone.
+        server = v4;
+        ipv6Server = undefined;
+        boundPort = candidatePort;
+        break;
+      }
     }
   } catch (error) {
     await closeServer();
     throw error;
-  }
-
-  // Best-effort companion listener on ::1 so `localhost` OAuth redirects work
-  // even when the OS resolves `localhost` to IPv6 first.
-  const candidateIpv6Server = http.createServer(handleRequest);
-  try {
-    await listenOn(candidateIpv6Server, "::1", boundPort, { ipv6Only: true });
-    ipv6Server = candidateIpv6Server;
-  } catch {
-    await closeHttpServer(candidateIpv6Server);
   }
 
   options.signal?.addEventListener("abort", onAbort, { once: true });

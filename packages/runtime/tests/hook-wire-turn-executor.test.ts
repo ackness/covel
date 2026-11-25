@@ -1355,5 +1355,144 @@ describe("Turn executor hook wire-in", () => {
       expect(toolNames).toContain("my-tool");
       expect(llm.calls).toHaveLength(1);
     });
+
+    it("pins toolCallId/name and serializes non-string PostToolUse replacement result (M-17)", async () => {
+      const llm = new SimpleMockLLM();
+      llm.responseQueue = [
+        {
+          content: null,
+          toolCalls: [
+            {
+              id: "call-original",
+              name: "my-tool",
+              arguments: JSON.stringify({}),
+            },
+          ],
+          finishReason: "tool_calls",
+          usage: { inputTokens: 10, outputTokens: 5 },
+        },
+        storySubmitted("done"),
+      ];
+      const businessTool = tool({
+        name: "my-tool",
+        description: "Test tool",
+        parameters: z.object({}),
+        execute: async () => "ok",
+      });
+      const toolExecutor = createToolExecutor({
+        findTool: (name) =>
+          name === businessTool.name ? businessTool : undefined,
+      });
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostToolUse:non-string",
+        event: "PostToolUse",
+        handler: async () => ({
+          action: "continue",
+          replace: {
+            result: {
+              toolCallId: "forged-id",
+              name: "forged-name",
+              result: { rewritten: 42 },
+            },
+          },
+        }),
+      });
+      const manifest = makeManifest({
+        outputKind: "story",
+        tools: { plugin: [businessTool.name] },
+      });
+      const result = await runTurnPipeline(makeTurnInput(), [manifest], {
+        loadRuntime: async () => ({ manifest, promptTemplate: "Use tools." }),
+        llm,
+        toolExecutor,
+        hookPipeline: pipeline,
+        store: await createMainLoopStore("sess-hook-wire"),
+      });
+      expect(result.runtimeResults[0]!.status).toBe("success");
+      const messages = llm.calls[1]!.messages as Array<{
+        role: string;
+        toolCallId?: string;
+        content?: unknown;
+      }>;
+      const toolMsg = messages.find((m) => m.role === "tool");
+      expect(toolMsg?.toolCallId).toBe("call-original");
+      expect(toolMsg?.content).toBe('{"rewritten":42}');
+    });
+
+    it("does not enqueue detached or background jobs for a plugin sitting out after TurnStart failure (M-15)", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "broken-plugin:TurnStart:fail",
+        pluginId: "broken-plugin",
+        event: "TurnStart",
+        handler: async () => {
+          throw new Error("broken turn start");
+        },
+      });
+      const storyManifest = makeManifest({
+        name: "story-plugin",
+        pluginId: "story-plugin",
+        runtimeType: "function",
+        outputKind: "story",
+      });
+      const detachedManifest = makeManifest({
+        name: "broken-plugin/detached",
+        pluginId: "broken-plugin",
+        runtimeType: "function",
+        outputKind: "system",
+        stage: "post-turn",
+        turnCompletion: { mode: "detached" },
+        effects: { writes: ["plugin-data:self:notes"] },
+      });
+      const bgFollowerManifest = makeManifest({
+        name: "broken-plugin/bg-follower",
+        pluginId: "broken-plugin",
+        runtimeType: "function",
+        outputKind: "system",
+        trigger: { type: "event", topic: "story.ping" },
+        execution: "background",
+      });
+      const store = await createMainLoopStore("sess-hook-wire");
+      const result = await runTurnPipeline(
+        makeTurnInput(),
+        [storyManifest, detachedManifest, bgFollowerManifest],
+        {
+          loadRuntime: async (m) => ({
+            manifest: m,
+            promptTemplate: "",
+            handler:
+              m.name === storyManifest.name
+                ? async () => ({
+                    outcome: "success",
+                    value: { segments: narrationSegments("The story goes on.") },
+                    effects: {
+                      events: [{ topic: "story.ping", data: { ok: true } }],
+                    },
+                  })
+                : async () => ({ outcome: "success", value: {} }),
+          }),
+          llm,
+          hookPipeline: pipeline,
+          store,
+        },
+      );
+      expect(
+        result.runtimeResults.find((r) => r.runtimeId === storyManifest.name)
+          ?.status,
+      ).toBe("success");
+      expect(
+        result.runtimeResults.find((r) => r.runtimeId === detachedManifest.name)
+          ?.status,
+      ).toBe("skipped");
+      expect(
+        result.runtimeResults.find(
+          (r) => r.runtimeId === bgFollowerManifest.name,
+        )?.status,
+      ).toBe("skipped");
+      expect(result.deferredRuntimeJobs ?? []).toEqual([]);
+      expect(result.deferredFollowers ?? []).toEqual([]);
+    });
   });
 });

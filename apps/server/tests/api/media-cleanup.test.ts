@@ -391,6 +391,27 @@ describe("POST /api/media/cleanup gate", () => {
     expect(body.code).toBe("invalid_request");
   });
 
+  it("returns 400 invalid_request on malformed or non-object JSON body instead of running default cleanup (M-14)", async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = "true";
+    const app = createTestApp(createMemoryMediaStore());
+    const malformed = await app.request("/api/media/cleanup", {
+      method: "POST",
+      body: "{not-json",
+      headers: { "content-type": "application/json" },
+    });
+    expect(malformed.status).toBe(400);
+    expect(((await malformed.json()) as { code: string }).code).toBe(
+      "invalid_request",
+    );
+
+    const arrayBody = await app.request("/api/media/cleanup", {
+      method: "POST",
+      body: "[]",
+      headers: { "content-type": "application/json" },
+    });
+    expect(arrayBody.status).toBe(400);
+  });
+
   it("singleFlight: a second concurrent cleanup request is rejected", async () => {
     process.env.COVEL_MEDIA_CLEANUP_ENABLED = "true";
     const dataStore = createMemoryStore();

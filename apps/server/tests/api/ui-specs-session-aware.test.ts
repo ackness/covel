@@ -165,4 +165,38 @@ describe("GET /api/ui-specs session-aware filter", () => {
     expect(body.right).toHaveLength(1);
     expect(body.right[0]!.pluginId).toBe("codex");
   });
+
+  it("returns 409 session_incarnation_changed when session is replaced mid-read (M-14)", async () => {
+    const origGet = store.getSession.bind(store);
+    let reads = 0;
+    store.getSession = async (id) => {
+      reads += 1;
+      const row = await origGet(id);
+      if (reads === 1 && row) {
+        return {
+          ...row,
+          metadata: {
+            ...row.metadata,
+            sessionIncarnationNonce: "inc-original",
+          },
+        };
+      }
+      if (reads >= 2 && row) {
+        return {
+          ...row,
+          metadata: {
+            ...row.metadata,
+            sessionIncarnationNonce: "inc-recreated",
+          },
+        };
+      }
+      return row;
+    };
+
+    const res = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "session_incarnation_changed",
+    });
+  });
 });

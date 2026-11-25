@@ -341,6 +341,52 @@ describe("plugin-rpc kind event", () => {
     );
   });
 
+  it("allows one-time (scope: 'once') event and subscriber grants without failing 409, then re-prompts on next emit", async () => {
+    let gate: RpcApprovalGate;
+    ({ app, store, gate } = await setup("community"));
+    const session = (await store.getSession(SESSION))!;
+    const request = {
+      pluginId: "map",
+      topic: "map.location-selected",
+      payload: { locationId: "docks" },
+    };
+
+    // Approve server code for the session, then approve event + subscriber runtime as "once".
+    const scopes: Array<"session" | "once"> = ["session", "once", "once"];
+    for (const scope of scopes) {
+      const res = await emit(app, request);
+      expect(res.status).toBe(202);
+      const body = (await res.json()) as {
+        status: string;
+        approvalId: string;
+      };
+      expect(body.status).toBe("approval-required");
+      gate.decide(
+        {
+          approvalId: body.approvalId,
+          decision: "allow",
+          scope,
+          decidedAt: new Date().toISOString(),
+        },
+        sessionApprovalScope(session, "map"),
+      );
+    }
+
+    const dispatched = await emit(app, request);
+    expect(dispatched.status).toBe(200);
+    expect(await listRuntimeJobs(store, { sessionId: SESSION })).toHaveLength(
+      2,
+    );
+
+    // A second emit must prompt again because the one-time grant was consumed.
+    const second = await emit(app, request);
+    expect(second.status).toBe(202);
+    expect(await second.json()).toMatchObject({
+      status: "approval-required",
+      pending: { action: "event:map.location-selected" },
+    });
+  });
+
   it("refuses event dispatch when a community subscriber's approval is revoked before acquiring sessionLock", async () => {
     const inner = createInProcessSessionLock();
     let lockCalls = 0;

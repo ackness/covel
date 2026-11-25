@@ -965,6 +965,7 @@ sessionRoutes.patch("/:id", async (c) => {
       "ended",
     );
     c.get("pluginFaults")?.forgetSession(id);
+    c.get("clearPluginEntrySession")?.(id);
   }
 
   let responseSession: SessionRecord | Response = updated.merged;

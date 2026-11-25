@@ -858,6 +858,8 @@ export async function runPostToolUseHook<R>(
  * `parsedResult`); a write it adds would commit under the runtime's identity.
  */
 const PINNED_TOOL_RESULT_FIELDS = [
+  "toolCallId",
+  "name",
   "pendingProposals",
   "emittedEvents",
   "success",
@@ -879,6 +881,26 @@ function pinToolResultWrites<R>(original: R, replaced: unknown): R {
   for (const field of PINNED_TOOL_RESULT_FIELDS) {
     if (Object.hasOwn(source, field)) pinned[field] = source[field];
     else delete pinned[field];
+  }
+  if (typeof pinned.result !== "string") {
+    if (pinned.result === undefined) {
+      if (typeof source.result === "string") pinned.result = source.result;
+    } else {
+      try {
+        const serialized = JSON.stringify(pinned.result);
+        pinned.result =
+          serialized !== undefined
+            ? serialized
+            : typeof source.result === "string"
+              ? source.result
+              : "";
+      } catch {
+        pinned.result =
+          typeof source.result === "string"
+            ? source.result
+            : String(pinned.result);
+      }
+    }
   }
   return pinned as R;
 }

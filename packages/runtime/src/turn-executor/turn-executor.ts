@@ -624,6 +624,19 @@ async function executeTurnImpl(
   let detachmentPlan = input.detachedStage
     ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
     : planTurnDetachment(scheduledRuntimes);
+  if (deps.hookFailedPlugins && deps.hookFailedPlugins.size > 0) {
+    detachmentPlan = {
+      ...detachmentPlan,
+      eligibleRuntimeIds: new Set(
+        [...detachmentPlan.eligibleRuntimeIds].filter((runtimeId) => {
+          const manifest = scheduledRuntimes.find(
+            (candidate) => candidate.name === runtimeId,
+          );
+          return !manifest || !deps.hookFailedPlugins?.has(manifest.pluginId);
+        }),
+      ),
+    };
+  }
   if (scopedRecovery) {
     detachmentPlan = {
       ...detachmentPlan,
@@ -1084,6 +1097,9 @@ async function executeTurnImpl(
           // mirror prevents a completed setup runtime from re-firing.
           setupRuntimes: setupTracker.mirror,
           isAborted: executionAborted,
+          ...(deps.hookFailedPlugins
+            ? { hookFailedPlugins: deps.hookFailedPlugins }
+            : {}),
           onHazardDiagnostics: emitHazardDiagnostics,
           onDroppedEvent: (topic, runtimeId) =>
             emitHazardDiagnostics([

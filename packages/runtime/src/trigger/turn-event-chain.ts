@@ -70,6 +70,8 @@ export interface RunEventChainParams {
   readonly onDroppedEvent?: (topic: string, runtimeId: string) => void;
   /** Stops scheduling further fan-out depths or groups once the execution aborts. */
   readonly isAborted?: () => boolean;
+  /** Plugins sitting out this execution due to a confined TurnStart hook failure. */
+  readonly hookFailedPlugins?: ReadonlySet<string>;
   /** Observer for same-layer effects hazard diagnostics in synchronous fan-out groups. */
   readonly onHazardDiagnostics?: (
     diagnostics: readonly SchedulingDiagnostic[],
@@ -184,6 +186,7 @@ export async function runEventChain({
   setupRuntimes,
   onDroppedEvent,
   isAborted,
+  hookFailedPlugins,
   onHazardDiagnostics,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, SelectedEvent>();
@@ -249,7 +252,8 @@ export async function runEventChain({
       if (
         manifest.execution === "background" &&
         topic !== undefined &&
-        matchedEvent !== undefined
+        matchedEvent !== undefined &&
+        !hookFailedPlugins?.has(manifest.pluginId)
       ) {
         if (deferredNames.has(manifest.name)) {
           // eslint-disable-next-line no-console -- dev-time warning, not user-facing

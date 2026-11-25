@@ -23,6 +23,14 @@ export interface BootstrapOwned {
   eventBus?: EventBus;
   pluginEntries?: BootstrapPluginEntries;
   instancePlugins?: import("./instance-plugins.js").InstancePluginRegistry;
+  appScheduler?: Pick<import("./app-scheduler.js").AppScheduler, "close">;
+  configFlows?: Pick<import("./config-flows.js").ConfigFlowEngine, "close">;
+  uiSlots?: Pick<import("../../../ui-slots/host.js").UiSlotHost, "close">;
+  runtimeJobWorker?: Pick<
+    import("../plugin-rpc/runtime-job-worker.js").RuntimeJobWorker,
+    "close"
+  >;
+  runtimeJobCredentials?: { readonly clear: () => void };
   closeTools?: () => Promise<void>;
   ephemeralConfigDir?: string;
 }
@@ -56,37 +64,63 @@ export async function createBootstrapEventBus(
   return owned.eventBus;
 }
 
+async function runStartupCleanup(
+  label: string,
+  fn: () => Promise<unknown> | unknown,
+): Promise<void> {
+  try {
+    await fn();
+  } catch {
+    console.warn(`[bootstrap] failed to ${label} after startup failure`);
+  }
+}
+
 /**
- * Release what a failed startup acquired: tool admission first, then plugin
- * entries, then the event bus (or the bare transport when the bus was never
- * built). The caller rethrows the startup error.
+ * Release what a failed startup acquired in reverse dependency order. Each
+ * cleanup step is isolated so a throwing resource never leaks the rest.
  */
 export async function releaseAfterStartupFailure(
   owned: BootstrapOwned,
 ): Promise<void> {
-  await owned.closeTools?.();
-  try {
-    await owned.pluginEntries?.close();
-  } catch {
-    console.warn(
-      "[bootstrap] failed to clean up plugin entries after startup failure",
+  if (owned.runtimeJobCredentials) {
+    await runStartupCleanup("clear runtime job credentials", () =>
+      owned.runtimeJobCredentials?.clear(),
     );
   }
-  try {
-    if (owned.eventBus) await owned.eventBus.close();
-    else await owned.eventTransport?.close?.();
-  } catch {
-    console.warn(
-      "[bootstrap] failed to close event infrastructure after startup failure",
+  if (owned.runtimeJobWorker) {
+    await runStartupCleanup("close runtime job worker", () =>
+      owned.runtimeJobWorker?.close(),
+    );
+  }
+  if (owned.appScheduler) {
+    await runStartupCleanup("close app scheduler", () =>
+      owned.appScheduler?.close(),
+    );
+  }
+  if (owned.configFlows) {
+    await runStartupCleanup("close config flows", () =>
+      owned.configFlows?.close(),
+    );
+  }
+  if (owned.uiSlots) {
+    await runStartupCleanup("close ui slots", () => owned.uiSlots?.close());
+  }
+  if (owned.closeTools) {
+    await runStartupCleanup("close tools", () => owned.closeTools?.());
+  }
+  if (owned.pluginEntries) {
+    await runStartupCleanup("clean up plugin entries", () =>
+      owned.pluginEntries?.close(),
+    );
+  }
+  if (owned.eventBus || owned.eventTransport) {
+    await runStartupCleanup("close event infrastructure", () =>
+      owned.eventBus ? owned.eventBus.close() : owned.eventTransport?.close?.(),
     );
   }
   if (owned.ephemeralConfigDir) {
-    try {
-      await rm(owned.ephemeralConfigDir, { recursive: true, force: true });
-    } catch {
-      console.warn(
-        "[bootstrap] failed to remove ephemeral instance config directory after startup failure",
-      );
-    }
+    await runStartupCleanup("remove ephemeral instance config directory", () =>
+      rm(owned.ephemeralConfigDir!, { recursive: true, force: true }),
+    );
   }
 }

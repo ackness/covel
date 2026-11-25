@@ -44,6 +44,7 @@ import { createReadRecorder, type ReadRecorder } from "../read-dependencies.js";
 import {
   baselinesFor,
   contentBasisOf,
+  createReadBaselineRecorder,
   type ReadBaselineRecorder,
 } from "../read-baselines.js";
 
@@ -575,4 +576,63 @@ export function pluginDataListBases(
       ).external,
     };
   });
+}
+
+/**
+ * Host-only speculative fork of plugin-data visibility for a sub-agent or
+ * delegation boundary. Reads observe the provider's uncommitted same-turn
+ * upstream writes (and `upstreamOf` for services), while recorded producer
+ * dependencies and baselines merge into `parent` only when `accept()` runs.
+ */
+export function forkPluginDataVisibility(
+  parent: PluginDataVisibility,
+  options: {
+    readonly pluginId?: string;
+    readonly runtimeId?: string;
+    readonly runId?: string;
+    readonly assertLive?: () => void;
+    readonly probe?: PluginDataReadProbe;
+  } = {},
+): {
+  readonly visibility: PluginDataVisibility;
+  accept(): void;
+  discard(): void;
+} {
+  const pluginId = options.pluginId ?? parent.pluginId;
+  const runtimeId = options.runtimeId ?? parent.runtimeId;
+  const runId = options.runId ?? parent.runId;
+  const recorder = createReadRecorder();
+  const baselines = createReadBaselineRecorder();
+  let closed = false;
+  const writes =
+    pluginId === parent.pluginId
+      ? parent.writes.length > 0
+        ? parent.writes
+        : (parent.upstreamOf?.(pluginId) ?? parent.writes)
+      : (parent.upstreamOf?.(pluginId) ?? []);
+  const probe = options.probe ?? parent.probe;
+  const visibility: PluginDataVisibility = {
+    pluginId,
+    runtimeId,
+    runId,
+    writes,
+    ...(parent.upstreamOf ? { upstreamOf: parent.upstreamOf } : {}),
+    recorder,
+    baselines,
+    ...(probe ? { probe } : {}),
+  };
+  return {
+    visibility,
+    accept() {
+      if (closed) return;
+      options.assertLive?.();
+      const targetBaselines = parent.baselines ?? baselinesFor(parent.recorder);
+      for (const read of baselines.snapshot()) targetBaselines.observe(read);
+      for (const producer of recorder) parent.recorder.add(producer);
+      closed = true;
+    },
+    discard() {
+      closed = true;
+    },
+  };
 }

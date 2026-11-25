@@ -135,7 +135,7 @@ export async function createPluginHost(args: {
   });
   const appActions = createAppActionRegistry();
   let providerSourcesRef: ProviderSourceHost | undefined;
-  const configFlows = createConfigFlowEngine({
+  const configFlows = (owned.configFlows = createConfigFlowEngine({
     onRunCompleted: (snapshot) =>
       invalidateAndRefreshProviderSources(
         providerSourcesRef,
@@ -144,7 +144,7 @@ export async function createPluginHost(args: {
         "config-flows",
         `flow for "${snapshot.pluginId}"`,
       ),
-  });
+  }));
   const appEvents = createAppEventDispatcher({
     registry,
     store,
@@ -156,14 +156,14 @@ export async function createPluginHost(args: {
       owned.instancePlugins?.activateForEvent(event) ?? Promise.resolve([]),
   });
   linkAppEventDispatcherToBus(eventBus, appEvents);
-  const appScheduler = createAppScheduler({
+  const appScheduler = (owned.appScheduler = createAppScheduler({
     registry,
     store,
     hostId,
     secretVault,
     getPermissionService: () => trust.permissions,
     getTrustedSources: () => trust.current,
-  });
+  }));
   const providerSources = createProviderSourceHost({
     registry,
     store,

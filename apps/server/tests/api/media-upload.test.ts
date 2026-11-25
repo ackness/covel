@@ -321,6 +321,19 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 413 limit_exceeded when upload exceeds 20 MB (M-14)", async () => {
+    const { app } = await makeApp();
+    const oversized = new Uint8Array(20 * 1024 * 1024 + 1);
+    oversized.set(IMG, 0);
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/png" },
+      body: oversized,
+    });
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ code: "limit_exceeded" });
+  });
+
   it("returns 503 when no media store is configured", async () => {
     const { app } = await makeApp(false);
     const res = await app.request("/api/media?sessionId=s1", {

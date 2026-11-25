@@ -45,8 +45,9 @@ describe("startLoopbackCallbackSession", () => {
     expect(hit.status).toBe(200);
     expect(hit.headers.get("cache-control")).toBe("no-store");
     expect(hit.headers.get("content-security-policy")).toBe(
-      "default-src 'none'",
+      "default-src 'none'; frame-ancestors 'none'",
     );
+    expect(hit.headers.get("x-frame-options")).toBe("DENY");
     expect(await hit.text()).toContain("Authorization received");
 
     const result = await waitPromise;
@@ -60,6 +61,66 @@ describe("startLoopbackCallbackSession", () => {
 
     // Port closes immediately once callback completes.
     await new Promise((r) => setTimeout(r, 25));
+    await expect(fetch(session.callbackUrl)).rejects.toThrow();
+  });
+
+  it("rejects forged non-loopback Host headers without closing the listener (M-03)", async () => {
+    const net = await import("node:net");
+    const session = await startLoopbackCallbackSession({
+      path: "/auth/callback",
+    });
+    sessions.push(session);
+
+    const waitPromise = session.waitForCallback();
+    const rawResponse = await new Promise<string>((resolve, reject) => {
+      const socket = net.connect(session.port, "127.0.0.1", () => {
+        socket.write(
+          `GET /auth/callback?code=evil&state=${session.state} HTTP/1.1\r\nHost: evil.example:${session.port}\r\nConnection: close\r\n\r\n`,
+        );
+      });
+      let chunks = "";
+      socket.on("data", (d) => {
+        chunks += d.toString("utf8");
+      });
+      socket.on("end", () => resolve(chunks));
+      socket.on("error", reject);
+    });
+    expect(rawResponse).toContain("403");
+
+    // Legitimate callback still succeeds afterwards.
+    const hit = await fetch(
+      `${session.callbackUrl}?code=legit&state=${session.state}`,
+    );
+    expect(hit.status).toBe(200);
+    const result = await waitPromise;
+    expect(result.query.code).toBe("legit");
+  });
+
+  it("settles and closes cleanly even when the client disconnects before reading the response (M-03)", async () => {
+    const net = await import("node:net");
+    const session = await startLoopbackCallbackSession({
+      path: "/auth/callback",
+      timeoutMs: 5_000,
+    });
+    sessions.push(session);
+
+    const waitPromise = session.waitForCallback();
+    await new Promise<void>((resolve, reject) => {
+      const socket = net.connect(session.port, "127.0.0.1", () => {
+        socket.write(
+          `GET /auth/callback?code=early-drop&state=${session.state} HTTP/1.1\r\nHost: 127.0.0.1:${session.port}\r\nConnection: close\r\n\r\n`,
+          () => {
+            socket.destroy();
+            resolve();
+          },
+        );
+      });
+      socket.on("error", reject);
+    });
+
+    const result = await waitPromise;
+    expect(result.query.code).toBe("early-drop");
+    await new Promise((r) => setTimeout(r, 30));
     await expect(fetch(session.callbackUrl)).rejects.toThrow();
   });
 
@@ -82,6 +143,36 @@ describe("startLoopbackCallbackSession", () => {
       expect(session.callbackUrl).toBe(
         `http://127.0.0.1:${session.port}/callback`,
       );
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+  });
+
+  it("skips a preferred port already bound on ::1 when IPv6 is available (M-03)", async ({
+    skip,
+  }) => {
+    const blocker = http.createServer((_req, res) => res.end("v6-busy"));
+    const busyV6Port = await new Promise<number | null>((resolve, reject) => {
+      blocker.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "EAFNOSUPPORT" || error.code === "EADDRNOTAVAIL") {
+          resolve(null);
+        } else {
+          reject(error);
+        }
+      });
+      blocker.listen({ host: "::1", port: 0, ipv6Only: true }, () => {
+        resolve((blocker.address() as AddressInfo).port);
+      });
+    });
+    if (busyV6Port === null) skip();
+
+    try {
+      const session = await startLoopbackCallbackSession({
+        path: "/callback",
+        ports: [busyV6Port!],
+      });
+      sessions.push(session);
+      expect(session.port).not.toBe(busyV6Port);
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }

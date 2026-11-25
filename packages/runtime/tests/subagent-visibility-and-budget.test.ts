@@ -800,4 +800,179 @@ describe("sub-agent delegation budget recovery", () => {
     expect(delegation.snapshot().calls).toBe(1);
     expect(delegation.snapshot().actorIds).toEqual(["char-b"]);
   });
+
+  it("forwards pluginDataVisibility and forks world/visibility for function runtime ctx.agents.run (H-14)", async () => {
+    const store = await createSeededStore(["bank", "coordinator", "helper"]);
+    await store.setPluginData({
+      id: `${SESSION}:bank:wallet:gold`,
+      sessionId: SESSION,
+      pluginId: "bank",
+      namespace: "wallet",
+      key: "gold",
+      value: { amount: 10 },
+      createdAt: NOW,
+    updatedAt: NOW,
+    });
+
+    const services = new PluginServiceRegistry({
+      list: async () => ["bank", "coordinator", "helper"],
+      ensure: async () => {},
+    });
+    let seenAmounts: number[] = [];
+    services.register("bank", {
+      name: "peek",
+      contract: "bank.peek@1",
+      access: "read",
+      modelFacing: true,
+      description: "Read gold from wallet",
+      input: z.object({}),
+      output: z.object({ amount: z.number() }),
+      handler: async (_input, ctx) => {
+        const current = (await ctx.pluginData.get("wallet", "gold")) as {
+          amount: number;
+        } | null;
+        const amount = current?.amount ?? 0;
+        seenAmounts.push(amount);
+        return { amount };
+      },
+    });
+
+    const toolRegistry = new ToolRegistry();
+    const toolExecutor = createToolExecutor({
+      store,
+      findTool: (name, context) => toolRegistry.find(name, context.pluginId),
+      getToolSource: (name) => toolRegistry.source(name),
+    });
+
+    const bankDeposit: RuntimeManifest = {
+      name: "bank/deposit",
+      pluginId: "bank",
+      description: "Deposit gold",
+      runtimeType: "function",
+      outputKind: "system",
+      trigger: { type: "auto" },
+      stage: "pre-turn",
+      model: "default",
+    };
+    const helperManifest: RuntimeManifest = {
+      name: "helper/agent",
+      pluginId: "helper",
+      description: "Helper subagent",
+      runtimeType: "agent",
+      outputKind: "system",
+      trigger: { type: "manual" },
+      subagentOnly: true,
+      model: "default",
+      outputContract: "helper.line@1",
+      output: { schema: "output.schema.json" },
+      tools: {
+        services: [{ contract: "bank.peek@1", name: "peek-gold" }],
+      },
+    };
+    const coordinator: RuntimeManifest = {
+      name: "coordinator/fn",
+      pluginId: "coordinator",
+      description: "Coordinator function",
+      runtimeType: "function",
+      outputKind: "system",
+      trigger: { type: "auto" },
+      stage: "narrative",
+      after: ["bank/deposit"],
+      model: "default",
+    };
+
+    let helperStep = 0;
+    const llm: LLMAdapter = {
+      async generate() {
+        helperStep += 1;
+        if (helperStep === 1) return toolCall("peek-gold", {}, "peek-1");
+        if (helperStep === 2) {
+          throw new Error("subagent failed after reading");
+        }
+        if (helperStep === 3) return toolCall("peek-gold", {}, "peek-2");
+        return submitOutput({ line: "saw uncommitted deposit" });
+      },
+    };
+
+    let firstOutcome: unknown;
+    let secondOutcome: unknown;
+    const loadedByName = new Map<string, LoadedRuntime>([
+      [
+        bankDeposit.name,
+        {
+          manifest: bankDeposit,
+          promptTemplate: "",
+          handler: (async (ctx) => {
+            await ctx.pluginData!.set("wallet", "gold", { amount: 99 });
+            return { outcome: "success", value: { deposited: true } };
+          }) as FunctionHandler,
+        },
+      ],
+      [
+        helperManifest.name,
+        {
+          manifest: helperManifest,
+          promptTemplate: "Peek gold and reply.",
+          outputSchema: { ...LINE_SCHEMA },
+          outputContractSchema: { ...LINE_SCHEMA },
+        },
+      ],
+      [
+        coordinator.name,
+        {
+          manifest: coordinator,
+          promptTemplate: "",
+          handler: (async (ctx) => {
+            firstOutcome = await ctx.agents!.run({
+              target: { contract: "helper.line@1" },
+              brief: "first (will fail)",
+            });
+            secondOutcome = await ctx.agents!.run({
+              target: { contract: "helper.line@1" },
+              brief: "second (succeeds)",
+            });
+            return { outcome: "success", value: { ok: true } };
+          }) as FunctionHandler,
+        },
+      ],
+    ]);
+
+    const input: TurnInput = {
+      origin: "player",
+      sessionId: SESSION,
+      turnId: "turn-h14",
+      locale: "en-US",
+      playerMessage: "go",
+    };
+    const execution = await executeTurn(
+      input,
+      [bankDeposit, helperManifest, coordinator],
+      {
+        store,
+        llm,
+        toolExecutor,
+        services,
+        hookScope: {
+          activePluginIds: new Set(["bank", "coordinator", "helper"]),
+        },
+        loadRuntime: async (m) => loadedByName.get(m.name),
+      },
+    );
+
+    const depositResult = execution.commit.results.find(
+      (r) => r.runtimeId === bankDeposit.name,
+    )!;
+    const coordResult = execution.commit.results.find(
+      (r) => r.runtimeId === coordinator.name,
+    )!;
+    expect(coordResult.status).toBe("success");
+    // Both subagents must observe the uncommitted same-turn deposit (99, not stored 10)
+    expect(seenAmounts).toEqual([99, 99]);
+    expect((firstOutcome as { ok: boolean }).ok).toBe(false);
+    expect((secondOutcome as { ok: boolean }).ok).toBe(true);
+    // Read dependency from the succeeded subagent merges back into coordinator
+    expect(execution.commit.readDependencies?.[coordResult.runId]).toEqual([
+      depositResult.runId,
+    ]);
+  });
 });

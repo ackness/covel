@@ -255,6 +255,22 @@ export function registerSessionPluginRoutes(
     const pluginId = c.req.param("pluginId");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
+    if (guard.session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+      return c.json(
+        errorBody("Session deletion is in progress; retry DELETE", {
+          code: "session_deleting",
+        }),
+        409,
+      );
+    }
+    if (guard.session.status !== "active") {
+      return c.json(
+        errorBody(`Session is ${guard.session.status}; mutation refused`, {
+          code: "session_not_active",
+        }),
+        409,
+      );
+    }
     const pluginEntry = pluginRegistry.get(pluginId);
     if (!pluginEntry) {
       return c.json(

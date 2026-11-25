@@ -6,6 +6,7 @@ const SHUTDOWN_SIGNALS = ["SIGINT", "SIGTERM"] as const;
 
 export interface ShutdownServer {
   close: (callback?: (error?: Error) => void) => unknown;
+  closeIdleConnections?: () => void;
   closeAllConnections?: () => void;
 }
 
@@ -22,6 +23,8 @@ export interface GracefulShutdownOptions {
 
 /** Overall budget: server close + resource drain, then force exit. */
 const FORCE_EXIT_AFTER_MS = 10_000;
+/** Grace window before upgrading closeIdleConnections() to closeAllConnections(). */
+const FORCE_CLOSE_CONNECTIONS_AFTER_MS = 1_500;
 
 export const registerGracefulShutdown = (
   server: ShutdownServer,
@@ -37,6 +40,7 @@ export const registerGracefulShutdown = (
     shuttingDown = true;
     console.log(`[shutdown] Received ${signal}, shutting down server...`);
 
+    let forceCloseTimer: ReturnType<typeof setTimeout> | undefined;
     const shutdownTimer = setTimeout(() => {
       console.log(
         `[shutdown] Server shutdown timed out after ${FORCE_EXIT_AFTER_MS}ms`,
@@ -45,13 +49,27 @@ export const registerGracefulShutdown = (
     }, FORCE_EXIT_AFTER_MS);
 
     const finish = async (error?: Error): Promise<void> => {
-      if (error) {
-        console.error("[shutdown] Server shutdown failed:", error);
-        process.exit(1);
-        return;
+      if (forceCloseTimer !== undefined) {
+        clearTimeout(forceCloseTimer);
+        forceCloseTimer = undefined;
       }
 
-      console.log("[shutdown] Server stopped.");
+      const errorCode =
+        error && typeof error === "object" && "code" in error
+          ? (error as NodeJS.ErrnoException).code
+          : undefined;
+      let exitCode = 0;
+      if (error && errorCode !== "ERR_SERVER_NOT_RUNNING") {
+        console.error("[shutdown] Server shutdown failed:", error);
+        exitCode = 1;
+      } else if (error) {
+        console.warn(
+          "[shutdown] Server was already stopped; draining remaining resources.",
+        );
+      } else {
+        console.log("[shutdown] Server stopped.");
+      }
+
       if (options.drain) {
         try {
           await options.drain();
@@ -60,14 +78,22 @@ export const registerGracefulShutdown = (
         }
       }
       clearTimeout(shutdownTimer);
-      process.exit(0);
+      process.exit(exitCode);
     };
 
     server.close((error) => {
       void finish(error);
     });
 
-    if (typeof server.closeAllConnections === "function") {
+    if (typeof server.closeIdleConnections === "function") {
+      server.closeIdleConnections();
+      if (typeof server.closeAllConnections === "function") {
+        forceCloseTimer = setTimeout(() => {
+          server.closeAllConnections?.();
+        }, FORCE_CLOSE_CONNECTIONS_AFTER_MS);
+        forceCloseTimer.unref?.();
+      }
+    } else if (typeof server.closeAllConnections === "function") {
       server.closeAllConnections();
     }
   };

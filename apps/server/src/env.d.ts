@@ -171,6 +171,8 @@ declare module "hono" {
     clearCompactionFailures?: (sessionId: string) => void;
     /** Release revision and full-commit replay state after session deletion. */
     clearBrowserWorkspace?: (sessionId: string) => void;
+    /** Forget session-scoped plugin entry approval tracking after session end/deletion. */
+    clearPluginEntrySession?: (sessionId: string) => void;
     /**
      * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from
      * the discovery result via `deriveBuiltinPluginIds`). The plugin install

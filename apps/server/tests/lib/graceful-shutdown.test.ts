@@ -122,4 +122,62 @@ describe("graceful shutdown", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(state.exit).toHaveBeenCalledExactlyOnceWith(1);
   });
+
+  it("still drains resources when server.close fails with ERR_SERVER_NOT_RUNNING (M-11)", async () => {
+    const drain = vi.fn(async () => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    shutdownProcess.connected = false;
+    shutdownProcess.send = undefined;
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    shutdownProcess.on.mockImplementation((event, listener) => {
+      listeners.set(String(event), listener);
+      return shutdownProcess;
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const notRunning = Object.assign(new Error("Server is not running"), {
+      code: "ERR_SERVER_NOT_RUNNING",
+    });
+    const server = {
+      close: vi.fn((cb?: (error?: Error) => void) => cb?.(notRunning)),
+      closeAllConnections: vi.fn(),
+    };
+    registerGracefulShutdown(server, { drain });
+    listeners.get("SIGTERM")!();
+    await vi.waitFor(() =>
+      expect(shutdownProcess.exit).toHaveBeenCalledExactlyOnceWith(0),
+    );
+    expect(drain).toHaveBeenCalledOnce();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it("prefers closeIdleConnections before force-closing active sockets (M-11)", async () => {
+    vi.useFakeTimers();
+    const drain = vi.fn(async () => {});
+    shutdownProcess.connected = false;
+    shutdownProcess.send = undefined;
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    shutdownProcess.on.mockImplementation((event, listener) => {
+      listeners.set(String(event), listener);
+      return shutdownProcess;
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    let finish!: (error?: Error) => void;
+    const server = {
+      close: vi.fn((cb?: (error?: Error) => void) => {
+        finish = cb!;
+      }),
+      closeIdleConnections: vi.fn(),
+      closeAllConnections: vi.fn(),
+    };
+    registerGracefulShutdown(server, { drain });
+    listeners.get("SIGINT")!();
+    expect(server.closeIdleConnections).toHaveBeenCalledOnce();
+    expect(server.closeAllConnections).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(server.closeAllConnections).toHaveBeenCalledOnce();
+    finish();
+    await vi.waitFor(() =>
+      expect(shutdownProcess.exit).toHaveBeenCalledExactlyOnceWith(0),
+    );
+  });
 });

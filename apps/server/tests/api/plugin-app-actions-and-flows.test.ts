@@ -875,4 +875,210 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
     );
     expect(redirRefused.status).toBe(500);
   });
+
+  it("activates only the target plugin for shared action/flow names and sets Cache-Control: no-store on flows (M-10)", async () => {
+    const manifest = (name: string) => ({
+      apiVersion: 2,
+      scope: "instance",
+      activationEvents: ["onAppAction:shared-act", "onFlow:shared-flow"],
+      contributes: { appActions: ["shared-act"], flows: ["shared-flow"] },
+      entry: "./server.mjs",
+      description: name,
+    });
+    const entryCode = (label: string) => `
+      export default function (covel) {
+        covel.registerAppAction("shared-act", async () => ({ owner: "${label}" }));
+        covel.registerConfigFlow("shared-flow", {
+          start: async () => ({ kind: "done", title: "${label}" }),
+          step: async () => ({ kind: "done", title: "${label}" }),
+        });
+      }
+    `;
+    await writePluginDir(userDir, "shared-a", manifest("A"), {
+      "server.mjs": entryCode("A"),
+    });
+    await writePluginDir(userDir, "shared-b", manifest("B"), {
+      "server.mjs": entryCode("B"),
+    });
+
+    const booted = await bootServer();
+    for (const pid of ["shared-a", "shared-b"]) {
+      await grantPlugin(booted, pid, {
+        "plugin.communityCode": "allow",
+        "plugin.instanceScope": "allow",
+      });
+    }
+
+    expect(booted.instancePlugins.isActivated("shared-a")).toBe(false);
+    expect(booted.instancePlugins.isActivated("shared-b")).toBe(false);
+
+    const actRes = await postJson("/api/plugins/shared-a/actions/shared-act");
+    expect(actRes.status).toBe(200);
+    expect(await actRes.json()).toEqual({ ok: true, result: { owner: "A" } });
+    expect(booted.instancePlugins.isActivated("shared-a")).toBe(true);
+    expect(booted.instancePlugins.isActivated("shared-b")).toBe(false);
+
+    const flowRes = await postJson(
+      "/api/plugins/shared-a/flows/shared-flow/start",
+    );
+    expect(flowRes.status).toBe(200);
+    expect(flowRes.headers.get("cache-control")).toBe("no-store");
+    expect(booted.instancePlugins.isActivated("shared-b")).toBe(false);
+  });
+
+  it("times out hanging app actions with 504 app_action_timeout (M-10)", async () => {
+    const { createPluginAppActionRoutes } =
+      await import("../../src/routes/api/plugin-app-actions.js");
+    const { createAppActionRegistry } =
+      await import("../../src/routes/api/bootstrap/app-actions.js");
+    await writePluginDir(
+      userDir,
+      "slow-action-plugin",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        contributes: { appActions: ["hang"] },
+        entry: "./server.mjs",
+      },
+      {
+        "server.mjs": `
+          export default function (covel) {
+            covel.registerAppAction("hang", () => new Promise(() => {}));
+          }
+        `,
+      },
+    );
+    const booted = await bootServer();
+    await grantPlugin(booted, "slow-action-plugin", {
+      "plugin.communityCode": "allow",
+      "plugin.instanceScope": "allow",
+    });
+
+    const appActions = createAppActionRegistry();
+    appActions.register(
+      "slow-action-plugin",
+      "hang",
+      () => new Promise(() => {}),
+      {},
+      "community",
+    );
+    const routeApp = createPluginAppActionRoutes({
+      registry: booted.registry,
+      store,
+      hostId: booted.hostId,
+      secretVault: booted.secretVault,
+      appActions,
+      instancePlugins: booted.instancePlugins,
+      permissionService: booted.permissionService,
+      trustedSources: booted.trustedSources,
+      actionTimeoutMs: 40,
+    });
+    const res = await routeApp.request("/slow-action-plugin/actions/hang", {
+      method: "POST",
+    });
+    expect(res.status).toBe(504);
+    expect(await res.json()).toMatchObject({ code: "app_action_timeout" });
+  });
+
+  it("enforces maxConcurrentRuns during async start(), aborts/cleans up on close(), and cleans half-registered entries on replacePlugin rollback (M-07)", async () => {
+    const { createConfigFlowEngine } =
+      await import("../../src/routes/api/bootstrap/config-flows.js");
+    const { createAppActionRegistry } =
+      await import("../../src/routes/api/bootstrap/app-actions.js");
+
+    // 1. replacePlugin rollback cleans up half-registered actions & flows.
+    const actions = createAppActionRegistry();
+    actions.register("p1", "old", async () => ({}), {}, "community");
+    expect(() =>
+      actions.replacePlugin("p1", () => {
+        actions.register("p1", "new-half", async () => ({}), {}, "community");
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(actions.get("p1", "old")).toBeDefined();
+    expect(actions.get("p1", "new-half")).toBeUndefined();
+
+    const engine = createConfigFlowEngine({ maxConcurrentRuns: 1 });
+    engine.register("p1", "old-flow", {
+      start: async () => ({ kind: "done", title: "ok" }),
+      step: async () => ({ kind: "done", title: "ok" }),
+    });
+    expect(() =>
+      engine.replacePlugin("p1", () => {
+        engine.register("p1", "half-flow", {
+          start: async () => ({ kind: "done", title: "ok" }),
+          step: async () => ({ kind: "done", title: "ok" }),
+        });
+        throw new Error("flow-boom");
+      }),
+    ).toThrow("flow-boom");
+    expect(engine.get("p1", "old-flow")).toBeDefined();
+    expect(engine.get("p1", "half-flow")).toBeUndefined();
+
+    // 2. Concurrent start() cannot bypass maxConcurrentRuns, and close() aborts in-flight start & closes its loopback.
+    let releaseStart!: () => void;
+    let startSignalAborted = false;
+    let loopbackClosed = false;
+    engine.register("p1", "slow-start", {
+      start: async (_input, ctx) => {
+        ctx.signal.addEventListener("abort", () => {
+          startSignalAborted = true;
+        });
+        await ctx.startLoopbackCallback?.();
+        await new Promise<void>((resolve) => {
+          releaseStart = resolve;
+        });
+        return { kind: "done", title: "late" };
+      },
+      step: async () => ({ kind: "done", title: "ok" }),
+    });
+
+    const ctxFactory = ({
+      pluginId,
+      flowId,
+      runId,
+      signal,
+      onLoopbackStarted,
+    }: Parameters<
+      Parameters<typeof engine.start>[3]
+    >[0]) =>
+      ({
+        pluginId,
+        flowId,
+        runId,
+        signal,
+        startLoopbackCallback: async () => {
+          const fakeSession = {
+            callbackUrl: "http://127.0.0.1:9999/cb",
+            state: "st",
+            port: 9999,
+            canAccept: () => true,
+            waitForCallback: () => new Promise<never>(() => {}),
+            close: async () => {
+              loopbackClosed = true;
+            },
+          };
+          onLoopbackStarted(fakeSession);
+          return fakeSession;
+        },
+      }) as unknown as ReturnType<Parameters<typeof engine.start>[3]>;
+
+    const firstStart = engine.start("p1", "slow-start", {}, ctxFactory);
+    // Let firstStart reserve the slot and enter definition.start().
+    await new Promise((r) => setTimeout(r, 10));
+
+    await expect(
+      engine.start("p1", "slow-start", {}, ctxFactory),
+    ).rejects.toMatchObject({ status: 429, code: "too_many_flow_runs" });
+
+    // Closing while start() is in flight must abort its signal, close its loopback, and reject firstStart.
+    await engine.close();
+    expect(startSignalAborted).toBe(true);
+    expect(loopbackClosed).toBe(true);
+    releaseStart();
+    await expect(firstStart).rejects.toMatchObject({
+      status: 409,
+      code: "flow_engine_closed",
+    });
+  });
 });

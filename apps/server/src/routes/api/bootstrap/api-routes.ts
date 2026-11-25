@@ -153,6 +153,7 @@ export function mountApiRoutes(args: {
       compactionFailures.reset(id),
     );
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
+    c.set("clearPluginEntrySession", pluginEntries.clearSession);
     c.set("activatePluginServerCode", activation.activatePluginServerCode);
     c.set("preloadPluginRuntimes", activation.preloadPluginRuntimes);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);

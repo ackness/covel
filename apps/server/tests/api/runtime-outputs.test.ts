@@ -274,5 +274,35 @@ describe("runtime-outputs API", () => {
       expect(body.items).toHaveLength(1);
       expect(body.items[0]!.type).toBe("form-submit");
     });
+
+    it("clamps oversized limit query params to 500 (M-14)", async () => {
+      const seenLimits: Array<number | undefined> = [];
+      const origOutputs = store.listRuntimeOutputs.bind(store);
+      const origRecords = store.listInteractionRecords.bind(store);
+      store.listRuntimeOutputs = async (sid, opts) => {
+        seenLimits.push(opts?.limit);
+        return origOutputs(sid, opts);
+      };
+      store.listInteractionRecords = async (sid, opts) => {
+        seenLimits.push(opts?.limit);
+        return origRecords(sid, opts);
+      };
+
+      expect(
+        (
+          await app.request(
+            "/api/sessions/sess-1/runtime-outputs?limit=999999",
+          )
+        ).status,
+      ).toBe(200);
+      expect(
+        (
+          await app.request(
+            "/api/sessions/sess-1/interaction-records?limit=999999",
+          )
+        ).status,
+      ).toBe(200);
+      expect(seenLimits).toEqual([500, 500]);
+    });
   });
 });
