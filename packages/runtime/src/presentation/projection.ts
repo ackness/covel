@@ -12,7 +12,7 @@ import {
   type TurnDigest,
 } from "@covel/shared";
 import type { DataStore } from "@covel/store";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 import { mergePluginDataRows } from "../function-runtime/execution-write-buffer.js";
 import type { UpstreamPluginDataWrite } from "../function-runtime/upstream-plugin-data.js";
 import { presentationLimits, presentationNamespaces } from "./policy.js";

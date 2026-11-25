@@ -28,7 +28,7 @@ import {
 import { createPluginRandom } from "../function-runtime/plugin-random.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 import {
   withDefaultGatewaySignal,
   withDefaultUtilsSignal,

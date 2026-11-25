@@ -429,9 +429,10 @@ export async function loadEntryTools(
     return { tools: [], unsupportedCapabilities: [], close: async () => {} };
 
   const tools = new ToolRegistry();
-  // Prompt/world/history-transform providers run in executeTurn. These three
-  // built-in points are driven only by the server's UI, HTTP or compaction host.
+  // Prompt/world/history-transform providers run in executeTurn. These
+  // built-in points are driven only by the server's UI, HTTP, channel, or compaction host.
   const hostOnlyPoints = new Set([
+    "channel.bridge@1",
     "history.compact@2",
     "ui.slot@1",
     "media.image-flow@1",
@@ -469,12 +470,19 @@ export async function loadEntryTools(
   );
   // A service or extension provider's code sends its own requests, so it
   // reaches what its own package declares, whoever calls it.
-  const ownUtils = <C extends { utils?: unknown; signal: AbortSignal }>(
+  const ownUtils = <
+    C extends { utils?: unknown; http?: unknown; signal: AbortSignal },
+  >(
     context: C,
-  ): C =>
-    context.utils
-      ? { ...context, utils: withCallSignal(http, context.signal) }
-      : context;
+  ): C => {
+    if (!context.utils && !context.http) return context;
+    const scopedHttp = withCallSignal(http, context.signal);
+    return {
+      ...context,
+      ...(context.utils ? { utils: scopedHttp } : {}),
+      ...(context.http ? { http: scopedHttp } : {}),
+    };
+  };
   const covel: PluginAPI = {
     pluginId: discovery.id,
     provideExtension(point, id, definition) {

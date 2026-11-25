@@ -29,11 +29,36 @@ import type {
   HookEventName,
   KernelExtensionPointId,
   KernelExtensionPointIo,
+  ProviderFailureKind,
   RpcTrustLevel,
 } from "@covel/shared";
 import type {
+  AppEventName,
+  AppEventPayloadMap,
   ChannelBridgeInput,
   ChannelBridgeOutput,
+  ConfigFlowField,
+  ConfigFlowStep,
+  ConfigFlowStepKind,
+  PlatformText,
+  PluginConfigFlowFieldOption,
+  PluginConfigFlowStartInput,
+  PluginConfigFlowStepInput,
+  PluginInstanceDataEntry,
+  PluginInstanceDataStore,
+  PluginJsonValue,
+  PluginLoopbackCallbackResult,
+  PluginLoopbackCallbackSession,
+  PluginProviderSourceRefreshRequest,
+  PluginSandboxWorkerRunner,
+  PluginSchedulerClient,
+  PluginSecretEntry,
+  PluginSecretStore,
+  PluginSecretSummary,
+  ProviderSourceAccountSummary,
+  ProviderSourceMode,
+  ProviderSourceRequestShape,
+  ProviderSourceUsageSummary,
 } from "@covel/shared/platform";
 import type {
   shortId,
@@ -47,6 +72,28 @@ import type { z, ZodType } from "zod";
 import type { HookHandler } from "./hooks/types.js";
 import type { FormValidator } from "./rpc/form-validator.js";
 import type { RpcHandler } from "./rpc/rpc-registry.js";
+
+export type {
+  PluginConfigFlowFieldOption,
+  PluginConfigFlowStartInput,
+  PluginConfigFlowStepInput,
+  PluginInstanceDataEntry,
+  PluginInstanceDataStore,
+  PluginJsonValue,
+  PluginLoopbackCallbackResult,
+  PluginLoopbackCallbackSession,
+  PluginProviderSourceRefreshRequest,
+  PluginSandboxWorkerRunner,
+  PluginSchedulerClient,
+  PluginSecretEntry,
+  PluginSecretStore,
+  PluginSecretSummary,
+};
+
+type PluginRuntimeHttp = {
+  readonly fetchWithRetry: typeof fetchWithRetry;
+  readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
+};
 
 /**
  * Pure helpers for entry factories. State reads belong to a tool's invocation
@@ -69,118 +116,8 @@ export interface PluginHookOptions {
   readonly enforce?: HookEnforce;
 }
 
-export type PluginJsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly PluginJsonValue[]
-  | { readonly [key: string]: PluginJsonValue };
-
-export interface PluginInstanceDataEntry {
-  readonly key: string;
-  readonly value: unknown;
-  readonly updatedAt?: string;
-}
-
-export interface PluginInstanceDataStore {
-  get(namespace: string, key: string): Promise<unknown>;
-  list(namespace: string): Promise<readonly PluginInstanceDataEntry[]>;
-  set(namespace: string, key: string, value: PluginJsonValue): Promise<void>;
-  delete(namespace: string, key: string): Promise<boolean>;
-}
-
-export interface PluginSecretEntry<
-  T extends PluginJsonValue = PluginJsonValue,
-> {
-  readonly value: T;
-  readonly generation: number;
-  readonly updatedAt: string;
-}
-
-export interface PluginSecretSummary {
-  readonly key: string;
-  readonly generation: number;
-  readonly updatedAt: string;
-}
-
-export interface PluginSecretStore {
-  get<T extends PluginJsonValue = PluginJsonValue>(
-    key: string,
-  ): Promise<PluginSecretEntry<T> | null>;
-  list(): Promise<readonly PluginSecretSummary[]>;
-  set<T extends PluginJsonValue = PluginJsonValue>(
-    key: string,
-    value: T,
-  ): Promise<PluginSecretEntry<T>>;
-  delete(key: string): Promise<boolean>;
-  compareAndSwap<T extends PluginJsonValue = PluginJsonValue>(
-    key: string,
-    expectedGeneration: number | null,
-    nextValue: T,
-  ): Promise<
-    | { readonly ok: true; readonly entry: PluginSecretEntry<T> }
-    | {
-        readonly ok: false;
-        readonly reason: "generation_mismatch";
-        readonly current: PluginSecretEntry<PluginJsonValue> | null;
-      }
-  >;
-  withLock<TResult>(
-    key: string,
-    fn: (
-      current: PluginSecretEntry<PluginJsonValue> | null,
-    ) => Promise<TResult>,
-  ): Promise<TResult>;
-}
-
-export interface PluginSandboxWorkerRunner {
-  run<I = unknown, O = unknown>(params: {
-    readonly code: string;
-    readonly input: I;
-    readonly timeoutMs?: number;
-    readonly maxOutputBytes?: number;
-    readonly signal?: AbortSignal;
-  }): Promise<O>;
-}
-
-export interface PluginSchedulerClient {
-  scheduleOnce(taskId: string, delayMs: number): Promise<void>;
-}
-
-export type PluginAppEventName =
-  | "AppStarted"
-  | "BeforeShutdown"
-  | "SessionCreated"
-  | "SessionTurnCommitted"
-  | "SessionDeleted"
-  | "WorldInstalled"
-  | "WorldRemoved";
-
-export interface PluginAppEventPayloads {
-  readonly AppStarted: { readonly hostId?: string; readonly startedAt: string };
-  readonly BeforeShutdown: {
-    readonly hostId?: string;
-    readonly reason: string;
-  };
-  readonly SessionCreated: {
-    readonly sessionId: string;
-    readonly worldId: string;
-    readonly locale: string;
-  };
-  readonly SessionTurnCommitted: {
-    readonly sessionId: string;
-    readonly turnId: string;
-    readonly logicalTurn: number;
-    readonly committedAt: string;
-  };
-  readonly SessionDeleted: { readonly sessionId: string };
-  readonly WorldInstalled: {
-    readonly worldId: string;
-    readonly source?: string;
-  };
-  readonly WorldRemoved: { readonly worldId: string };
-}
+export type PluginAppEventName = AppEventName;
+export type PluginAppEventPayloads = AppEventPayloadMap;
 
 export interface PluginAppEventContext {
   readonly signal: AbortSignal;
@@ -189,10 +126,7 @@ export interface PluginAppEventContext {
   readonly hostId?: string;
   readonly instanceData?: PluginInstanceDataStore;
   readonly secrets?: PluginSecretStore;
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
 }
 
 export type PluginAppEventHandler<
@@ -210,10 +144,7 @@ export interface PluginScheduledTaskContext {
   readonly instanceData?: PluginInstanceDataStore;
   readonly secrets?: PluginSecretStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
 }
 
 export type PluginScheduledTaskHandler = (
@@ -229,10 +160,7 @@ export interface PluginAppActionContext {
   readonly secrets?: PluginSecretStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
   readonly scheduler?: PluginSchedulerClient;
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
 }
 
 export type PluginAppActionHandler<I = unknown, O = unknown> = (
@@ -247,103 +175,10 @@ export interface PluginAppActionOptions<I = unknown, O = unknown> {
   readonly requiredCapabilities?: readonly string[];
 }
 
-export type PluginConfigFlowStepKind =
-  "form" | "browser" | "device" | "import" | "confirm" | "done" | "error";
-
-export type PluginConfigFlowText = string | Record<string, string>;
-
-export interface PluginConfigFlowFieldOption {
-  value: string;
-  label: PluginConfigFlowText;
-}
-
-export interface PluginConfigFlowField {
-  name: string;
-  label: PluginConfigFlowText;
-  type: "text" | "secret" | "url" | "number" | "boolean" | "select";
-  required?: boolean;
-  placeholder?: PluginConfigFlowText;
-  description?: PluginConfigFlowText;
-  defaultValue?: string | number | boolean;
-  options?: PluginConfigFlowFieldOption[];
-}
-
-export type PluginConfigFlowStep =
-  | {
-      kind: "form";
-      stepId: string;
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      fields: PluginConfigFlowField[];
-      submitLabel?: PluginConfigFlowText;
-    }
-  | {
-      kind: "browser";
-      stepId: string;
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      authorizeUrl: string;
-      completion: "loopback-or-paste" | "paste" | "loopback";
-      callbackUrl?: string;
-      expiresAt?: string;
-    }
-  | {
-      kind: "device";
-      stepId: string;
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      userCode: string;
-      verificationUri: string;
-      verificationUriComplete?: string;
-      intervalSec?: number;
-      expiresAt?: string;
-    }
-  | {
-      kind: "import";
-      stepId: string;
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      accept?: string;
-      maxBytes?: number;
-      placeholder?: PluginConfigFlowText;
-    }
-  | {
-      kind: "confirm";
-      stepId: string;
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      confirmLabel?: PluginConfigFlowText;
-      cancelLabel?: PluginConfigFlowText;
-      destructive?: boolean;
-      details?: { label: PluginConfigFlowText; value: string }[];
-    }
-  | {
-      kind: "done";
-      title: PluginConfigFlowText;
-      description?: PluginConfigFlowText;
-      summary?: Record<string, unknown>;
-      refreshSections?: string[];
-    }
-  | {
-      kind: "error";
-      code?: string;
-      title: PluginConfigFlowText;
-      message: PluginConfigFlowText;
-      retryable?: boolean;
-    };
-
-export interface PluginLoopbackCallbackResult {
-  readonly callbackUrl: string;
-  readonly query: Readonly<Record<string, string>>;
-}
-
-export interface PluginLoopbackCallbackSession {
-  readonly callbackUrl: string;
-  readonly state: string;
-  readonly port: number;
-  waitForCallback(): Promise<PluginLoopbackCallbackResult>;
-  close(): Promise<void>;
-}
+export type PluginConfigFlowStepKind = ConfigFlowStepKind;
+export type PluginConfigFlowText = PlatformText;
+export type PluginConfigFlowField = ConfigFlowField;
+export type PluginConfigFlowStep = ConfigFlowStep;
 
 export interface PluginConfigFlowContext {
   readonly signal: AbortSignal;
@@ -354,22 +189,8 @@ export interface PluginConfigFlowContext {
   readonly instanceData?: PluginInstanceDataStore;
   readonly secrets?: PluginSecretStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
   startLoopbackCallback?(): Promise<PluginLoopbackCallbackSession>;
-}
-
-export interface PluginConfigFlowStartInput {
-  readonly initial?: PluginJsonValue;
-}
-
-export interface PluginConfigFlowStepInput {
-  readonly stepId: string;
-  readonly data?: Record<string, unknown>;
-  readonly callbackUrl?: string;
-  readonly cancelled?: boolean;
 }
 
 export interface PluginConfigFlowDefinition {
@@ -397,14 +218,11 @@ export interface PluginProviderSourceContext {
   readonly secrets?: PluginSecretStore;
   readonly instanceData?: PluginInstanceDataStore;
   readonly sandbox?: PluginSandboxWorkerRunner;
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
 }
 
 export interface PluginProviderSourceResolveRequest {
-  readonly mode: import("@covel/shared/platform").ProviderSourceMode;
+  readonly mode: ProviderSourceMode;
   readonly model: string;
   readonly accountId?: string;
 }
@@ -415,17 +233,11 @@ export interface PluginProviderSourceResolved {
   readonly headers: Readonly<Record<string, string>>;
   readonly accountId?: string;
   readonly credentialGeneration?: number;
-  readonly requestShape?: import("@covel/shared/platform").ProviderSourceRequestShape;
-}
-
-export interface PluginProviderSourceRefreshRequest {
-  readonly accountId?: string;
-  readonly failedGeneration?: number;
-  readonly statusCode: number;
+  readonly requestShape?: ProviderSourceRequestShape;
 }
 
 export interface PluginProviderSourceErrorClassification {
-  readonly kind: import("@covel/shared").ProviderFailureKind;
+  readonly kind: ProviderFailureKind;
   readonly retryAfterMs?: number;
   readonly message?: string;
 }
@@ -442,9 +254,7 @@ export interface PluginProviderSource {
   ): Promise<PluginProviderSourceResolved | null>;
   listAccounts?(
     context: PluginProviderSourceContext,
-  ): Promise<
-    readonly import("@covel/shared/platform").ProviderSourceAccountSummary[]
-  >;
+  ): Promise<readonly ProviderSourceAccountSummary[]>;
   listModels?(
     request: { readonly accountId?: string },
     context: PluginProviderSourceContext,
@@ -452,9 +262,7 @@ export interface PluginProviderSource {
   getUsage?(
     request: { readonly accountId?: string },
     context: PluginProviderSourceContext,
-  ): Promise<
-    import("@covel/shared/platform").ProviderSourceUsageSummary | null
-  >;
+  ): Promise<ProviderSourceUsageSummary | null>;
   classifyError?(error: {
     readonly statusCode?: number;
     readonly body?: unknown;
@@ -510,10 +318,7 @@ export interface PluginAPI {
     options?: { readonly locale?: string; readonly signal?: AbortSignal },
   ): Promise<readonly ChannelBridgeOutput[]>;
   /** SSRF-guarded fetch helpers for wire implementations. */
-  readonly http: {
-    readonly fetchWithRetry: typeof fetchWithRetry;
-    readonly validateBaseUrl: typeof validateBaseUrlForPlugin;
-  };
+  readonly http: PluginRuntimeHttp;
   /** Register a local tool scoped to this plugin. */
   registerTool(toolModule: ToolModule): void;
   /** Register a lifecycle hook handler (17 events, same semantics as `hooks`). */

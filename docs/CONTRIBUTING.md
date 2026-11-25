@@ -102,7 +102,7 @@ README 里的静态截图（`.assets/images/readme/`）取自真实游玩，取�
 
 ```bash
 pnpm check                                 # CI 静态检查与脚本回归
-pnpm deps:check                            # Fallow 依赖与导入检查
+pnpm deps:check                            # Fallow 依赖、导入与循环依赖检查
 pnpm analyze                               # Fallow 死代码、重复代码与复杂度报告
 pnpm test                                  # 全量
 pnpm check:push                            # 对当前已提交的 HEAD 运行 pre-push hook 的检查
@@ -115,7 +115,7 @@ pnpm e2e:extensions                        # CI 的社区插件验收（隔离�
 pnpm e2e                                   # Playwright 端到端
 ```
 
-`pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明、插件 manifest、schema 参考页、提示词变体、i18n、changelog 片段、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
+`pnpm check` 包含 peer 依赖、类型、Oxlint、包边界、依赖声明与循环依赖、环境变量注册（`pnpm check:env`）、插件 manifest、schema 参考页、提示词变体、i18n、changelog 片段、脚本回归和工作流检查。修改作者可见的 schema 字段后运行 `pnpm schemas:generate`，重新生成 `packages/shared/schemas/*.json` 与 `docs/reference/schema/*.md`；每个字段都必须带 `.describe()` 说明，缺失或生成物过期都会让检查失败。工作流检查要求 `actionlint`，版本固定在 `mise.toml`（与 CI 一致），`mise install` 会一并安装。`pnpm lint` 和 `pnpm test` 不再隐式构建 Web 资源；需要打包验证时另跑 `pnpm build`。
 
 安装 hook 后，每次 `git push` 都会检查本次推送中所有不同且未删除的已提交目标，包括与当前 HEAD 不同的 ref。每个目标在一次性干净克隆中运行 `pnpm install --frozen-lockfile` 和 `pnpm check`；任何一步失败都会阻止推送。源码推送的 hook 不跑测试套件：全部套件由 CI 在 PR 上用并行 job 运行，而 `main` 只接受通过 PR 合入的改动。对已提交的 HEAD 运行 `pnpm check:push`，或用 `COVEL_PUSH_CHECK=affected git push` 推送，会加上这次改动可能影响的测试和 `pnpm e2e --list`。这些测试包括：分支自远端 main 分支（`origin/main`，本地从未获取过时会先获取一次）分出以来改动过的包、依赖这些包的包（`turbo test --filter=...<包名>`），以及 `turbo.json` 里 `$TURBO_ROOT$` 输入匹配到改动文件的套件——内置插件的文件会带上 plugin-loader、runtime 和 server 套件，`worlds/**`、`prompts/**` 会带上读取它们的套件。以下情况运行全部套件：改动了所有包都会读取的文件（`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`turbo.json`、`vitest.base.ts`、根目录的 `package.json` 与 `tsconfig.json`、`mise.toml`），改动了规则未覆盖的根目录文件（规则在 `scripts/lib/push-scope.mjs`），推送目标是 `main` 或 tag，或者无法确定远端 main 分支。`COVEL_PUSH_CHECK=full git push` 和 `pnpm check:push --full` 可以要求运行全部套件；`pnpm check:push --base <分支>` 让叠在其他分支上的分支以下层分支为基准。输出的最后两行说明运行了什么、哪些留给 CI。检查不复制工作区的 `.env`、`node_modules` 或 `test-results`，不会使用开发者数据库连接变量 `DATABASE_URL` / `COVEL_REQUIRE_PG_TESTS`。Turbo 读写的是仓库所有 worktree 共用的缓存（主 worktree 的 `.turbo/cache`）：被推送的提交与某次已通过的运行有相同的已跟踪输入时，任务直接回放；回放看不出的是依赖了 Git 忽略文件的结果，这一类由 CI 兜底。在一台负载较高的开发机上、Turbo 缓存为空时实测：`apps/web` 的一行改动耗时 2 分 52 秒，运行全部套件为 4 分 43 秒；其中安装、`pnpm check` 和 E2E 收集约占 85 秒。`packages/shared` 被所有包依赖，改动它会选中全部套件（4 分 22 秒）。缓存已有结果时，未改动的任务直接回放；store 和 server 套件从不缓存，现在只在改动选中它们时运行。一次推送新增的内容全是文档时，hook 跑 `pnpm check` 和 `pnpm test:docs:packages`；文档脚本测试与插件 README 检查已包含在前者，不重复运行。独立的 `pnpm test:docs` 仍包含包测试、文档脚本测试和插件 README 检查。检查历史提交时使用该提交实际提供的文档命令。新分支以远端的 main 分支为基准。文档指 `docs/**`、根目录的 `*.md`、任意位置的 `README.md` / `README.*.md`、嵌套的 `AGENTS.md` / `CLAUDE.md`、`.claude/skills/**`、`.assets/**`、`LICENSE` 以及 issue 与 PR 模板，清单在 `scripts/lib/change-scope.mjs`。由加载器读取的 Markdown（`PLUGIN.md`、`RUNTIME.md`、`WORLD.md`、`prompts/` 下的文件）是源码，走完整流程。需要提前验证当前已提交的 HEAD 时可运行 `pnpm check:push`。
 
@@ -125,7 +125,7 @@ pnpm e2e                                   # Playwright 端到端
 
 该检查只收集 E2E 测试，不执行本次推送未改动的测试套件、PostgreSQL 集成、完整浏览器、smoke、扩展验收或发布/打包验证；按需显式运行 `pnpm test:pg`、`pnpm e2e:smoke`、`pnpm e2e`、`pnpm e2e:extensions`、`pnpm build` 和发布检查，并以 CI 结果为准。
 
-[Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖与无法解析的导入；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
+[Fallow](https://github.com/fallow-rs/fallow) 作为根开发依赖安装，替代 Knip。`deps:check` 会阻断未使用依赖、未声明依赖、无法解析的导入与模块循环依赖（`fallow architecture --cycles`）；`analyze` 提供完整报告，供人工核实后清理，不作为全量阻断项。`.fallowrc.jsonc` 声明文件路由、插件动态入口和手动运行的脚本；增加这类入口时同步维护配置，避免误报。工具版本遵循工作区的 7 天发布等待期。
 
 `pnpm test:pg` 从环境或根 `.env` 读取 `DATABASE_URL`，强制执行 Store 的五个真实 PG 文件（`pg-store`、`pg-schema-version`、`vector-store`、`media-store`、`schema-ddl-codegen`）和 Server 的全部 `tests/integration`，不再重跑其余 Store 文件。数据库缺失、不可达或缺少 pgvector 都会失败。Store 和 Server 的普通测试也接收显式传入的数据库环境变量，但由于数据库状态不属于源码输入，这两组测试不复用 Turbo 缓存。其余缓存会跟随公共 TypeScript 配置失效，读取框架 prompt 的测试也跟随 `prompts/**` 失效。
 

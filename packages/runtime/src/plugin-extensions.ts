@@ -19,7 +19,7 @@ import {
 import { channelBridgeV1 } from "@covel/shared/platform";
 import type { PluginServiceContext } from "@covel/shared/plugin-runtime";
 import { PluginServiceRegistry } from "./plugin-services.js";
-import { deepFreeze } from "./hooks/hook-settings.js";
+import { deepFreeze } from "./utils/deep-freeze.js";
 
 export interface PluginExtensionExecutionScope {
   readonly emitter?: import("./trace/turn-emitter.js").TurnEmitter;

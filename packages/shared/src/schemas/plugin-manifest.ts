@@ -594,7 +594,7 @@ export const pluginManifestSchema = z
           .optional(),
         data: z
           .record(
-            z.string(),
+            pluginDataNamespaceSchema,
             pluginDataSchemaDeclSchema
               .omit({
                 namespace: true,

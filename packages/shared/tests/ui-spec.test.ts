@@ -845,5 +845,18 @@ describe("live session view widgets", () => {
         ).map((issue) => issue.path),
       ).toContain("dataSource.source");
     });
+
+    it.each(["../escape.html", "/etc/passwd", "sub/../../escape.html"])(
+      "rejects unsafe webview.entry %s even when webview.root is omitted",
+      (entry) => {
+        const spec = {
+          id: "unsafe-webview",
+          label: "Unsafe",
+          webview: { entry },
+        };
+        expect(pluginUiSpecSchema.safeParse(spec).success).toBe(false);
+        expect(paths(spec)).toContain("webview.entry");
+      },
+    );
   });
 });

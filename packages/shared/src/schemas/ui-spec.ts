@@ -262,11 +262,14 @@ export const pluginUiSpecSchema = z
           message: `${JSON.stringify(value)} must not start with a slash; write the item's field name (${JSON.stringify(value.slice(1))})`,
         });
     });
-    if (spec.webview?.root !== undefined) {
-      for (const [field, value] of [
-        ["root", spec.webview.root],
+    if (spec.webview !== undefined) {
+      const webviewPaths: Array<readonly ["root" | "entry", string]> = [
         ["entry", spec.webview.entry],
-      ] as const) {
+        ...(spec.webview.root !== undefined
+          ? ([["root", spec.webview.root]] as const)
+          : []),
+      ];
+      for (const [field, value] of webviewPaths) {
         if (
           value.startsWith("/") ||
           value.includes("\\") ||

@@ -11,7 +11,7 @@ import {
   emitToolEvent,
   failed,
   type SubagentDelegateScope,
-} from "./subagent-delegate.js";
+} from "./subagent-delegate-helpers.js";
 import type { SubagentRunArgs, SubagentRunner } from "./subagent-runner.js";
 import type {
   ToolCall,

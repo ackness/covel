@@ -205,4 +205,70 @@ describe("semantic judge funnel and anti-spoiler boundary", () => {
     expect(result.verdicts.has("injected#99")).toBe(false);
     expect(result.matchedOptionId).toBe("opt-known");
   });
+
+  it("preserves structured worldIR fields and enforces dimension JSON budgets via modelFacingJson", () => {
+    const signals = buildTurnSignals({
+      narrativeSegments: [{ kind: "narration", text: "The dock is quiet." }],
+      playerMessage: "Inspect the crate.",
+      worldIR: {
+        summary: "Crate inspected.",
+        entities: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Brass Key",
+            type: "item",
+            description: "Stamped with a seal.",
+          },
+        ],
+        relations: [{ type: "knows", from: "Hero", to: "Keeper" }],
+        events: [{ type: "discovery", description: "Found a hidden notch." }],
+        statements: [{ type: "claim", content: "The ledger was altered." }],
+      },
+      dimensions: {
+        shortDim: {
+          value: {
+            note: "ok",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          version: 1,
+        },
+        oversizedDim: {
+          value: { blob: "x".repeat(3500) },
+          version: 1,
+        },
+      },
+      worldTime: { phase: 2 },
+      turn: 3,
+    });
+
+    // Structured worldIR fields survive when within budget.
+    expect(signals.worldIR?.entities).toEqual([
+      { name: "Brass Key", type: "item", description: "Stamped with a seal." },
+    ]);
+    expect(signals.worldIR?.relations).toHaveLength(1);
+    expect(signals.worldIR?.events).toHaveLength(1);
+    expect(signals.worldIR?.statements).toHaveLength(1);
+
+    // Dimensions respect the 3000-char JSON budget and strip bookkeeping timestamps.
+    expect(signals.dimensions.shortDim).toEqual({ note: "ok" });
+    expect(signals.dimensions.oversizedDim).toBeUndefined();
+    expect(JSON.stringify(signals.dimensions).length).toBeLessThanOrEqual(3000);
+
+    // Oversized worldIR falls back cleanly to truncated summary.
+    const hugeSignals = buildTurnSignals({
+      narrativeSegments: [],
+      playerMessage: "",
+      worldIR: {
+        summary: "Summary text.",
+        events: Array.from({ length: 16 }, (_, idx) => ({
+          type: "event",
+          description: `detail-${idx}-${"a".repeat(350)}`,
+        })),
+      },
+      dimensions: {},
+      worldTime: null,
+      turn: 4,
+    });
+    expect(hugeSignals.worldIR).toEqual({ summary: "Summary text." });
+  });
 });

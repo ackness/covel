@@ -26,3 +26,5 @@ export const platformTextSchema = z.union([
   z.string().min(1),
   z.record(z.string().min(1), z.string()),
 ]);
+
+export type PlatformText = z.infer<typeof platformTextSchema>;

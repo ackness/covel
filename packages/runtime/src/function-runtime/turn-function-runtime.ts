@@ -39,7 +39,7 @@ import type { HookPipeline } from "../hooks/pipeline.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { suspensionBasis } from "../resume/suspension-settlement.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 import { createPluginRuntimeContext } from "./plugin-runtime-context.js";
 import { attachNestedResults } from "../turn-executor/nested-results.js";
 import type { RootOperationStage } from "../operations/operation-stage.js";

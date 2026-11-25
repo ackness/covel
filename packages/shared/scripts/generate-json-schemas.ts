@@ -127,7 +127,11 @@ function restoreRepresentableConstraints(
   schema: Record<string, unknown>,
 ): void {
   const properties = asRecord(schema.properties);
-  const worldProjections = asRecord(properties?.worldProjections);
+  const contributes = asRecord(properties?.contributes);
+  const contributesProperties = asRecord(contributes?.properties);
+  const worldProjections =
+    asRecord(properties?.worldProjections) ??
+    asRecord(contributesProperties?.worldProjections);
   if (!worldProjections) return;
   worldProjections.minProperties = 1;
 

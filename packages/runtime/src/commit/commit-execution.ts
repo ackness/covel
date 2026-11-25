@@ -6,7 +6,7 @@ import {
   deleteExpiredTraceEvents,
   maybeSweepOldTraces,
 } from "./trace-retention.js";
-import { deepFreeze } from "../hooks/hook-settings.js";
+import { deepFreeze } from "../utils/deep-freeze.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
 import {

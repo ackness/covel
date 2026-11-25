@@ -77,9 +77,9 @@ function compactWorldIR(worldIR) {
         }
       : {}),
   };
-  const json = modelFacingJson(compact);
-  return json.length <= MAX_WORLD_IR_CHARS
-    ? compact
+  const projected = modelFacingJson(compact);
+  return JSON.stringify(projected).length <= MAX_WORLD_IR_CHARS
+    ? projected
     : { summary: truncate(worldIR.summary ?? "", 800) };
 }
 
@@ -90,13 +90,14 @@ function compactDimensions(dimensions) {
     if (entry && typeof entry === "object" && "value" in entry)
       entries[id] = entry.value;
   }
-  const json = modelFacingJson(entries);
-  if (json.length <= MAX_DIMENSIONS_CHARS) return entries;
+  const projected = modelFacingJson(entries);
+  if (JSON.stringify(projected).length <= MAX_DIMENSIONS_CHARS)
+    return projected;
   // Keep compact scalar/short entries first to stay under the data budget.
   const trimmed = {};
   let used = 2;
-  for (const [id, value] of Object.entries(entries)) {
-    const serialized = modelFacingJson(value);
+  for (const [id, value] of Object.entries(projected)) {
+    const serialized = JSON.stringify(value);
     if (used + serialized.length + id.length + 8 > MAX_DIMENSIONS_CHARS) break;
     trimmed[id] = value;
     used += serialized.length + id.length + 8;
@@ -296,6 +297,7 @@ export async function runSemanticJudge(
       verdicts: new Map(),
       matchedOptionId: null,
       called: false,
+      failed: false,
       diagnostics: [],
     };
   }
@@ -304,6 +306,7 @@ export async function runSemanticJudge(
       verdicts: new Map(),
       matchedOptionId: null,
       called: false,
+      failed: true,
       diagnostics: ["semantic judge runtime is unavailable"],
     };
   }
@@ -338,6 +341,7 @@ export async function runSemanticJudge(
       verdicts: new Map(),
       matchedOptionId: null,
       called: true,
+      failed: true,
       diagnostics: [
         `semantic judge failed: ${response?.error?.code ?? "unknown"}`,
       ],
@@ -374,13 +378,19 @@ export async function runSemanticJudge(
       ? output.matchedOptionId
       : null;
 
-  return { verdicts, matchedOptionId, called: true, diagnostics: [] };
+  return {
+    verdicts,
+    matchedOptionId,
+    called: true,
+    failed: false,
+    diagnostics: [],
+  };
 }
 
 /** Persist non-outcome judge verdicts into `_hidden.judgments` and the in-memory cache. */
 export async function persistJudgeVerdicts(
   ctx,
-  { candidates, verdicts, judgments, signals, turn, sourceTurnId },
+  { candidates, verdicts, judgments, signals, turn, sourceTurnId, phase },
 ) {
   for (const candidate of candidates) {
     if (candidate.key.startsWith("outcome:")) continue;
@@ -391,6 +401,7 @@ export async function persistJudgeVerdicts(
       met: verdict.met,
       confidence: verdict.confidence,
       sticky: candidate.sticky,
+      ...(phase ? { phase } : {}),
       turn,
       turnId: ctx.turnId,
       sourceTurnId,

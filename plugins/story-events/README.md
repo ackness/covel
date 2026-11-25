@@ -62,7 +62,7 @@ sources:
         in: [friendly, close, devoted]
       - judge: 主角向守灯人提起旧船单上的编号，或明确追问油灯台底下的夹层
         id: asks-about-ledger-number
-        scope: turn
+        scope: both
         sticky: true
         watch:
           keywords: [船单, 编号, 油灯台, 夹层]
@@ -96,17 +96,17 @@ sources:
 ### 条件语法（`when`）
 
 - **组合**：`all` / `any` / `not`。
-- **自然语言快捷写法**：`when` 可以直接写成字符串（等价于 `{ judge: "<文本>", scope: "turn" }`）。
+- **自然语言快捷写法**：`when` 可以直接写成字符串（等价于 `{ judge: "<文本>", scope: "narrative" }`）。
 - **语义判断叶子（`judge`）**：
   - `{ judge: "<自然语言条件>", id?, scope?, sticky?, watch? }`
-  - `scope`：`"turn"`（默认，评估本回合玩家输入 + 叙事 + WorldIR）、`"player"`（仅看玩家本回合输入）、`"recent"`（含近期几回合摘要）。
-  - `sticky`：默认 `false`；设为 `true` 时，一旦判为成立便记住结果，后续回合不再重复调用模型。
-  - `watch`：可选廉价预筛线索，如 `{ keywords: [...], characters: [...], dimensions: [...] }`；有命中时才纳入本回合送审候选，用来进一步节省模型调用。
+  - `scope`：`"narrative"`（默认，评估本回合叙事与已结算状态）、`"player-input"`（仅看玩家本回合输入）、`"both"`（已确认的叙事事实或玩家本回合输入任一满足即可）。
+  - `sticky`：默认 `true`；一旦判为成立便记住结果，后续回合不再重复调用模型。对于仅在当前场景成立的瞬时条件，可显式设为 `false`。
+  - `watch`：可选廉价预筛线索，如 `{ keywords: [...], characters: [...], dimensions: [...], every?: n }`；有命中时才纳入本回合送审候选，用来进一步节省模型调用。
 - **确定性叶子**：
   - `dimension`（可带 `path`，点号或数组）+ 比较运算符
   - `time`（world-time 输出的数值字段，如时段制的 `phase` / `cycle`，历法制的 `hour` / `day` / `month` / `weekdayIndex`）+ 比较运算符（请用与语言无关的数值字段，不要用本地化 `period`）
-  - `affinity`（NPC 名字，可选 `path: score | tier`，默认 `score`；读取 `affinity.tier@1`）+ 比较运算符
-  - `item`（背包物品名或 ID，支持 `has: true | false` 或 `gte` / `gt` / `lte` / `lt` / `equals` 数量比较；读取 `inventory.bag@2`）
+  - `affinity`（NPC 名字，可选 `path: score | tier`，默认按运算符推断）+ 比较运算符
+  - `item`（背包物品名，支持 `exists: true | false` 或 `gte` / `gt` / `lte` / `lt` / `equals` 数量比较；读取 `inventory.bag@2`）
   - `attribute`（行动角色或主角的属性 ID；读取世界角色属性）+ 比较运算符
   - `revealed`（另一个事件 ID，可选 `turnsSinceGte` / `turnsSinceLte`；配合 `not` 可写「某事还没发生」）
   - `selected`（另一个已选择的隐藏选项 ID，可选 `turnsSinceGte` / `turnsSinceLte`）
@@ -115,7 +115,7 @@ sources:
 - **触发时机与去重**：
   - `timing`：默认 `"post-turn"`（在 `audit` 阶段、回合结束后判定，零首字延迟；语义故事事件上膛后在下回合 `pre-turn` 揭示，隐藏选项与隐藏奖励当回合结束即可见）。若希望本回合立刻根据玩家刚发出的话介入叙事，可显式设 `timing: "pre-turn"`。
   - `once` 默认 `true`；可重复事件用 `once: false` + `cooldownTurns`。
-  - `exclusive`：用于互斥组或同一事件下的多个选项；同一条目多个事件同时满足时，`priority` 高者先触发，同级按 ID 排序。
+  - `exclusive`（事件级布尔值，默认 `false`）：设为 `true` 时，选中同一事件下的任一选项后自动关闭该事件的其余选项；同一回合多个事件同时满足时，`priority` 高者先触发，同级按 ID 排序。
 - **四值短路与缺失降级**：
   - 引用不存在的维度、事件 ID，或对应插件（如 `world-time`、`affinity`、`inventory`）未启用时，该叶子为 `unknown`（原因只以 ID 记入 `diagnostics`，不含剧情内容）。
   - `unknown` 不会被 `not` 翻成成立；`all` 中任一确定性分支为 `false` 时立即短路为 `false`（**跳过同一 `all` 里的 `judge` 调用**）；`any` 中任一确定性分支为 `true` 时同样短路（无需调用 `judge`）。整棵树最终为 `unknown` 时视为不满足。
@@ -123,7 +123,7 @@ sources:
 ### 隐藏选项（`options`）与隐藏奖励（`rewards`）
 
 - **隐藏选项（`options[]`）**：
-  - 每个选项有 `id`、`text`（解锁后展示给玩家的行动文本），可选 `label`、`hint`、`when`（选项自己的额外门控条件）、`payload`（选中后交给叙事的隐藏剧情简述）、`rewards`（选中后发放的隐藏奖励）、`once`（默认 `true`）、`exclusive`（同组互斥）。
+  - 每个选项有 `id`、`text`（解锁后展示给玩家的行动文本），可选 `label`、`hint`、`when`（选项自己的额外门控条件）、`payload`（选中后交给叙事的隐藏剧情简述）、`rewards`（选中后发放的隐藏奖励）、`once`（默认 `true`）、`persist`（默认 `false`，为 `true` 时即使条件不再成立也保持解锁直到选中或过期）、`expiresAfterTurns`（解锁后的有效回合数）。
   - 未解锁前，`text`、`hint`、`payload` 与 `rewards` 全部留在 `_hidden.events` 内，绝不暴露；解锁后仅把公开字段（`id`、`label`、`text`、`hint`）投影到公开命名空间 `active_options`，隐藏 `payload` 与 `rewards` 直到玩家真正选中时才进入叙事或结算。
 - **隐藏奖励（`rewards[]`）**：
   - 支持三种 `kind`：
@@ -135,7 +135,7 @@ sources:
 ## 数据与可见性
 
 - 隐藏 source 导入到本插件的保留命名空间 `_hidden.events`。框架保证它不进入提示词、不出现在插件数据 API、数据面板、UI 扩展与模型可用的 plugin-data 工具里，也不能投影进 lorebook。
-- 触发、解锁或领奖时，仅在公开命名空间 `revealed`、`active_options`、`selected_options`、`claimed_rewards` 写入不含秘密原文的公开投影或记录；语义判定缓存与上膛队列保存在 `_hidden.judge_cache`、`_hidden.armed`、`_hidden.pending_rewards` 中。
+- 触发、解锁或领奖时，仅在公开命名空间 `revealed`、`active_options`、`selected_options`、`claimed_rewards`、`message` 写入不含秘密原文的公开投影或记录；语义判定缓存、上膛队列、待核实奖励与一次性叙事提示保存在 `_hidden.judgments`、`_hidden.armed`、`_hidden.pending_options`、`_hidden.narrative_notes` 中。
 - 同一回合重试时重新给出同一条提示，不会重复触发或重复发奖；整轮执行失败回滚时，揭示记录与奖励提案也会随事务回滚。
 
 ## 剧情中追加事件

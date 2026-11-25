@@ -95,7 +95,7 @@ export const pluginRelativeJsonSchemaPath = z
   });
 
 /** Public framework schemas may be referenced by URI without plugin copies. */
-const runtimeJsonSchemaReference = z.union([
+export const runtimeJsonSchemaReference = z.union([
   z
     .string()
     .min(1)
@@ -106,7 +106,10 @@ const runtimeJsonSchemaReference = z.union([
     .describe(
       "JSON Schema path relative to RUNTIME.md (or the root for an inline runtime); parent segments are allowed only within the package. The loader checks real-path containment.",
     ),
-  z.string().regex(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/),
+  z
+    .string()
+    .regex(/^contract:[a-z][a-z0-9.-]*@[1-9][0-9]*$/)
+    .describe("Public contract schema URI (`contract:<contractId>`)."),
 ]);
 
 /** capability cardinality — `one` (any single provider) or `all` (every provider). */
@@ -132,7 +135,7 @@ const bindingSourceSchema = z.union([
 ]);
 
 /** Binding / export local name — letter-led identifier. */
-const bindingNameSchema = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
+export const bindingNameSchema = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
   message:
     "name must start with a letter and contain only letters/digits/underscore/hyphen",
 });

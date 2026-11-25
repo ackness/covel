@@ -35,7 +35,7 @@ describe("plugin-owned UI documents", () => {
     await fs.writeFile(path.join(root, "outside.html"), "private");
     await write("../outside.html");
     await expect(loadPluginUiSpec(plugin, spec, "owner")).rejects.toThrow(
-      "escapes",
+      "package-relative path without ..",
     );
     await fs.symlink(
       path.join(root, "outside.html"),

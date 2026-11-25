@@ -68,6 +68,24 @@ export type LoopbackCallbackPermission = z.infer<
   typeof loopbackCallbackPermissionSchema
 >;
 
+export type { PlatformText } from "./primitives.js";
+export type {
+  JsonValue as PluginJsonValue,
+  PluginConfigFlowFieldOption,
+  PluginConfigFlowStartInput,
+  PluginConfigFlowStepInput,
+  PluginInstanceDataEntry,
+  PluginInstanceDataStore,
+  PluginLoopbackCallbackResult,
+  PluginLoopbackCallbackSession,
+  PluginProviderSourceRefreshRequest,
+  PluginSandboxWorkerRunner,
+  PluginSchedulerClient,
+  PluginSecretEntry,
+  PluginSecretStore,
+  PluginSecretSummary,
+} from "@covel/plugin-handlers-utils";
+
 export * from "./config-flows.js";
 export * from "./prompt-governance.js";
 export * from "./ui-mounts.js";
