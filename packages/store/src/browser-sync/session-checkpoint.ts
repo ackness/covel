@@ -187,11 +187,20 @@ export async function exportSessionCheckpoint(
   }
   const retainedRuntimeTraces = new Set(runtimeTraces.values());
 
+  // Embedding model registry IDs are local integer keys in each store backend;
+  // carrying them across checkpoints breaks MemoryStore target resolution and
+  // causes cross-backend FK/dimension mismatches. Target backends re-lock on demand.
+  const {
+    embeddingModelId: _exportEmbeddingModelId,
+    embeddingLockedAt: _exportEmbeddingLockedAt,
+    ...portableSession
+  } = session;
+
   const checkpoint = {
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId,
     profile: options.profile ?? "browser-private",
-    session,
+    session: portableSession,
     world,
     messages,
     turnMessages,
@@ -241,10 +250,15 @@ async function writeCheckpoint(
   checkpoint: BrowserCheckpoint,
   options: ReplaceSessionCheckpointOptions,
 ): Promise<void> {
-  const session = options.session ?? checkpoint.session;
-  if (session.id !== checkpoint.sessionId) {
+  const rawSession = options.session ?? checkpoint.session;
+  if (rawSession.id !== checkpoint.sessionId) {
     throw new Error("Replacement session id must match the checkpoint");
   }
+  const {
+    embeddingModelId: _restoreEmbeddingModelId,
+    embeddingLockedAt: _restoreEmbeddingLockedAt,
+    ...session
+  } = rawSession;
 
   // Browser uploads do not own the dispatch ledger. Keep the live ledger
   // when hydrating the same incarnation, without putting it on the wire.

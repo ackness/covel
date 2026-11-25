@@ -122,4 +122,23 @@ describe("PNG card chunks", () => {
     for (const type of ["tEXt", "zTXt", "iTXt", "eXIf", "tIME"])
       expect(buffer.includes(Buffer.from(type))).toBe(false);
   });
+  it("rejects incomplete PNG streams missing IHDR first, IDAT, or IEND", () => {
+    const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const ihdr = pngChunk("IHDR", Buffer.alloc(13));
+    const idat = pngChunk("IDAT", Buffer.from([1, 2, 3]));
+    const iend = pngChunk("IEND");
+    expectCode(
+      () => stripPngTextChunks(Buffer.concat([signature, idat, ihdr, iend])),
+      "png-invalid",
+    );
+    expectCode(
+      () => stripPngTextChunks(Buffer.concat([signature, ihdr, iend])),
+      "png-invalid",
+    );
+    expectCode(
+      () => stripPngTextChunks(makePng(v2Card()).subarray(0, -12)),
+      "png-invalid",
+    );
+  });
 });
+

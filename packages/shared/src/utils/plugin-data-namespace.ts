@@ -35,7 +35,10 @@ export function hiddenPluginDataNamespace(namespace: string): string {
 }
 
 export function isHiddenPluginDataNamespace(namespace: string): boolean {
-  return namespace.startsWith(HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX);
+  return (
+    namespace.startsWith(HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX) &&
+    namespace.length > HIDDEN_PLUGIN_DATA_NAMESPACE_PREFIX.length
+  );
 }
 
 /**

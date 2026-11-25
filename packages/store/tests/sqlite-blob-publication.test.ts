@@ -137,4 +137,98 @@ describe("SQLite blob publication", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("gates media reads behind an open DataStore transaction on the shared connection", async () => {
+    const { createSqliteStore } = await import("../src/sqlite-entry.js");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-media-gate-"));
+    const dbPath = path.join(root, "test.db");
+    const dataStore = createSqliteStore(dbPath);
+    const mediaStore = createSqliteMediaStore(dbPath, {
+      mediaRoot: path.join(root, "media"),
+    });
+    try {
+      const bytes = new Uint8Array(16).fill(11);
+      const id = createHash("sha256").update(bytes).digest("hex");
+      let releaseTx!: () => void;
+      const inTx = new Promise<void>((resolve) => {
+        releaseTx = resolve;
+      });
+      let enteredTx!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enteredTx = resolve;
+      });
+      const txPromise = dataStore
+        .withTransaction(async () => {
+          // Insert a media_assets row inside the open transaction via the shared handle.
+          await mediaStore.put(bytes, "image/png");
+          enteredTx();
+          await inTx;
+          throw new Error("rollback media tx");
+        })
+        .catch(() => {});
+
+      await entered;
+      // Concurrent read from outside the transaction must wait for rollback
+      // and never dirty-read the uncommitted media row.
+      let readDone = false;
+      const lookupPromise = mediaStore.lookup(id).then((row) => {
+        readDone = true;
+        return row;
+      });
+      await new Promise((r) => setTimeout(r, 25));
+      expect(readDone).toBe(false);
+
+      releaseTx();
+      await txPromise;
+      expect(await lookupPromise).toBeNull();
+      expect(await mediaStore.exists(id)).toBe(false);
+    } finally {
+      await mediaStore.close?.();
+      await dataStore.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes newly published .bin file when DB registration fails and sweeps aged orphan .bin files on cleanup", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "covel-media-orphan-"));
+    const dbPath = path.join(root, "test.db");
+    const mediaRoot = path.join(root, "media");
+    const mediaStore = createSqliteMediaStore(dbPath, {
+      mediaRoot,
+      orphanFileGraceMs: 50,
+    });
+    try {
+      // 1. Seed a freshly orphaned .bin (simulating crash after publishFile)
+      //    and an aged orphaned .bin, plus a live referenced asset.
+      const liveBytes = new Uint8Array(16).fill(21);
+      const liveRef = await mediaStore.put(liveBytes, "image/png", undefined, {
+        sessionId: "sess-live",
+      });
+
+      const agedId = "a".repeat(64);
+      const agedPath = mediaPath(mediaRoot, agedId);
+      fs.mkdirSync(path.dirname(agedPath), { recursive: true });
+      fs.writeFileSync(agedPath, new Uint8Array([1, 2, 3]));
+      const past = new Date(Date.now() - 5_000);
+      fs.utimesSync(agedPath, past, past);
+
+      const freshId = "b".repeat(64);
+      const freshPath = mediaPath(mediaRoot, freshId);
+      fs.mkdirSync(path.dirname(freshPath), { recursive: true });
+      fs.writeFileSync(freshPath, new Uint8Array([4, 5, 6]));
+
+      // Dry-run leaves orphan files untouched.
+      await mediaStore.cleanup(new Set(), { dryRun: true });
+      expect(fs.existsSync(agedPath)).toBe(true);
+
+      // Real cleanup removes aged orphan, preserves fresh (in-grace) and live files.
+      await mediaStore.cleanup(new Set());
+      expect(fs.existsSync(agedPath)).toBe(false);
+      expect(fs.existsSync(freshPath)).toBe(true);
+      expect(fs.existsSync(mediaPath(mediaRoot, liveRef.id))).toBe(true);
+    } finally {
+      await mediaStore.close?.();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

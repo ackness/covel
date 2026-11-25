@@ -111,6 +111,42 @@ export function ledgerKey(ledger: WorldDataImportLedgerRecord): string {
   return `${ledger.target}:${ledger.pluginId ?? ""}:${ledger.namespace ?? ""}:${ledger.key ?? ""}`;
 }
 
+export interface LedgerReadCache {
+  characterById(id: string): Promise<CharacterRecord | undefined>;
+  worldLorebookById(id: string): Promise<LorebookEntryRecord | undefined>;
+}
+
+export function createLedgerReadCache(
+  store: Pick<DataStore, "listCharacters" | "listSessionLorebookEntries">,
+  sessionId: string,
+): LedgerReadCache {
+  let characters: Map<string, CharacterRecord> | undefined;
+  let lorebook: Map<string, LorebookEntryRecord> | undefined;
+  return {
+    async characterById(id: string) {
+      if (!characters) {
+        characters = new Map(
+          (await store.listCharacters(sessionId)).map((record) => [
+            record.id,
+            record,
+          ]),
+        );
+      }
+      return characters.get(id);
+    },
+    async worldLorebookById(id: string) {
+      if (!lorebook) {
+        lorebook = new Map(
+          (await store.listSessionLorebookEntries(sessionId))
+            .filter((entry) => entry.owner.kind === "world")
+            .map((entry) => [entry.id, entry]),
+        );
+      }
+      return lorebook.get(id);
+    },
+  };
+}
+
 export async function currentHashForLedger(options: {
   // Reads only — accepts a transaction-bound view as well as the full store,
   // so the apply transaction can re-verify hashes before overwriting.
@@ -120,8 +156,10 @@ export async function currentHashForLedger(options: {
   >;
   sessionId: string;
   ledger: WorldDataImportLedgerRecord;
+  /** Optional per-scan/per-transaction read cache for characters and lorebook. */
+  cache?: LedgerReadCache;
 }): Promise<string | null> {
-  const { store, sessionId, ledger } = options;
+  const { store, sessionId, ledger, cache } = options;
   if (ledger.pluginId && ledger.namespace && ledger.key) {
     const record = await store.getPluginData(
       sessionId,
@@ -137,17 +175,21 @@ export async function currentHashForLedger(options: {
     return record ? hashImportValue(record.value) : null;
   }
   if (ledger.target === "characters" && ledger.key) {
-    const record = (await store.listCharacters(sessionId)).find(
-      (character) => character.id === ledger.key,
-    );
+    const record = cache
+      ? await cache.characterById(ledger.key)
+      : (await store.listCharacters(sessionId)).find(
+          (character) => character.id === ledger.key,
+        );
     return record
       ? sha256Hex(canonicalJson(stableCharacterValue(record)))
       : null;
   }
   if (ledger.key) {
-    const record = (await store.listSessionLorebookEntries(sessionId)).find(
-      (entry) => entry.owner.kind === "world" && entry.id === ledger.key,
-    );
+    const record = cache
+      ? await cache.worldLorebookById(ledger.key)
+      : (await store.listSessionLorebookEntries(sessionId)).find(
+          (entry) => entry.owner.kind === "world" && entry.id === ledger.key,
+        );
     return record
       ? sha256Hex(canonicalJson(stableLorebookValue(record)))
       : null;

@@ -539,3 +539,57 @@ it.each(["memory", "sqlite"])(
     }
   },
 );
+
+it("clears backend-local embeddingModelId and embeddingLockedAt on checkpoint export and restore so target stores re-lock cleanly", async () => {
+  const source = createMemoryStore();
+  const target = createMemoryStore();
+  try {
+    const session = makeSession({ id: "sess-embed-checkpoint" });
+    await source.createSession(session);
+    const model = await source.ensureVectorModel({
+      modelId: "embed/source",
+      provider: "test",
+      modelName: "embed",
+      dim: 2,
+    });
+    await source.lockSessionEmbeddingModel(session.id, model);
+    expect((await source.getSession(session.id))?.embeddingModelId).toBe(
+      model.modelRegistryId,
+    );
+
+    const checkpoint = await exportSessionCheckpoint(source, session.id, {
+      revision: 1,
+      actionId: "embed-export",
+    });
+    expect(checkpoint.session.embeddingModelId).toBeUndefined();
+    expect(checkpoint.session.embeddingLockedAt).toBeUndefined();
+
+    // Even if a caller passes a session override carrying stale lock fields,
+    // restore strips them so the target backend re-locks cleanly.
+    await replaceSessionFromCheckpoint(target, checkpoint, {
+      session: {
+        ...checkpoint.session,
+        embeddingModelId: 999,
+        embeddingLockedAt: "2026-01-01T00:00:00.000Z",
+      },
+    });
+    const restored = await target.getSession(session.id);
+    expect(restored?.embeddingModelId).toBeUndefined();
+    expect(restored?.embeddingLockedAt).toBeUndefined();
+    expect(await target.resolveSessionVectorTarget(session.id)).toBeNull();
+
+    const targetModel = await target.ensureVectorModel({
+      modelId: "embed/target",
+      provider: "test",
+      modelName: "embed",
+      dim: 2,
+    });
+    await target.lockSessionEmbeddingModel(session.id, targetModel);
+    expect(await target.resolveSessionVectorTarget(session.id)).toEqual(
+      targetModel,
+    );
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});

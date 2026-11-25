@@ -1328,4 +1328,68 @@ describe("vector search result identity and excerpts", () => {
     expect(semantic).toHaveLength(1);
     expect(semantic[0]!.content.length).toBeLessThanOrEqual(502);
   });
+
+  it("releases runIngestExclusive between backfill batches so other callers can interleave", async () => {
+    const store = createMemoryStore();
+    const sessionId = "multi-batch-lock";
+    await lockModel(store, sessionId);
+    const totalMessages = 135; // > MAX_INGEST_BATCH (128), requires 2 backfill batches
+    for (let i = 1; i <= totalMessages; i += 1) {
+      await store.appendTurnMessage({
+        id: `mb-${i}`,
+        sessionId,
+        turnId: `t-${i}`,
+        sourceType: "runtime",
+        role: "assistant",
+        content: `chronicle entry number ${i}`,
+        order: i,
+        createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(),
+      });
+    }
+
+    const events: string[] = [];
+    let activeLocks = 0;
+    let lockAcquisitions = 0;
+    let resolveInterleaved!: () => void;
+    const interleavedDone = new Promise<void>((r) => {
+      resolveInterleaved = r;
+    });
+
+    const ingestor = createVectorIngestor({
+      store,
+      embed,
+      runIngestExclusive: async (_sid, task) => {
+        lockAcquisitions += 1;
+        const seq = lockAcquisitions;
+        expect(activeLocks).toBe(0);
+        activeLocks += 1;
+        events.push(`acquire:${seq}`);
+        try {
+          return await task();
+        } finally {
+          activeLocks -= 1;
+          events.push(`release:${seq}`);
+          if (seq === 1) {
+            // Simulate another waiter claiming the lock between batches.
+            events.push("interleaved-work");
+            resolveInterleaved();
+          }
+        }
+      },
+    });
+
+    const result = await ingestor.ingest(sessionId);
+    await interleavedDone;
+
+    expect(result.skipped).toBe(false);
+    expect(result.recall).toBe(totalMessages);
+    expect(lockAcquisitions).toBeGreaterThanOrEqual(2);
+    expect(events.slice(0, 4)).toEqual([
+      "acquire:1",
+      "release:1",
+      "interleaved-work",
+      "acquire:2",
+    ]);
+  });
 });
+

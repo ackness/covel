@@ -13,7 +13,7 @@ export function createServerSettingMethods(
       state.serverSettings.set(record.key, {
         key: record.key,
         // The SQL backends keep JSON text, so only JSON survives here too.
-        value: JSON.parse(JSON.stringify(record.value)) as unknown,
+        value: JSON.parse(JSON.stringify(record.value) ?? "null") as unknown,
         updatedAt: record.updatedAt,
       });
     },

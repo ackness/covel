@@ -263,14 +263,30 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
 
     async releaseSession(sessionId) {
       await sql.begin(async (tx) => {
-        await tx`
-          DELETE FROM media_refs
-          WHERE session_id = ${sessionId}
+        // Acquire the same per-asset advisory locks in hashtext order as
+        // claimAssets/delete/cleanup, and update media_assets before deleting
+        // media_refs to match claimAssets's table lock order and prevent AB-BA
+        // deadlocks or delete/cleanup races.
+        const keys = await tx<{ key: number }[]>`
+          SELECT DISTINCT hashtext(id) AS key
+          FROM (
+            SELECT id FROM media_assets WHERE owner_session_id = ${sessionId}
+            UNION
+            SELECT media_id AS id FROM media_refs WHERE session_id = ${sessionId}
+          ) AS affected
+          ORDER BY key
         `;
+        for (const { key } of keys) {
+          await tx`SELECT pg_advisory_xact_lock(1129270860, ${key})`;
+        }
         await tx`
           UPDATE media_assets
           SET owner_session_id = NULL, owner_plugin_id = NULL
           WHERE owner_session_id = ${sessionId}
+        `;
+        await tx`
+          DELETE FROM media_refs
+          WHERE session_id = ${sessionId}
         `;
       });
     },

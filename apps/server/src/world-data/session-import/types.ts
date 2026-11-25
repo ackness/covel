@@ -202,6 +202,8 @@ export interface ApplyPreparedWorldDataImportForSessionOptions {
 
 export interface PreflightWorldDataForSessionOptions {
   readonly inventory?: import("../requirements.js").WorldDataRequirements;
+  /** Direct package directory when already resolved (skips parent-dir scanning). */
+  readonly worldRoot?: string;
   /** The world's record, as for {@link PrepareWorldDataImportForSessionOptions}. */
   readonly world?: WorldDataImportRecord | null;
   readonly sessionId: string;

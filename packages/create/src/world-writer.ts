@@ -314,9 +314,9 @@ export async function publishWorldPackage(
       path.join(path.dirname(finalDir), ".covel-replaced-"),
     );
     const kept = path.join(previous, "package");
-    await rename(finalDir, kept);
     let removePrevious = true;
     try {
+      await rename(finalDir, kept);
       try {
         await rename(staging, finalDir);
       } catch (error) {
@@ -372,6 +372,9 @@ export async function writeWorldPackage(
   const locale = canonicalizeLocale(world.locale);
   if (
     !locale ||
+    typeof id !== "string" ||
+    id.trim().length === 0 ||
+    typeof world.manifest.id !== "string" ||
     world.manifest.id !== id ||
     !validateWorldManifest(world.manifest).valid ||
     !worldDimensionsSchema.safeParse(

@@ -9,12 +9,18 @@ import {
   writeWorldPackage,
 } from "./world-writer.js";
 
-const faults = vi.hoisted(() => ({ publication: false, rollback: false }));
+const faults = vi.hoisted(() => ({
+  backupMove: false,
+  publication: false,
+  rollback: false,
+}));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...fs,
     rename: async (from: string, to: string) => {
+      if (faults.backupMove && path.basename(to) === "package")
+        throw new Error("backup move denied");
       if (
         faults.publication &&
         path.basename(from).startsWith(".covel-create-")
@@ -50,6 +56,7 @@ const world: GeneratedWorld = {
 };
 let directory: string | undefined;
 afterEach(async () => {
+  faults.backupMove = false;
   faults.publication = false;
   faults.rollback = false;
   if (directory) await rm(directory, { recursive: true, force: true });
@@ -98,3 +105,17 @@ it.each([false, true])(
     if (!rollback) expect(paths).toEqual([world.id]);
   },
 );
+
+it("cleans up the temporary backup directory when moving the existing package fails", async () => {
+  directory = await mkdtemp(path.join(tmpdir(), "covel-world-recovery-"));
+  await writeWorldPackage(directory, { ...world, lore: "original" });
+  faults.backupMove = true;
+  await expect(
+    writeWorldPackage(directory, world, { replace: true }),
+  ).rejects.toThrow("backup move denied");
+  expect(await readdir(directory)).toEqual([world.id]);
+  expect(await readFile(path.join(directory, world.id, "WORLD.md"), "utf8")).toBe(
+    "original",
+  );
+});
+

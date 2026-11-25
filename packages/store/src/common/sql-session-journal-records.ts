@@ -360,16 +360,16 @@ export function createSqlSessionJournalRecords(
       summaryId: string,
     ): Promise<void> {
       if (messageIds.length === 0) return;
-      // One bulk UPDATE ... WHERE id IN (...) instead of N serially-awaited
-      // single-row updates (the compacted window grows on long sessions).
-      await runner.update(
-        turnMessages,
-        { compactedAtTurnId: summaryId },
-        and(
-          eq(turnMessages.sessionId, sessionId),
-          inArray(turnMessages.id, [...messageIds]),
-        ),
-      );
+      for (const chunk of chunkIds(messageIds)) {
+        await runner.update(
+          turnMessages,
+          { compactedAtTurnId: summaryId },
+          and(
+            eq(turnMessages.sessionId, sessionId),
+            inArray(turnMessages.id, chunk),
+          ),
+        );
+      }
     },
 
     async retagCompactedTurnMessages(
@@ -378,16 +378,27 @@ export function createSqlSessionJournalRecords(
       sourceSummaryIds?: readonly string[],
     ): Promise<void> {
       if (sourceSummaryIds?.length === 0) return;
-      await runner.update(
-        turnMessages,
-        { compactedAtTurnId: summaryId },
-        and(
-          eq(turnMessages.sessionId, sessionId),
-          sourceSummaryIds
-            ? inArray(turnMessages.compactedAtTurnId, [...sourceSummaryIds])
-            : isNotNull(turnMessages.compactedAtTurnId),
-        ),
-      );
+      if (!sourceSummaryIds) {
+        await runner.update(
+          turnMessages,
+          { compactedAtTurnId: summaryId },
+          and(
+            eq(turnMessages.sessionId, sessionId),
+            isNotNull(turnMessages.compactedAtTurnId),
+          ),
+        );
+        return;
+      }
+      for (const chunk of chunkIds(sourceSummaryIds)) {
+        await runner.update(
+          turnMessages,
+          { compactedAtTurnId: summaryId },
+          and(
+            eq(turnMessages.sessionId, sessionId),
+            inArray(turnMessages.compactedAtTurnId, chunk),
+          ),
+        );
+      }
     },
 
     async savePlayerInput(record: PlayerInputRecord): Promise<void> {
@@ -443,15 +454,32 @@ export function createSqlSessionJournalRecords(
       summaryIds?: readonly string[],
     ): Promise<void> {
       if (summaryIds?.length === 0) return;
-      await runner.delete(
-        sessionSummaries,
-        and(
+      if (!summaryIds) {
+        await runner.delete(
+          sessionSummaries,
           eq(sessionSummaries.sessionId, sessionId),
-          summaryIds
-            ? inArray(sessionSummaries.id, [...summaryIds])
-            : undefined,
-        ),
-      );
+        );
+        return;
+      }
+      for (const chunk of chunkIds(summaryIds)) {
+        await runner.delete(
+          sessionSummaries,
+          and(
+            eq(sessionSummaries.sessionId, sessionId),
+            inArray(sessionSummaries.id, chunk),
+          ),
+        );
+      }
     },
   };
+}
+
+const IN_CHUNK_SIZE = 500;
+
+function chunkIds(ids: readonly string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IN_CHUNK_SIZE) {
+    chunks.push(ids.slice(i, i + IN_CHUNK_SIZE));
+  }
+  return chunks;
 }

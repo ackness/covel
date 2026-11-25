@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import type { SqlRunner } from "./sql-runner.js";
+import { assertStoreIdentifiers, withoutNul } from "./without-nul.js";
 import type { DataStore, ServerSettingRecord } from "../types.js";
 
 /** Structural handle to the `server_settings` table. */
@@ -56,18 +57,21 @@ export function createSqlServerSettingRecords(
     },
 
     async setServerSetting(record: ServerSettingRecord): Promise<void> {
-      const value = JSON.stringify(record.value);
+      assertStoreIdentifiers(record);
+      const value = JSON.stringify(withoutNul(record.value)) ?? "null";
+      const updatedAt = withoutNul(record.updatedAt);
       await runner.insert(
         serverSettings,
-        { key: record.key, value, updatedAt: record.updatedAt },
+        { key: record.key, value, updatedAt },
         {
           target: serverSettings.key,
-          set: { value, updatedAt: record.updatedAt },
+          set: { value, updatedAt },
         },
       );
     },
 
     async deleteServerSetting(key: string): Promise<void> {
+      assertStoreIdentifiers(key);
       await runner.delete(serverSettings, eq(serverSettings.key, key));
     },
   };

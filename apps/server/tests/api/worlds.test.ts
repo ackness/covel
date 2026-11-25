@@ -1,10 +1,11 @@
 import { registerDimensionProvider } from "../helpers/dimension-provider.js";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { access, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createEventBus } from "@covel/events";
+import type { MemorySystem } from "@covel/memory";
 import { type DataStore, type MediaStore } from "@covel/store";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import {
@@ -24,6 +25,7 @@ type Env = {
     eventBus: ReturnType<typeof createEventBus>;
     pluginRegistry: PluginRegistry;
     mediaStore?: MediaStore;
+    memorySystem?: MemorySystem;
     worldsDirs?: readonly string[];
     covelHome?: string;
     sessionLock: SessionLock;
@@ -35,12 +37,14 @@ function createTestApp(
   pluginRegistry: PluginRegistry,
   options: {
     mediaStore?: MediaStore;
+    memorySystem?: MemorySystem;
+    sessionLock?: SessionLock;
     worldsDirs?: readonly string[];
     covelHome?: string;
   } = {},
 ): Hono<Env> {
   const eventBus = createEventBus();
-  const sessionLock = createInProcessSessionLock();
+  const sessionLock = options.sessionLock ?? createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -48,6 +52,7 @@ function createTestApp(
     c.set("pluginRegistry", pluginRegistry);
     c.set("sessionLock", sessionLock);
     if (options.mediaStore) c.set("mediaStore", options.mediaStore);
+    if (options.memorySystem) c.set("memorySystem", options.memorySystem);
     if (options.worldsDirs) c.set("worldsDirs", options.worldsDirs);
     if (options.covelHome) c.set("covelHome", options.covelHome);
     await next();
@@ -820,4 +825,135 @@ describe("world routes", () => {
       (await mediaStore.listRefs()).filter((ref) => ref.mediaId === mediaId),
     ).toContainEqual(expect.objectContaining({ sessionId: "media-b" }));
   });
+
+  it("POST /api/worlds/:id/sync-data finalizes media refs inside the session lock and schedules memory ingest on mutation", async () => {
+    const { worldsDir } = await makeMediaWorldDataFixture();
+    const now = new Date().toISOString();
+    const mediaStore = createMemoryMediaStore();
+    const innerLock = createInProcessSessionLock();
+    const lockDepth = new Map<string, number>();
+    const claimLockDepths: number[] = [];
+    const trackedLock: SessionLock = {
+      withLock: async (sessionId, fn) =>
+        innerLock.withLock(sessionId, async () => {
+          lockDepth.set(sessionId, (lockDepth.get(sessionId) ?? 0) + 1);
+          try {
+            return await fn();
+          } finally {
+            lockDepth.set(sessionId, (lockDepth.get(sessionId) ?? 1) - 1);
+          }
+        }),
+      withLocks: (keys, fn) => innerLock.withLocks(keys, fn),
+    };
+    const origClaim = mediaStore.claimAssets.bind(mediaStore);
+    vi.spyOn(mediaStore, "claimAssets").mockImplementation(async (claims) => {
+      const targetSessionId = claims[0]?.sessionId ?? "";
+      claimLockDepths.push(lockDepth.get(targetSessionId) ?? 0);
+      return origClaim(claims);
+    });
+    const ingestSpy = vi.fn(async () => ({
+      skipped: false,
+      recall: 0,
+      archival: 0,
+    }));
+    const memorySystem = {
+      ingest: ingestSpy,
+    } as unknown as MemorySystem;
+    const pluginRegistry = await registryWithDataPlugin(
+      "character-presence",
+      "assets",
+      "character.portrait-assets@1",
+    );
+    app = createTestApp(store, pluginRegistry, {
+      mediaStore,
+      memorySystem,
+      sessionLock: trackedLock,
+      worldsDirs: [worldsDir],
+    });
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: "media-locked",
+      worldId: "media-world",
+      status: "active",
+      completedPlayerTurns: 0,
+      locale: "zh-CN",
+      activePlugins: ["character-presence"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Dry-run does not claim media or trigger memory ingestion.
+    const dryRes = await app.request("/api/worlds/media-world/sync-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "media-locked", dryRun: true }),
+    });
+    expect(dryRes.status).toBe(200);
+    expect(claimLockDepths).toEqual([]);
+    expect(ingestSpy).not.toHaveBeenCalled();
+
+    // Mutating sync claims media while holding the session lock and schedules ingest.
+    const applyRes = await app.request("/api/worlds/media-world/sync-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "media-locked", dryRun: false }),
+    });
+    expect(applyRes.status).toBe(200);
+    expect(claimLockDepths).toEqual([1]);
+    expect(ingestSpy).toHaveBeenCalledWith("media-locked");
+  });
+
+  it("POST /api/worlds/:id/sync-dimensions schedules memory ingest when dimensions mutate", async () => {
+    const now = new Date().toISOString();
+    const registry = createPluginRegistry();
+    await registerDimensionProvider(registry, "builtin");
+    const ingestSpy = vi.fn(async () => ({
+      skipped: false,
+      recall: 0,
+      archival: 0,
+    }));
+    app = createTestApp(store, registry, {
+      memorySystem: { ingest: ingestSpy } as unknown as MemorySystem,
+    });
+    await store.upsertWorld({
+      id: "world-ingest-dim",
+      name: "World Ingest Dim",
+      description: "",
+      metadata: { dimensions: makeDimensions("North", "Guild") },
+      createdAt: now,
+    });
+    await store.createSession({
+      id: "sess-dim-ingest",
+      worldId: "world-ingest-dim",
+      status: "active",
+      phase: "playing",
+      setupRuntimes: {},
+      seats: [
+        { id: "main", controller: "human", role: "player", characters: "auto" },
+      ],
+      metadata: { sessionIncarnationNonce: crypto.randomUUID() },
+      completedPlayerTurns: 0,
+      locale: "en-US",
+      activePlugins: ["world-init"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.request("/api/worlds/world-ingest-dim/sync-dimensions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: "sess-dim-ingest" }),
+    });
+    expect(res.status).toBe(200);
+    expect(ingestSpy).toHaveBeenCalledWith("sess-dim-ingest");
+  });
 });
+

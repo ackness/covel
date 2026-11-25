@@ -43,6 +43,7 @@ import {
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
 import { DimensionProviderConflictError } from "../../../world-data/dimension-provider-conflict.js";
+import { scheduleMemoryIngest } from "../commit-execution.js";
 import {
   checkSessionOwner,
   sessionApprovalScope,
@@ -381,7 +382,17 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
             409,
           );
         }
-        return runSyncData(liveSession);
+        const synced = await runSyncData(liveSession);
+        // Keep permanent media claim finalization inside the session lock so a
+        // concurrent session deletion cannot release and then get re-pinned,
+        // and concurrent readers never observe an unclaimed media reference.
+        if (synced.mediaRefs.length > 0) {
+          await finalizeWorldDataMediaRefs({
+            mediaStore,
+            refs: synced.mediaRefs,
+          });
+        }
+        return synced;
       },
     });
     if (locked instanceof Response) return locked;
@@ -399,11 +410,8 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     throw err;
   }
 
-  if (result.mediaRefs.length > 0) {
-    await finalizeWorldDataMediaRefs({
-      mediaStore,
-      refs: result.mediaRefs,
-    });
+  if (result.upserted > 0 || result.deleted > 0) {
+    scheduleMemoryIngest(c.get("memorySystem"), sessionId);
   }
 
   return c.json(publicSyncResult(result));
@@ -530,6 +538,10 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
       errorBody(`Dimension sync failed and was rolled back: ${message}`),
       500,
     );
+  }
+
+  if (report && (report.upserted > 0 || report.deleted > 0)) {
+    scheduleMemoryIngest(c.get("memorySystem"), sessionId);
   }
 
   return c.json(okBody({ ...report }));

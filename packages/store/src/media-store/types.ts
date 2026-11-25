@@ -12,6 +12,8 @@ export interface MediaStoreConfig {
 
 export interface SqliteMediaStoreOptions {
   readonly mediaRoot?: string;
+  /** Minimum age (ms) before unreferenced .bin files on disk are removed by cleanup. Defaults to 60_000. */
+  readonly orphanFileGraceMs?: number;
 }
 
 export interface PgMediaStoreOptions {
