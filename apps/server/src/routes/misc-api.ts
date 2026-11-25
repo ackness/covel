@@ -471,10 +471,17 @@ export function createMiscApiRoutes(
         targetProvider,
         AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
       );
+      const canReadDiagnostics = allowsAccess(c, "server.diagnostics");
       return c.json({
         ok: true,
         models: models.slice(0, MODEL_LIST_LIMIT),
-        baseUrl: resolution.config.baseUrl,
+        baseUrl:
+          baseUrl ??
+          visibleBaseUrl(
+            canReadDiagnostics,
+            targetProvider,
+            resolution.config.baseUrl,
+          ),
         protocol: resolution.protocol,
       });
     } catch (error) {
@@ -505,6 +512,7 @@ export function createMiscApiRoutes(
   app.post("/api/ai/ping", async (c) => {
     const denied = requireAccess(c, "model.probe");
     if (denied) return denied;
+    const canReadDiagnostics = allowsAccess(c, "server.diagnostics");
     const json = await readJsonBody(c);
     if (json instanceof Response) return json;
     const parsedBody = z
@@ -547,237 +555,266 @@ export function createMiscApiRoutes(
     // Register client-declared custom presets via the shared overlay helper
     // (request-isolated scoped ids, ref-counted, base-registry-safe).
     const cleanupTransient = applySlotOverlay(ai, slotConfig);
-
-    const serverPresets = ai.presetRegistry
-      .listPresets()
-      .filter((p) => p.enabled);
-    const findBinding = (binding: import("@covel/shared").LlmModelBinding) => {
-      const id = resolveModelBinding(binding, slotConfig, (key) =>
-        ai.presetRegistry.hasPreset(key),
-      );
-      return ai.presetRegistry.resolvePreset(id) ?? undefined;
-    };
-    type ResolvedVia = "direct" | "slot" | "tag-fallback" | "any";
-    let resolvedVia: ResolvedVia = "direct";
-    let preset: (typeof serverPresets)[number] | undefined;
-    const explicitBinding = body.modelRef
-      ? { modelRef: body.modelRef }
-      : body.presetId
-        ? { presetId: body.presetId }
-        : requestedSlot
-          ? slotConfig.slotBindings?.[requestedSlot]
-          : undefined;
-    try {
-      if (explicitBinding) {
-        preset = findBinding(explicitBinding);
-        if (requestedSlot) resolvedVia = "slot";
-      } else if (requestedSlot) {
-        const id = ai.slotRegistry.resolveSlot(requestedSlot);
-        preset = serverPresets.find((p) => p.id === id);
-        if (preset) resolvedVia = "slot";
-      }
-      if (!preset && !explicitBinding) {
-        const textSlots = ai.slotRegistry.listSlotsByTag("text");
-        preset = serverPresets.find((p) => p.id === textSlots[0]?.presetId);
-        if (preset) resolvedVia = "tag-fallback";
-      }
-      if (!preset && !explicitBinding) {
-        preset = serverPresets[0];
-        if (preset) resolvedVia = "any";
-      }
-    } catch {
-      // A missing explicit reference must never probe a different model.
-    }
-    if (!preset) {
-      cleanupTransient();
-      return c.json({
-        ok: false,
-        latencyMs: 0,
-        error: explicitBinding
-          ? "Selected model is not available."
-          : "No LLM provider configured. Add a slot to llm.toml or via Settings.",
-      });
-    }
-
-    // Resolve the effective baseUrl/protocol once so error + success paths
-    // both report the exact target. Unknown providers can still ping via
-    // the preset's own baseUrl, so treat resolution failure as non-fatal.
-    const inspectedSource = inspectSourceForRequest(
-      c,
-      preset.source,
-      preset.account,
-    );
-    let effectiveBaseUrl = inspectedSource?.baseUrl ?? preset.baseUrl;
-    let effectiveProtocol: string | undefined =
-      inspectedSource?.protocol ?? preset.protocol;
-    try {
-      if (!preset.source) {
-        const resolution = ai.providerRegistry.resolve({
-          provider: preset.provider,
-          baseUrl: preset.baseUrl,
-          protocol: preset.protocol,
-        });
-        effectiveBaseUrl = resolution.config.baseUrl ?? effectiveBaseUrl;
-        effectiveProtocol = resolution.protocol ?? effectiveProtocol;
-      }
-    } catch {
-      // Provider not registered — fall back to preset/source fields as-is.
-    }
-
-    const testedTarget = {
-      // Overlay presets carry internal scoped ids — echo the public form.
-      presetId: publicPresetId(preset.id),
-      provider: preset.provider,
-      ...(preset.source ? { source: preset.source } : {}),
-      ...(preset.account ? { account: preset.account } : {}),
-      model: preset.model,
-      baseUrl: effectiveBaseUrl,
-      protocol: effectiveProtocol,
-      resolvedVia,
-    };
-
-    const startedAt = Date.now();
-    let ttfbMs: number | null = null;
-    let firstText = "";
-    let finalUsage: { inputTokens: number; outputTokens: number } | null = null;
     const abort = new AbortController();
     let aborted = false;
     let timedOut = false;
-
-    // Safety timeout — a ping that can't even start streaming within 30s is
-    // effectively broken. Without this the endpoint would hang indefinitely
-    // on misconfigured providers (wrong baseUrl, unreachable host, ...).
-    const timeout = setTimeout(() => {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const requestSignal = c.req.raw.signal;
+    const onRequestAbort = () => {
       if (!aborted) {
-        timedOut = true;
         aborted = true;
-        abort.abort();
+        abort.abort(requestSignal.reason);
       }
-    }, 30_000);
-
-    const relay = getRequestLlmOptions()?.relay;
-    const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
-      apiKeys: requestApiKeys,
-      signal: abort.signal,
-      ...(relay ? { relay } : {}),
-      allowFallback: false,
-      // One request: a retried probe would report a later answer and the
-      // time of the waits as the model's own.
-      transportRetry: false,
-      envApiKeys: apiKeys,
-      slotOverrides: requestedSlot
-        ? {
-            ...slotConfig,
-            // Pin the resolved target while retaining the original slot's
-            // parameter/capability keys and its local/server namespace.
-            slotBindings: {
-              [requestedSlot]: explicitBinding ?? { presetId: preset.id },
-            },
-          }
-        : { ...slotConfig, slotBindings: undefined },
-      capabilityOverridePolicy:
-        hostProfileOf(c).credentials.capabilityOverrides,
     };
+    if (requestSignal.aborted) {
+      aborted = true;
+      abort.abort(requestSignal.reason);
+    } else {
+      requestSignal.addEventListener("abort", onRequestAbort, { once: true });
+    }
+
     try {
-      if (preset.supportedModes.includes("evaluate")) {
-        const result = await ai.gateway.evaluate(
-          {
-            presetId: requestedSlot ?? preset.id,
-            state: "Connection test",
-            questions: {
-              connected: {
-                type: "boolean",
-                instructions: "Is this a connection test?",
-              },
-            },
-          },
-          gatewayOptions,
+      const serverPresets = ai.presetRegistry
+        .listPresets()
+        .filter((p) => p.enabled);
+      const findBinding = (
+        binding: import("@covel/shared").LlmModelBinding,
+      ) => {
+        const id = resolveModelBinding(binding, slotConfig, (key) =>
+          ai.presetRegistry.hasPreset(key),
         );
-        return c.json({
-          ok: true,
-          latencyMs: Date.now() - startedAt,
-          usage: result.usage,
-          testedTarget,
-        });
-      }
-      // An embedding model has no text stream: it answers one vector call.
-      if (
-        preset.supportedModes.includes("embed") &&
-        !preset.supportedModes.includes("stream")
-      ) {
-        const result = await ai.gateway.embed(
-          { presetId: requestedSlot ?? preset.id, values: ["hi"] },
-          gatewayOptions,
-        );
-        return c.json({
-          ok: true,
-          latencyMs: Date.now() - startedAt,
-          usage: result.usage,
-          testedTarget,
-        });
-      }
-      for await (const event of ai.gateway.streamText(
-        {
-          presetId: requestedSlot ?? preset.id,
-          messages: [{ role: "user", content: "hi" }],
-        },
-        gatewayOptions,
-      )) {
-        if (event.type === "text-delta" && event.textDelta.length > 0) {
-          if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
-          firstText += event.textDelta;
-          // Stop once we have proof-of-life; keeps probe cheap (~1 token).
-          if (firstText.length >= 8 && !aborted) {
-            aborted = true;
-            abort.abort();
-          }
-        } else if (
-          event.type === "reasoning-delta" &&
-          event.reasoningDelta.length > 0
-        ) {
-          if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
-        } else if (event.type === "done") {
-          finalUsage = event.usage;
+        return ai.presetRegistry.resolvePreset(id) ?? undefined;
+      };
+      type ResolvedVia = "direct" | "slot" | "tag-fallback" | "any";
+      let resolvedVia: ResolvedVia = "direct";
+      let preset: (typeof serverPresets)[number] | undefined;
+      const explicitBinding = body.modelRef
+        ? { modelRef: body.modelRef }
+        : body.presetId
+          ? { presetId: body.presetId }
+          : requestedSlot
+            ? slotConfig.slotBindings?.[requestedSlot]
+            : undefined;
+      try {
+        if (explicitBinding) {
+          preset = findBinding(explicitBinding);
+          if (requestedSlot) resolvedVia = "slot";
+        } else if (requestedSlot) {
+          const id = ai.slotRegistry.resolveSlot(requestedSlot);
+          preset = serverPresets.find((p) => p.id === id);
+          if (preset) resolvedVia = "slot";
         }
+        if (!preset && !explicitBinding) {
+          const textSlots = ai.slotRegistry.listSlotsByTag("text");
+          preset = serverPresets.find((p) => p.id === textSlots[0]?.presetId);
+          if (preset) resolvedVia = "tag-fallback";
+        }
+        if (!preset && !explicitBinding) {
+          preset = serverPresets[0];
+          if (preset) resolvedVia = "any";
+        }
+      } catch {
+        // A missing explicit reference must never probe a different model.
       }
-    } catch (err) {
-      if (!aborted) {
-        const failure = classifyProviderFailure(err, preset.provider);
+      if (!preset) {
         return c.json({
           ok: false,
-          latencyMs: Date.now() - startedAt,
-          ...(ttfbMs !== null ? { ttfbMs } : {}),
-          error: failure.message,
-          errorKind: failure.kind,
+          latencyMs: 0,
+          error: explicitBinding
+            ? "Selected model is not available."
+            : "No LLM provider configured. Add a slot to llm.toml or via Settings.",
+        });
+      }
+
+      // Resolve the effective baseUrl/protocol once so error + success paths
+      // both report the exact target. Unknown providers can still ping via
+      // the preset's own baseUrl, so treat resolution failure as non-fatal.
+      const inspectedSource = inspectSourceForRequest(
+        c,
+        preset.source,
+        preset.account,
+      );
+      let effectiveBaseUrl = inspectedSource?.baseUrl ?? preset.baseUrl;
+      let effectiveProtocol: string | undefined =
+        inspectedSource?.protocol ?? preset.protocol;
+      try {
+        if (!preset.source) {
+          const resolution = ai.providerRegistry.resolve({
+            provider: preset.provider,
+            baseUrl: preset.baseUrl,
+            protocol: preset.protocol,
+          });
+          effectiveBaseUrl = resolution.config.baseUrl ?? effectiveBaseUrl;
+          effectiveProtocol = resolution.protocol ?? effectiveProtocol;
+        }
+      } catch {
+        // Provider not registered — fall back to preset/source fields as-is.
+      }
+
+      const publicId = publicPresetId(preset.id);
+      const isClientOverlayPreset = publicId !== preset.id;
+      const reportedBaseUrl =
+        isClientOverlayPreset && preset.baseUrl
+          ? preset.baseUrl
+          : visibleBaseUrl(canReadDiagnostics, preset.provider, effectiveBaseUrl);
+      const testedTarget = {
+        // Overlay presets carry internal scoped ids — echo the public form.
+        presetId: publicId,
+        provider: preset.provider,
+        ...(canReadDiagnostics && preset.source
+          ? { source: preset.source }
+          : {}),
+        ...(canReadDiagnostics && preset.account
+          ? { account: preset.account }
+          : {}),
+        model: preset.model,
+        baseUrl: reportedBaseUrl,
+        protocol: effectiveProtocol,
+        resolvedVia,
+      };
+
+      const startedAt = Date.now();
+      let ttfbMs: number | null = null;
+      let firstText = "";
+      let finalUsage: { inputTokens: number; outputTokens: number } | null =
+        null;
+
+      // Safety timeout — a ping that can't even start streaming within 30s is
+      // effectively broken. Without this the endpoint would hang indefinitely
+      // on misconfigured providers (wrong baseUrl, unreachable host, ...).
+      timeout = setTimeout(() => {
+        if (!aborted) {
+          timedOut = true;
+          aborted = true;
+          abort.abort();
+        }
+      }, 30_000);
+
+      const relay = getRequestLlmOptions()?.relay;
+      const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
+        apiKeys: requestApiKeys,
+        signal: abort.signal,
+        ...(relay ? { relay } : {}),
+        allowFallback: false,
+        // One request: a retried probe would report a later answer and the
+        // time of the waits as the model's own.
+        transportRetry: false,
+        envApiKeys: apiKeys,
+        slotOverrides: requestedSlot
+          ? {
+              ...slotConfig,
+              // Pin the resolved target while retaining the original slot's
+              // parameter/capability keys and its local/server namespace.
+              slotBindings: {
+                [requestedSlot]: explicitBinding ?? { presetId: preset.id },
+              },
+            }
+          : { ...slotConfig, slotBindings: undefined },
+        capabilityOverridePolicy:
+          hostProfileOf(c).credentials.capabilityOverrides,
+      };
+      try {
+        if (preset.supportedModes.includes("evaluate")) {
+          const result = await ai.gateway.evaluate(
+            {
+              presetId: requestedSlot ?? preset.id,
+              state: "Connection test",
+              questions: {
+                connected: {
+                  type: "boolean",
+                  instructions: "Is this a connection test?",
+                },
+              },
+            },
+            gatewayOptions,
+          );
+          return c.json({
+            ok: true,
+            latencyMs: Date.now() - startedAt,
+            usage: result.usage,
+            testedTarget,
+          });
+        }
+        // An embedding model has no text stream: it answers one vector call.
+        if (
+          preset.supportedModes.includes("embed") &&
+          !preset.supportedModes.includes("stream")
+        ) {
+          const result = await ai.gateway.embed(
+            { presetId: requestedSlot ?? preset.id, values: ["hi"] },
+            gatewayOptions,
+          );
+          return c.json({
+            ok: true,
+            latencyMs: Date.now() - startedAt,
+            usage: result.usage,
+            testedTarget,
+          });
+        }
+        for await (const event of ai.gateway.streamText(
+          {
+            presetId: requestedSlot ?? preset.id,
+            messages: [{ role: "user", content: "hi" }],
+          },
+          gatewayOptions,
+        )) {
+          if (event.type === "text-delta" && event.textDelta.length > 0) {
+            if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
+            firstText += event.textDelta;
+            // Stop once we have proof-of-life; keeps probe cheap (~1 token).
+            if (firstText.length >= 8 && !aborted) {
+              aborted = true;
+              abort.abort();
+            }
+          } else if (
+            event.type === "reasoning-delta" &&
+            event.reasoningDelta.length > 0
+          ) {
+            if (ttfbMs === null) ttfbMs = Date.now() - startedAt;
+          } else if (event.type === "done") {
+            finalUsage = event.usage;
+          }
+        }
+      } catch (err) {
+        if (!aborted) {
+          const failure = classifyProviderFailure(err, preset.provider);
+          return c.json({
+            ok: false,
+            latencyMs: Date.now() - startedAt,
+            ...(ttfbMs !== null ? { ttfbMs } : {}),
+            error: failure.message,
+            errorKind: failure.kind,
+            testedTarget,
+          });
+        }
+        // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
+      }
+      const latencyMs = Date.now() - startedAt;
+      if (ttfbMs === null) {
+        return c.json({
+          ok: false,
+          latencyMs,
+          error: timedOut
+            ? "Provider did not return any content within 30s"
+            : "Provider returned no content",
+          errorKind: timedOut ? "timeout" : "unknown",
           testedTarget,
         });
       }
-      // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
-    } finally {
-      clearTimeout(timeout);
-      cleanupTransient();
-    }
-    const latencyMs = Date.now() - startedAt;
-    if (ttfbMs === null) {
+
       return c.json({
-        ok: false,
+        ok: true,
         latencyMs,
-        error: timedOut
-          ? "Provider did not return any content within 30s"
-          : "Provider returned no content",
-        errorKind: timedOut ? "timeout" : "unknown",
+        ttfbMs,
+        text: `${preset.name} (${preset.provider}/${preset.model})`,
+        ...(finalUsage ? { usage: finalUsage } : {}),
         testedTarget,
       });
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+      requestSignal.removeEventListener("abort", onRequestAbort);
+      cleanupTransient();
     }
-
-    return c.json({
-      ok: true,
-      latencyMs,
-      ttfbMs,
-      text: `${preset.name} (${preset.provider}/${preset.model})`,
-      ...(finalUsage ? { usage: finalUsage } : {}),
-      testedTarget,
-    });
   });
 
   app.get("/api/provider-sources", accessGuard("host.config"), async (c) => {

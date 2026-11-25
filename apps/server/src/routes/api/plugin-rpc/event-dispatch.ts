@@ -1,4 +1,4 @@
-import { refreshDeclarativeEligibility } from "../../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../../trust/plugin-admission.js";
 import {
   approvalVerdictResponse,
   hasServerCodeGrant,
@@ -88,15 +88,29 @@ export async function dispatchPluginEvent(
     );
   }
 
+  const bridgeDenied = c
+    .get("permissionService")
+    ?.requireCapabilityForPlugin(c, "session.bridgeWrite", body.pluginId);
+  if (bridgeDenied) return bridgeDenied;
+
   // Approval gate — same trust rule as the other kinds: trust comes from the
   // discovery source, and a community plugin needs the server-code grant
   // before a per-event grant.
   const entry = pluginRegistry.get(body.pluginId);
-  const declarative = await refreshDeclarativeEligibility(
-    c.get("trustedSources"),
-    body.pluginId,
-  );
   const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
+  const declAdmission =
+    trustInfo.source === "community"
+      ? await evaluateDeclarativeRouteAdmission(
+          c,
+          c.get("trustedSources"),
+          c.get("permissionService"),
+          body.pluginId,
+        )
+      : { admitted: false as const };
+  if (!declAdmission.admitted && declAdmission.denied) {
+    return declAdmission.denied;
+  }
+  const declarative = declAdmission.admitted;
   if (trustInfo.source === "community" && !declarative) {
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
@@ -143,12 +157,13 @@ export async function dispatchPluginEvent(
       pluginRegistry.get(runtime.pluginId)?.source,
     ).source;
     if (source !== "community") continue;
-    if (
-      await refreshDeclarativeEligibility(
-        c.get("trustedSources"),
-        runtime.pluginId,
-      )
-    ) {
+    const subDecl = await evaluateDeclarativeRouteAdmission(
+      c,
+      c.get("trustedSources"),
+      c.get("permissionService"),
+      runtime.pluginId,
+    );
+    if (subDecl.admitted) {
       checkedSubscriberApprovals.set(runtime.pluginId, {
         scope: sessionApprovalScope(session, runtime.pluginId),
         declarative: true,
@@ -156,6 +171,7 @@ export async function dispatchPluginEvent(
       checkedSubscriberRuntimes.add(runtime.name);
       continue;
     }
+    if (subDecl.denied) return subDecl.denied;
     const operatorDenied = requireAccess(c, "plugin.community");
     if (operatorDenied) return operatorDenied;
     const scope = sessionApprovalScope(session, runtime.pluginId);

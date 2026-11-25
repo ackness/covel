@@ -36,6 +36,12 @@ export interface CapabilityDefinition {
   readonly defaultPolicy: CapabilityPolicyMode;
   /** Whether an instance policy may set this capability to `"allow"` by default. */
   readonly allowAutoPolicy: boolean;
+  /**
+   * True when the capability is reserved for a future host feature and has no
+   * active executor yet. Reserved capabilities stay locked at their default
+   * policy and reject policy/grant mutations.
+   */
+  readonly reserved?: boolean;
 }
 
 export const capabilityKeySchema = z.enum(CAPABILITY_KEYS);
@@ -156,5 +162,6 @@ export const CAPABILITY_CATALOG: Readonly<
     risk: "critical",
     defaultPolicy: "deny",
     allowAutoPolicy: false,
+    reserved: true,
   },
 };

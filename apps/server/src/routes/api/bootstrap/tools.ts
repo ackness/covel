@@ -21,11 +21,13 @@ import {
 import type { DataStore } from "@covel/store";
 import { createToolExecutor, type ManagedToolExecutor } from "@covel/runtime";
 import { createDefaultToolApprovalPipeline } from "@covel/approval";
+import type { PermissionService } from "../../../trust/permission-service.js";
 import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
   readonly store: DataStore;
   readonly eventDirectory: EventDirectory;
+  readonly getPermissionService?: () => PermissionService | undefined;
 }
 
 export interface PluginToolsResult {
@@ -40,7 +42,7 @@ export interface PluginToolsResult {
 export async function setupPluginTools(
   params: SetupPluginToolsParams,
 ): Promise<PluginToolsResult> {
-  const { store, eventDirectory } = params;
+  const { store, eventDirectory, getPermissionService } = params;
   const tools = createDefaultToolRegistry({ store, eventDirectory });
 
   // ── Per-session tool overrides ──────────────────────
@@ -98,6 +100,25 @@ export async function setupPluginTools(
     store,
     approval,
     getToolSource: (name) => tools.source(name),
+    checkPolicy: ({ pluginId, annotations }) => {
+      // Read-only and idempotent tools are not high-risk; non-idempotent
+      // mutating/side-effecting tools respect L1/L2/L3 `runtime.highRiskTools`.
+      if (annotations.readOnly || annotations.idempotent) return undefined;
+      const perms = getPermissionService?.();
+      if (!perms) return undefined;
+      const state = perms.evaluateCapabilityForPlugin(
+        "runtime.highRiskTools",
+        pluginId,
+      );
+      if (state.effective !== "deny") return undefined;
+      const reason =
+        state.lockedBy === "ceiling"
+          ? 'Capability "runtime.highRiskTools" is disabled on this host'
+          : state.lockedBy === "policy"
+            ? 'Capability "runtime.highRiskTools" is denied by instance policy'
+            : 'Capability "runtime.highRiskTools" is denied by persistent plugin grant';
+      return { decision: "deny", reason };
+    },
   });
 
   return {

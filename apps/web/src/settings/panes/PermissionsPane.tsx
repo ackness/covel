@@ -430,9 +430,11 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
                   const configuredMode =
                     snapshot.policy.overrides[key] ?? def.defaultPolicy;
                   const i18nKey = key.replaceAll(".", "_");
+                  const reserved = def.reserved === true;
                   const disabled =
                     !snapshot.policy.settable ||
                     ceiling === "disabled" ||
+                    reserved ||
                     savingPolicy;
                   const options: CapabilityPolicyMode[] = def.allowAutoPolicy
                     ? ["allow", "ask", "deny"]
@@ -454,6 +456,14 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
                           <span className="font-mono text-xs text-muted-foreground">
                             {key}
                           </span>
+                          {reserved && (
+                            <Badge variant="secondary">
+                              {t(
+                                "settings.permissions.reservedBadge",
+                                "Reserved",
+                              )}
+                            </Badge>
+                          )}
                           <Badge
                             variant={
                               ceiling === "disabled" ? "secondary" : "outline"

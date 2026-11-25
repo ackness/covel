@@ -116,6 +116,7 @@ export async function bootstrapApi(
       activation,
       model,
       memorySystem,
+      getPermissionService: () => trust.permissions,
     });
     // Subscribes to the event bus, after the runtime-job worker.
     const uiSlots = createUiSlotHost({
@@ -137,6 +138,7 @@ export async function bootstrapApi(
       jobs,
       uiSlots,
       trust,
+      secretVault,
     });
     const { trustedSources, permissionService } = await loadServerTrust({
       config,
@@ -146,6 +148,13 @@ export async function bootstrapApi(
       app,
       trust,
       rpcApprovalGate: host.rpc.rpcApprovalGate,
+    });
+    permissionService.onChange((pluginId) => {
+      if (pluginId) {
+        host.providerSources.invalidatePlugin(pluginId);
+      } else {
+        host.providerSources.invalidateAll();
+      }
     });
     const instancePlugins = (owned.instancePlugins =
       createInstancePluginRegistry({

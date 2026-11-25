@@ -40,6 +40,17 @@ export const permissionsPolicySchema: z.ZodType<PermissionsPolicyOverrides> = z
         });
         continue;
       }
+      if (
+        CAPABILITY_CATALOG[key].reserved &&
+        mode !== CAPABILITY_CATALOG[key].defaultPolicy
+      ) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `Capability "${key}" is reserved and cannot be changed from "${CAPABILITY_CATALOG[key].defaultPolicy}"`,
+        });
+        continue;
+      }
       if (mode === "allow" && !CAPABILITY_CATALOG[key].allowAutoPolicy) {
         ctx.addIssue({
           code: "custom",

@@ -4,7 +4,7 @@ import { getPluginTrustInfo } from "@covel/plugin-loader";
 
 import { errorBody, listBody } from "../../api-error.js";
 import { requireAccess } from "../../host-profile.js";
-import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../trust/plugin-admission.js";
 import { hasServerCodeGrant } from "./approval-verdict.js";
 import {
   createRuntimeJob,
@@ -184,11 +184,14 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
         if (!entry) return undefined;
         const trust = getPluginTrustInfo(source.pluginId, entry.source);
         if (trust.requiresApproval) {
-          const declarative = await refreshDeclarativeEligibility(
+          const declAdmission = await evaluateDeclarativeRouteAdmission(
+            c,
             c.get("trustedSources"),
+            c.get("permissionService"),
             source.pluginId,
           );
-          if (!declarative) {
+          if (!declAdmission.admitted) {
+            if (declAdmission.denied) return declAdmission.denied;
             const operatorDenied = requireAccess(c, "plugin.community");
             if (operatorDenied) return operatorDenied;
             const gate = c.get("rpcApprovalGate");

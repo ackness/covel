@@ -48,7 +48,7 @@ import type { DataStore } from "@covel/store";
 import { errorBody } from "../api-error.js";
 import {
   hostProfileOf,
-  presentedToken,
+  isOperatorRequest,
   type HostForm,
   type HostProfile,
 } from "../host-profile.js";
@@ -172,6 +172,17 @@ export function createPermissionService({
   let grantsCache = new Map<string, PluginGrantRecord>();
   let loadedAt = Number.NEGATIVE_INFINITY;
   let refreshing: Promise<void> | null = null;
+  const changeListeners = new Set<(pluginId?: string) => void>();
+
+  function notifyChanged(pluginId?: string): void {
+    for (const listener of changeListeners) {
+      try {
+        listener(pluginId);
+      } catch {
+        // Cache invalidation listeners must never fail a permission update.
+      }
+    }
+  }
 
   if (
     readEnvString("COVEL_PERMISSIONS_POLICY") !== undefined &&
@@ -384,6 +395,13 @@ export function createPermissionService({
   return {
     load,
 
+    onChange(listener: (pluginId?: string) => void): () => void {
+      changeListeners.add(listener);
+      return () => {
+        changeListeners.delete(listener);
+      };
+    },
+
     async refresh(): Promise<void> {
       await Promise.all([serverSettings.load(), load()]);
     },
@@ -402,6 +420,7 @@ export function createPermissionService({
         entries: { [PERMISSIONS_POLICY_SETTING_KEY]: overrides },
       });
       await serverSettings.write(patch);
+      notifyChanged();
       return snapshot(profile);
     },
 
@@ -475,6 +494,13 @@ export function createPermissionService({
         CapabilityKey,
         "allow" | "deny",
       ][]) {
+        if (CAPABILITY_CATALOG[key].reserved) {
+          throw new PermissionServiceError(
+            403,
+            "capability_disabled",
+            `Capability "${key}" is reserved and cannot be assigned a plugin grant`,
+          );
+        }
         if (decision === "allow" && profile.capabilities[key] === "disabled") {
           throw new PermissionServiceError(
             403,
@@ -511,6 +537,7 @@ export function createPermissionService({
       if (hasDeny || removedAllow) {
         rpcApprovalGate.revokePlugin(pluginId);
       }
+      notifyChanged(pluginId);
 
       return summarizeEntry(entry, profile, policy());
     },
@@ -522,10 +549,14 @@ export function createPermissionService({
       await store.deletePluginGrant(pluginId);
       await load();
       const revokedSessionGrants = rpcApprovalGate.revokePlugin(pluginId);
+      notifyChanged(pluginId);
       return { pluginId, revokedSessionGrants };
     },
 
-    evaluateRpcApproval(query: ImplicitGrantQuery): PolicyDecisionResult {
+    evaluateRpcApproval(
+      query: ImplicitGrantQuery,
+      options?: { readonly isOperator?: boolean },
+    ): PolicyDecisionResult {
       refreshWhenStale();
       const entry = registry.getCurrent(query.pluginId);
       const declarative =
@@ -534,11 +565,28 @@ export function createPermissionService({
       const isCodeLevelAction =
         query.action === COMMUNITY_SERVER_CODE_ACTION ||
         query.action.startsWith("runtime:");
-      if (!isCodeLevelAction && declarative) {
+      if (declarative) {
+        const declState = evaluateCapabilityForPlugin(
+          "plugin.declarative",
+          query.pluginId,
+          hostProfile,
+          options?.isOperator ?? false,
+        );
+        if (declState.effective === "deny") {
+          return {
+            decision: "deny",
+            reason: declState.lockedBy ?? "grant",
+            capability: "plugin.declarative",
+          };
+        }
         return { decision: "ask" };
       }
 
-      if (hostProfile.capabilities["plugin.communityCode"] === "disabled") {
+      const communityCeiling = hostProfile.capabilities["plugin.communityCode"];
+      if (
+        communityCeiling === "disabled" ||
+        (communityCeiling === "operator-only" && options?.isOperator === false)
+      ) {
         return {
           decision: "deny",
           reason: "ceiling",
@@ -577,9 +625,16 @@ export function createPermissionService({
       return { decision: "ask" };
     },
 
-    hasPersistentServerCodeGrant(pluginId: string): boolean {
+    hasPersistentServerCodeGrant(
+      pluginId: string,
+      options?: { readonly isOperator?: boolean },
+    ): boolean {
       refreshWhenStale();
-      if (hostProfile.capabilities["plugin.communityCode"] === "disabled") {
+      const communityCeiling = hostProfile.capabilities["plugin.communityCode"];
+      if (
+        communityCeiling === "disabled" ||
+        (communityCeiling === "operator-only" && options?.isOperator === false)
+      ) {
         return false;
       }
       if (policy()["plugin.communityCode"] === "deny") {
@@ -610,13 +665,11 @@ export function createPermissionService({
       pluginId: string,
     ): Response | undefined {
       const profile = hostProfileOf(c);
-      const token = presentedToken(c);
-      const isOperator = token !== undefined && profile.isOperatorToken(token);
       const state = evaluateCapabilityForPlugin(
         key,
         pluginId,
         profile,
-        isOperator,
+        isOperatorRequest(c, profile),
       );
       if (state.effective !== "deny") return undefined;
       return capabilityDenialResponse(

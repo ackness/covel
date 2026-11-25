@@ -20,6 +20,13 @@ import {
   buildPluginSummary,
   pluginContractFacts,
 } from "../../../lib/plugin-descriptor.js";
+import type { HostProfile } from "../../../host-profile.js";
+import type { PermissionService } from "../../../trust/permission-service.js";
+import {
+  declarativeAdmissionDecision,
+  isDeclarativeAdmitted,
+} from "../../../trust/plugin-admission.js";
+import type { TrustedSourceService } from "../../../trust/trusted-source-service.js";
 import { hasServerCodeGrant } from "../approval-verdict.js";
 
 /**
@@ -67,32 +74,43 @@ export function authorizedSessionPluginIds(
   registry: Pick<PluginRegistry, "getAll">,
   gate?: RpcApprovalGate,
   session?: SessionRecord,
-  trustedSources?: import("../../../trust/trusted-source-service.js").TrustedSourceService,
+  trustedSources?: TrustedSourceService,
   permissionOptions?: {
-    readonly permissionService?: import("../../../trust/permission-service.js").PermissionService;
+    readonly permissionService?: PermissionService;
     readonly allowCommunityCode?: boolean;
   },
 ): string[] {
+  const permissionService = permissionOptions?.permissionService;
+  const communityCodeAllowed =
+    permissionOptions?.allowCommunityCode ??
+    (permissionService
+      ? permissionService.snapshot().capabilities["plugin.communityCode"] ===
+        "enabled"
+      : true);
   return [...registry.getAll().values()]
     .filter((entry) => {
       if (getPluginTrustInfo(entry.id, entry.source).autoLoad) return true;
-      if (trustedSources?.isDeclarative(entry.id)) {
-        return permissionOptions?.permissionService
-          ? permissionOptions.permissionService.isCapabilityAllowedForPlugin(
-              "plugin.declarative",
-              entry.id,
-            )
-          : true;
+      const declDecision = declarativeAdmissionDecision(
+        trustedSources,
+        permissionService,
+        entry.id,
+      );
+      if (declDecision === "allow") return true;
+      if (declDecision === "deny") return false;
+      if (declDecision === "ask") {
+        return Boolean(
+          session && gate && hasServerCodeGrant(gate, session, entry.id),
+        );
       }
+      if (!communityCodeAllowed) return false;
       if (session && gate && hasServerCodeGrant(gate, session, entry.id)) {
         return true;
       }
       if (
         !session &&
-        permissionOptions?.allowCommunityCode !== false &&
-        permissionOptions?.permissionService?.hasPersistentServerCodeGrant(
-          entry.id,
-        )
+        permissionService?.hasPersistentServerCodeGrant(entry.id, {
+          isOperator: communityCodeAllowed,
+        })
       ) {
         return true;
       }
@@ -100,6 +118,42 @@ export function authorizedSessionPluginIds(
     })
     .map((entry) => entry.id);
 }
+
+/**
+ * Helper plugins declaring `globalSessionDefault: "optional"` that are allowed
+ * to join new sessions by default under L1/L2/L3 `plugin.globalAutoEnable`.
+ */
+export function globalDefaultSessionPluginIds(
+  registry: Pick<PluginRegistry, "getAll">,
+  options?: {
+    readonly permissionService?: PermissionService;
+    readonly profile?: HostProfile;
+    readonly isOperator?: boolean;
+  },
+): string[] {
+  const ids: string[] = [];
+  for (const entry of registry.getAll().values()) {
+    if (entry.status === "error") continue;
+    const pluginManifest = entry.packageManifest?.plugin;
+    if (pluginManifest?.globalSessionDefault !== "optional") continue;
+    if ((pluginManifest.scope ?? "session") === "instance") continue;
+    if (options?.permissionService) {
+      const state = options.permissionService.evaluateCapabilityForPlugin(
+        "plugin.globalAutoEnable",
+        entry.id,
+        options.profile,
+        options.isOperator ?? false,
+      );
+      const allowed = getPluginTrustInfo(entry.id, entry.source).autoLoad
+        ? state.effective !== "deny"
+        : state.effective === "allow";
+      if (!allowed) continue;
+    }
+    ids.push(entry.id);
+  }
+  return ids;
+}
+
 export function resolveSessionPluginPlan(
   requested: readonly string[],
   registry: Pick<PluginRegistry, "getAll">,
@@ -109,6 +163,7 @@ export function resolveSessionPluginPlan(
     requiredContracts?: readonly string[];
     requiredDataContracts?: readonly string[];
     automaticPluginIds?: readonly string[];
+    globalDefaults?: readonly string[];
   } = {},
 ): SessionPluginResolution {
   const authorized = new Set(
@@ -120,6 +175,7 @@ export function resolveSessionPluginPlan(
     requiredContracts: options.requiredContracts,
     requiredDataContracts: options.requiredDataContracts,
     automaticPluginIds: options.automaticPluginIds,
+    globalDefaults: options.globalDefaults,
     plugins: resolvablePlugins(registry.getAll().values()).map((facts) => ({
       ...facts,
       authorized: authorized.has(facts.id),
@@ -250,8 +306,11 @@ export function buildAvailablePluginList(
   return [...registry.getAll().values()].map((entry) => {
     const rejection = plan?.rejected.find((item) => item.pluginId === entry.id);
     const isActive = active.includes(entry.id);
-    const declarative =
-      options.trustedSources?.isDeclarative(entry.id) ?? false;
+    const declarative = isDeclarativeAdmitted(
+      options.trustedSources,
+      options.permissionService,
+      entry.id,
+    );
     const codeApproved =
       entry.source === "builtin" ||
       (options.isServerCodeApproved?.(entry.id) ??

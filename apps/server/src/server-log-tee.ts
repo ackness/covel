@@ -34,7 +34,32 @@ interface TeeChannel {
 let activeChannel: TeeChannel | null = null;
 let maxBytes = 10 * 1024 * 1024;
 let maxFiles = 10;
+let rotating = false;
+let rawStdoutWrite: NodeJS.WriteStream["write"] | null = null;
+let rawStderrWrite: NodeJS.WriteStream["write"] | null = null;
+let streamsWrapped = false;
 const SERVER_WARNING_PREFIX = "[covel:warn]";
+
+function writeRawStderr(message: string): void {
+  const writer = rawStderrWrite ?? process.stderr.write.bind(process.stderr);
+  try {
+    writer(message);
+  } catch {
+    // Best-effort diagnostics only.
+  }
+}
+
+function attachStreamErrorHandler(
+  ch: TeeChannel,
+  stream: fs.WriteStream,
+): void {
+  stream.on("error", (err) => {
+    if (activeChannel === ch && ch.stream === stream) {
+      activeChannel = null;
+    }
+    writeRawStderr(`[server-log-tee] stream error: ${String(err)}\n`);
+  });
+}
 
 function openChannel(filePath: string): TeeChannel {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -44,14 +69,18 @@ function openChannel(filePath: string): TeeChannel {
   } catch {
     bytesWritten = 0;
   }
-  return {
+  const stream = fs.createWriteStream(filePath, { flags: "a" });
+  const channel: TeeChannel = {
     filePath,
-    stream: fs.createWriteStream(filePath, { flags: "a" }),
+    stream,
     bytesWritten,
   };
+  attachStreamErrorHandler(channel, stream);
+  return channel;
 }
 
 function rotateChannel(ch: TeeChannel): void {
+  rotating = true;
   try {
     ch.stream.end();
     for (let i = maxFiles - 1; i >= 1; i--) {
@@ -68,13 +97,19 @@ function rotateChannel(ch: TeeChannel): void {
         }
       }
     }
-    ch.stream = fs.createWriteStream(ch.filePath, { flags: "a" });
+    const nextStream = fs.createWriteStream(ch.filePath, { flags: "a" });
+    attachStreamErrorHandler(ch, nextStream);
+    ch.stream = nextStream;
     ch.bytesWritten = 0;
   } catch (err) {
-    // Failing to rotate must never crash the server. Surface to stderr
-    // (which is also being teed — but a write failure is rare and the
-    // tee is best-effort by design).
-    process.stderr.write(`[server-log-tee] rotation failed: ${String(err)}\n`);
+    // Detach the channel so subsequent writes never hit an ended stream or
+    // re-enter rotation, and write directly to the unwrapped stderr handle.
+    if (activeChannel === ch) {
+      activeChannel = null;
+    }
+    writeRawStderr(`[server-log-tee] rotation failed: ${String(err)}\n`);
+  } finally {
+    rotating = false;
   }
 }
 
@@ -95,7 +130,7 @@ function stripAnsi(input: string): string {
 }
 
 function appendNdjson(source: "stdout" | "stderr", line: string): void {
-  if (!activeChannel) return;
+  if (!activeChannel || rotating) return;
   if (!line || !line.trim()) return;
   const classified = classifyServerStreamLine(source, line);
   const record = JSON.stringify({
@@ -109,8 +144,12 @@ function appendNdjson(source: "stdout" | "stderr", line: string): void {
   if (activeChannel.bytesWritten + byteLen > maxBytes) {
     rotateChannel(activeChannel);
   }
-  activeChannel.stream.write(buf);
-  activeChannel.bytesWritten += byteLen;
+  const channel = activeChannel;
+  if (!channel || channel.stream.writableEnded || channel.stream.destroyed) {
+    return;
+  }
+  channel.stream.write(buf);
+  channel.bytesWritten += byteLen;
 }
 
 /**
@@ -122,7 +161,7 @@ function appendNdjson(source: "stdout" | "stderr", line: string): void {
 function wrapStream(
   stream: NodeJS.WriteStream,
   source: "stdout" | "stderr",
-): void {
+): NodeJS.WriteStream["write"] {
   const original = stream.write.bind(stream);
   let pending = "";
   // Cast through `unknown` because Node's `write` is overloaded and we
@@ -154,6 +193,7 @@ function wrapStream(
     return original(chunk as never);
   }) as NodeJS.WriteStream["write"];
   stream.write = proxy;
+  return original;
 }
 
 export interface SetupServerLogFileOptions {
@@ -195,11 +235,33 @@ export function setupServerLogFile(options: SetupServerLogFileOptions): void {
   try {
     activeChannel = openChannel(options.filePath);
   } catch (err) {
-    process.stderr.write(
+    writeRawStderr(
       `[server-log-tee] could not open ${options.filePath}: ${String(err)}\n`,
     );
     return;
   }
-  wrapStream(process.stdout, "stdout");
-  wrapStream(process.stderr, "stderr");
+  if (!streamsWrapped) {
+    rawStdoutWrite = wrapStream(process.stdout, "stdout");
+    rawStderrWrite = wrapStream(process.stderr, "stderr");
+    streamsWrapped = true;
+  }
+}
+
+/** Test-only cleanup: restore process streams and close the active log channel. */
+export function resetServerLogFileForTests(): void {
+  const ch = activeChannel;
+  activeChannel = null;
+  rotating = false;
+  if (ch && !ch.stream.destroyed) {
+    ch.stream.end();
+  }
+  if (streamsWrapped) {
+    if (rawStdoutWrite) process.stdout.write = rawStdoutWrite;
+    if (rawStderrWrite) process.stderr.write = rawStderrWrite;
+    rawStdoutWrite = null;
+    rawStderrWrite = null;
+    streamsWrapped = false;
+  }
+  maxBytes = 10 * 1024 * 1024;
+  maxFiles = 10;
 }

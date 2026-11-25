@@ -270,4 +270,78 @@ describe("model relay registry", () => {
     expect(events.at(-1)).toEqual({ type: "cancel", id });
     await expect(response.text()).rejects.toThrow("too large");
   });
+
+  it("caps channels per clientKey while allowing other clients and reconnects", () => {
+    const registry = createModelRelayRegistry({
+      maxChannels: 10,
+      maxChannelsPerClient: 2,
+    });
+    const ch1 = "1".repeat(40);
+    const ch2 = "2".repeat(40);
+    const ch3 = "3".repeat(40);
+    const chOther = "4".repeat(40);
+
+    expect(registry.attach(ch1, () => {}, () => {}, "203.0.113.1")).toBeTypeOf(
+      "function",
+    );
+    expect(registry.attach(ch2, () => {}, () => {}, "203.0.113.1")).toBeTypeOf(
+      "function",
+    );
+    expect(registry.canAttach(ch3, "203.0.113.1")).toBe(false);
+    expect(
+      registry.attach(ch3, () => {}, () => {}, "203.0.113.1"),
+    ).toBeUndefined();
+    // Reconnect on an existing channel from the same client is still accepted.
+    expect(registry.canAttach(ch1, "203.0.113.1")).toBe(true);
+    expect(registry.attach(ch1, () => {}, () => {}, "203.0.113.1")).toBeTypeOf(
+      "function",
+    );
+    // A different client IP gets its own per-client budget.
+    expect(registry.canAttach(chOther, "203.0.113.2")).toBe(true);
+    expect(
+      registry.attach(chOther, () => {}, () => {}, "203.0.113.2"),
+    ).toBeTypeOf("function");
+  });
+
+  it("enforces body-phase idle timeout and unread buffer backpressure caps", async () => {
+    const registry = createModelRelayRegistry({
+      bodyIdleTimeoutMs: 40,
+      maxBufferedBytesPerRequest: 10,
+      maxTotalBufferedBytes: 12,
+    });
+    const { events } = attachRecorder(registry);
+    const relay = registry.relayFor(CHANNEL);
+
+    // 1. Body idle timeout cancels a stalled response body.
+    const stalledPromise = relay.fetch({
+      url: "http://localhost:1/stalled",
+      method: "GET",
+      headers: {},
+    });
+    await Promise.resolve();
+    const stalledId = lastRequestId(events);
+    expect(
+      registry.head(CHANNEL, stalledId, { status: 200, headers: {} }),
+    ).toBe("ok");
+    const stalledRes = await stalledPromise;
+    await expect(stalledRes.text()).rejects.toThrow("stopped sending");
+    expect(registry.pendingCount).toBe(0);
+
+    // 2. Unread buffered chunks exceeding maxBufferedBytesPerRequest fail with too-large.
+    const floodPromise = relay.fetch({
+      url: "http://localhost:1/flood",
+      method: "GET",
+      headers: {},
+    });
+    await Promise.resolve();
+    const floodId = lastRequestId(events);
+    registry.head(CHANNEL, floodId, { status: 200, headers: {} });
+    const floodRes = await floodPromise;
+    expect(registry.chunk(CHANNEL, floodId, new Uint8Array(6))).toBe("ok");
+    expect(registry.chunk(CHANNEL, floodId, new Uint8Array(6))).toBe(
+      "too-large",
+    );
+    await expect(floodRes.text()).rejects.toThrow("buffered too much");
+    expect(registry.pendingCount).toBe(0);
+  });
 });

@@ -269,6 +269,12 @@ async function createOrdinaryPluginRuntimeContext({
     ? enforceHttpPermissions(runtimeUtils, {
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
+        ...(deps.canUseDeclaredHttp
+          ? {
+              canUseDeclaredHttp: () =>
+                deps.canUseDeclaredHttp!(manifest.pluginId),
+            }
+          : {}),
       })
     : undefined;
   const mediaOptions = {

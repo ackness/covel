@@ -17,9 +17,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createCipheriv,
   createDecipheriv,
-  createHash,
   randomBytes,
   randomUUID,
+  scrypt as scryptCallback,
 } from "node:crypto";
 import {
   chmod,
@@ -108,11 +108,24 @@ export interface CreateSecretVaultOptions {
 }
 
 const SAFE_SEGMENT_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/;
+const GCM_IV_BYTES = 12;
+const GCM_TAG_BYTES = 16;
+const SCRYPT_SALT_BYTES = 16;
+const SCRYPT_KEY_BYTES = 32;
+const SCRYPT_OPTIONS = {
+  N: 16384,
+  r: 8,
+  p: 1,
+  maxmem: 32 * 1024 * 1024,
+} as const;
+const MAX_DERIVED_KEY_CACHE = 256;
 
 const encryptedEnvelopeSchema = z.strictObject({
   version: z.literal(1),
   encrypted: z.literal(true),
   alg: z.literal("aes-256-gcm"),
+  kdf: z.literal("scrypt"),
+  salt: z.string().min(1),
   iv: z.string().min(1),
   tag: z.string().min(1),
   ciphertext: z.string().min(1),
@@ -131,6 +144,24 @@ const plaintextEnvelopeSchema = z.strictObject({
 type SecretEnvelope =
   | z.infer<typeof encryptedEnvelopeSchema>
   | z.infer<typeof plaintextEnvelopeSchema>;
+
+function deriveScryptKey(passphrase: string, salt: Buffer): Promise<Buffer> {
+  return new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(
+      passphrase,
+      salt,
+      SCRYPT_KEY_BYTES,
+      SCRYPT_OPTIONS,
+      (error, derivedKey) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(derivedKey);
+      },
+    );
+  });
+}
 
 function isNodeErrno(error: unknown, code: string): boolean {
   return (
@@ -225,26 +256,44 @@ function parseEnvelope(rawText: string): SecretEnvelope {
   throw new SecretVaultError("corrupt_entry", "Unknown secret envelope format");
 }
 
-function decryptEnvelopeValue(
+async function decryptEnvelopeValue(
   envelope: SecretEnvelope,
   pluginId: string,
   key: string,
-  encryptionKey: Buffer | null,
-): SecretJsonValue {
+  passphrase: string | null,
+  deriveKey: (salt: Buffer) => Promise<Buffer>,
+): Promise<SecretJsonValue> {
   if (!envelope.encrypted) {
+    if (passphrase !== null) {
+      throw new SecretVaultError(
+        "decrypt_failed",
+        `Secret "${pluginId}/${key}" is stored in plaintext, but COVEL_CREDENTIALS_KEY requires encrypted secrets`,
+      );
+    }
     return normalizeJsonValue(envelope.value as SecretJsonValue);
   }
-  if (!encryptionKey) {
+  if (passphrase === null) {
     throw new SecretVaultError(
       "decrypt_failed",
       `Secret "${pluginId}/${key}" is encrypted, but COVEL_CREDENTIALS_KEY is not configured`,
     );
   }
   try {
+    const salt = Buffer.from(envelope.salt, "base64");
     const iv = Buffer.from(envelope.iv, "base64");
     const tag = Buffer.from(envelope.tag, "base64");
+    if (
+      salt.length !== SCRYPT_SALT_BYTES ||
+      iv.length !== GCM_IV_BYTES ||
+      tag.length !== GCM_TAG_BYTES
+    ) {
+      throw new Error("Invalid AES-256-GCM envelope parameter length");
+    }
+    const encryptionKey = await deriveKey(salt);
     const ciphertext = Buffer.from(envelope.ciphertext, "base64");
-    const decipher = createDecipheriv("aes-256-gcm", encryptionKey, iv);
+    const decipher = createDecipheriv("aes-256-gcm", encryptionKey, iv, {
+      authTagLength: GCM_TAG_BYTES,
+    });
     decipher.setAAD(
       Buffer.from(`${pluginId}:${key}:${envelope.generation}`, "utf8"),
     );
@@ -255,6 +304,7 @@ function decryptEnvelopeValue(
     ]).toString("utf8");
     return JSON.parse(plaintext) as SecretJsonValue;
   } catch (error) {
+    if (error instanceof SecretVaultError) throw error;
     throw new SecretVaultError(
       "decrypt_failed",
       `Failed to decrypt secret "${pluginId}/${key}"`,
@@ -263,15 +313,16 @@ function decryptEnvelopeValue(
   }
 }
 
-function encodeEnvelope(
+async function encodeEnvelope(
   pluginId: string,
   key: string,
   generation: number,
   updatedAt: string,
   value: SecretJsonValue,
-  encryptionKey: Buffer | null,
-): SecretEnvelope {
-  if (!encryptionKey) {
+  passphrase: string | null,
+  deriveKey: (salt: Buffer) => Promise<Buffer>,
+): Promise<SecretEnvelope> {
+  if (passphrase === null) {
     return {
       version: 1,
       encrypted: false,
@@ -280,8 +331,12 @@ function encodeEnvelope(
       value,
     };
   }
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);
+  const salt = randomBytes(SCRYPT_SALT_BYTES);
+  const encryptionKey = await deriveKey(salt);
+  const iv = randomBytes(GCM_IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv, {
+    authTagLength: GCM_TAG_BYTES,
+  });
   cipher.setAAD(Buffer.from(`${pluginId}:${key}:${generation}`, "utf8"));
   const serialized = JSON.stringify(value);
   const ciphertext = Buffer.concat([
@@ -293,6 +348,8 @@ function encodeEnvelope(
     version: 1,
     encrypted: true,
     alg: "aes-256-gcm",
+    kdf: "scrypt",
+    salt: salt.toString("base64"),
     iv: iv.toString("base64"),
     tag: tag.toString("base64"),
     ciphertext: ciphertext.toString("base64"),
@@ -306,13 +363,31 @@ export function createSecretVault(
 ): SecretVault {
   const secretsRoot = path.resolve(options.configDir, "secrets");
   const trimmedKey = options.credentialsKey?.trim();
-  const encryptionKey =
-    trimmedKey && trimmedKey.length > 0
-      ? createHash("sha256").update(trimmedKey, "utf8").digest()
-      : null;
+  const passphrase = trimmedKey && trimmedKey.length > 0 ? trimmedKey : null;
+  const derivedKeyCache = new Map<string, Buffer>();
+
+  const deriveKeyForSalt = async (salt: Buffer): Promise<Buffer> => {
+    if (passphrase === null) {
+      throw new SecretVaultError(
+        "decrypt_failed",
+        "COVEL_CREDENTIALS_KEY is not configured",
+      );
+    }
+    const cacheKey = salt.toString("base64");
+    const cached = derivedKeyCache.get(cacheKey);
+    if (cached) return cached;
+    const derived = await deriveScryptKey(passphrase, salt);
+    if (derivedKeyCache.size >= MAX_DERIVED_KEY_CACHE) {
+      const oldest = derivedKeyCache.keys().next().value;
+      if (oldest !== undefined) derivedKeyCache.delete(oldest);
+    }
+    derivedKeyCache.set(cacheKey, derived);
+    return derived;
+  };
 
   const lockContext = new AsyncLocalStorage<ReadonlySet<string>>();
   const keyTails = new Map<string, Promise<void>>();
+  const pluginDeleteTails = new Map<string, Promise<void>>();
 
   const runWithKeyLock = async <TResult>(
     pluginId: string,
@@ -323,6 +398,9 @@ export function createSecretVault(
     const held = lockContext.getStore();
     if (held?.has(lockId)) {
       return fn();
+    }
+    while (pluginDeleteTails.has(pluginId)) {
+      await pluginDeleteTails.get(pluginId)?.catch(() => {});
     }
     const previous = keyTails.get(lockId) ?? Promise.resolve();
     let release!: () => void;
@@ -392,12 +470,13 @@ export function createSecretVault(
       throw error;
     }
     const envelope = parseEnvelope(rawText);
-    const value = decryptEnvelopeValue(
+    const value = (await decryptEnvelopeValue(
       envelope,
       safePlugin,
       safeKey,
-      encryptionKey,
-    ) as T;
+      passphrase,
+      deriveKeyForSalt,
+    )) as T;
     return {
       value,
       generation: envelope.generation,
@@ -419,13 +498,14 @@ export function createSecretVault(
     );
     const normalized = normalizeJsonValue(value);
     const updatedAt = new Date().toISOString();
-    const envelope = encodeEnvelope(
+    const envelope = await encodeEnvelope(
       safePlugin,
       safeKey,
       generation,
       updatedAt,
       normalized,
-      encryptionKey,
+      passphrase,
+      deriveKeyForSalt,
     );
     await ensureDirPrivate(secretsRoot);
     await ensureDirPrivate(pluginDir);
@@ -476,7 +556,13 @@ export function createSecretVault(
         if (name.startsWith(".") || !name.endsWith(".json")) continue;
         const key = name.slice(0, -".json".length);
         if (!SAFE_SEGMENT_RE.test(key) || key.includes("..")) continue;
-        const rawText = await readFile(path.join(pluginDir, name), "utf8");
+        let rawText: string;
+        try {
+          rawText = await readFile(path.join(pluginDir, name), "utf8");
+        } catch (error) {
+          if (isNodeErrno(error, "ENOENT")) continue;
+          throw error;
+        }
         const envelope = parseEnvelope(rawText);
         summaries.push({
           key,
@@ -572,18 +658,47 @@ export function createSecretVault(
     async deletePlugin(pluginId: string): Promise<number> {
       const safePlugin = assertSafeSegment("pluginId", pluginId);
       const pluginDir = resolvePluginDir(safePlugin);
-      let count = 0;
+      const previousDelete =
+        pluginDeleteTails.get(safePlugin) ?? Promise.resolve();
+      let releaseDelete!: () => void;
+      const currentDelete = new Promise<void>((resolve) => {
+        releaseDelete = resolve;
+      });
+      const nextDeleteTail = previousDelete.then(
+        () => currentDelete,
+        () => currentDelete,
+      );
+      pluginDeleteTails.set(safePlugin, nextDeleteTail);
       try {
-        const names = await readdir(pluginDir);
-        count = names.filter(
-          (name) => !name.startsWith(".") && name.endsWith(".json"),
-        ).length;
-      } catch (error) {
-        if (isNodeErrno(error, "ENOENT")) return 0;
-        throw error;
+        await previousDelete.catch(() => {});
+        const keyPrefix = `${safePlugin}\0`;
+        const pendingKeyLocks: Promise<void>[] = [];
+        for (const [lockId, tail] of keyTails) {
+          if (lockId.startsWith(keyPrefix)) {
+            pendingKeyLocks.push(tail);
+          }
+        }
+        if (pendingKeyLocks.length > 0) {
+          await Promise.allSettled(pendingKeyLocks);
+        }
+        let count = 0;
+        try {
+          const names = await readdir(pluginDir);
+          count = names.filter(
+            (name) => !name.startsWith(".") && name.endsWith(".json"),
+          ).length;
+        } catch (error) {
+          if (isNodeErrno(error, "ENOENT")) return 0;
+          throw error;
+        }
+        await rm(pluginDir, { recursive: true, force: true });
+        return count;
+      } finally {
+        releaseDelete();
+        if (pluginDeleteTails.get(safePlugin) === nextDeleteTail) {
+          pluginDeleteTails.delete(safePlugin);
+        }
       }
-      await rm(pluginDir, { recursive: true, force: true });
-      return count;
     },
 
     forPlugin(

@@ -31,7 +31,7 @@ import {
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import { allowsAccess, requireAccess } from "../../host-profile.js";
-import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
+import { evaluateDeclarativeRouteAdmission } from "../../trust/plugin-admission.js";
 import { earliestUnfinishedJobSourceStart } from "./plugin-rpc/runtime-job-worker.js";
 
 type Env = {
@@ -326,11 +326,14 @@ export function createBrowserWorkspaceRoutes(
                 if (!entry) continue;
                 const trust = getPluginTrustInfo(pluginId, entry.source);
                 if (!trust.requiresApproval) continue;
-                const declarative = await refreshDeclarativeEligibility(
+                const declAdmission = await evaluateDeclarativeRouteAdmission(
+                  c,
                   c.get("trustedSources"),
+                  c.get("permissionService"),
                   pluginId,
                 );
-                if (declarative) continue;
+                if (declAdmission.admitted) continue;
+                if (declAdmission.denied) return declAdmission.denied;
                 const operatorDenied = requireAccess(c, "plugin.community");
                 if (operatorDenied) return operatorDenied;
               }

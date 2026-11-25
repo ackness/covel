@@ -1,4 +1,7 @@
-import { refreshDeclarativeEligibility } from "../../trust/plugin-admission.js";
+import {
+  declarativeAdmissionDecision,
+  evaluateDeclarativeRouteAdmission,
+} from "../../trust/plugin-admission.js";
 import {
   approvalVerdictResponse,
   hasServerCodeGrant,
@@ -100,7 +103,7 @@ import {
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { dispatchPluginAction } from "./plugin-rpc/action-dispatch.js";
 import { dispatchPluginEvent } from "./plugin-rpc/event-dispatch.js";
-import { requireAccess } from "../../host-profile.js";
+import { allowsAccess, requireAccess } from "../../host-profile.js";
 import { preflightSubagentApprovals } from "./actions/approval-preflight.js";
 
 export const pluginRpcRoutes = new Hono();
@@ -232,16 +235,30 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       );
     }
 
+    const bridgeDenied = c
+      .get("permissionService")
+      ?.requireCapabilityForPlugin(c, "session.bridgeWrite", body.pluginId);
+    if (bridgeDenied) return bridgeDenied;
+
     // Approval trust comes from discovery source, independent of authored
     // package kind. `entry.source` is set by bootstrap from the
     // discovery pipeline, which clamps non-first-dir plugins to 'community'
     // so they can't escalate. A missing source remains community-trusted.
     const entry = pluginRegistry.get(body.pluginId);
-    const declarative = await refreshDeclarativeEligibility(
-      c.get("trustedSources"),
-      body.pluginId,
-    );
     const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
+    const declAdmission =
+      trustInfo.source === "community"
+        ? await evaluateDeclarativeRouteAdmission(
+            c,
+            c.get("trustedSources"),
+            c.get("permissionService"),
+            body.pluginId,
+          )
+        : { admitted: false as const };
+    if (!declAdmission.admitted && declAdmission.denied) {
+      return declAdmission.denied;
+    }
+    const declarative = declAdmission.admitted;
     if (trustInfo.source === "community" && !declarative) {
       const operatorDenied = requireAccess(c, "plugin.community");
       if (operatorDenied) return operatorDenied;
@@ -523,8 +540,18 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
                   followerEntry?.source,
                 );
                 if (followerTrust.source !== "community") return true;
-                if (c.get("trustedSources")?.isDeclarative(follower.pluginId)) {
-                  return true;
+                const followerDecl = declarativeAdmissionDecision(
+                  c.get("trustedSources"),
+                  c.get("permissionService"),
+                  follower.pluginId,
+                );
+                if (followerDecl === "allow") return true;
+                if (followerDecl === "deny") return false;
+                if (
+                  followerDecl === null &&
+                  !allowsAccess(c, "plugin.community")
+                ) {
+                  return false;
                 }
                 const followerScope = sessionApprovalScope(
                   live,

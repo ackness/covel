@@ -6,12 +6,18 @@ import {
 import { worldDataImportNotices } from "../../../world-data/receiver-import.js";
 import {
   authorizedSessionPluginIds,
+  globalDefaultSessionPluginIds,
   readSessionPluginSelection,
   worldRequiredContracts,
 } from "../session/plugins.js";
 import { sessionContentLocale, resolveSessionPlugins } from "@covel/shared";
 import { pluginContractFacts } from "../../../lib/plugin-descriptor.js";
 import { hasServerCodeGrant } from "../approval-verdict.js";
+import {
+  allowsAccess,
+  hostProfileOf,
+  isOperatorRequest,
+} from "../../../host-profile.js";
 /**
  * World data-sync routes — import-plan preflight, session worldData sync, and
  * session dimension re-import into plugin_data + lorebook.
@@ -71,6 +77,10 @@ function admittedWorldDataPluginIds(
     c.get("rpcApprovalGate"),
     session,
     c.get("trustedSources"),
+    {
+      permissionService: c.get("permissionService"),
+      allowCommunityCode: allowsAccess(c, "plugin.community"),
+    },
   );
   const paused = new Set(
     c
@@ -168,12 +178,24 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
           (id): id is string => typeof id === "string",
         )
       : [];
+  const profile = hostProfileOf(c);
   const authorized = authorizedSessionPluginIds(
     pluginRegistry,
     c.get("rpcApprovalGate"),
     session ?? undefined,
     c.get("trustedSources"),
+    {
+      permissionService: c.get("permissionService"),
+      allowCommunityCode: allowsAccess(c, "plugin.community"),
+    },
   );
+  const globalDefaults = session
+    ? undefined
+    : globalDefaultSessionPluginIds(catalogue, {
+        permissionService: c.get("permissionService"),
+        profile,
+        isOperator: isOperatorRequest(c, profile),
+      });
   const selection = session
     ? readSessionPluginSelection(session)
     : {
@@ -191,6 +213,7 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
     fixed: Boolean(session),
     requiredContracts: selection.requiredContracts,
     requiredDataContracts: selection.requiredDataContracts,
+    globalDefaults,
     plugins: eligibleCandidates(entries.values(), authorized, paused),
   });
   const result = await preflightWorldDataForSession({
@@ -256,6 +279,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     return admittedWorldDataPluginIds(c, liveSession);
   };
   const plannedActive = admittedIds(session);
+  const allowCommunityCode = allowsAccess(c, "plugin.community");
   const syncOptions = (liveSession: typeof session) => ({
     store,
     mediaStore,
@@ -272,6 +296,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
       activePlugins: admittedIds(liveSession),
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
+        allowCommunityCode &&
         hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
     },
   });
@@ -424,6 +449,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     return admittedWorldDataPluginIds(c, liveSession);
   };
   const plannedActive = admittedIds(session);
+  const allowCommunityCode = allowsAccess(c, "plugin.community");
   const syncOptions = (liveSession: typeof session) => ({
     store,
     sessionId,
@@ -438,6 +464,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
       activePlugins: admittedIds(liveSession),
       registry: pluginRegistry,
       canExecuteProjection: (pluginId: string) =>
+        allowCommunityCode &&
         hasServerCodeGrant(c.get("rpcApprovalGate"), liveSession, pluginId),
     },
   });

@@ -76,14 +76,27 @@ export function mountApiRoutes(args: {
   readonly uiSlots: UiSlotHost;
   /** Read per request: the trust stage fills it before any request arrives. */
   readonly trust: TrustedSourcesRef;
+  readonly secretVault?: import("../../../trust/secret-vault.js").SecretVault;
 }): BootstrapApiApp {
   const { config, storage, eventBus, catalog, host, activation, model } = args;
-  const { jobs, uiSlots, trust, memorySystem } = args;
+  const { jobs, uiSlots, trust, memorySystem, secretVault } = args;
   const { store, sessionLock, memoryIngestLock } = storage;
   const { registry } = catalog;
   const { tools, rpc, services, extensions } = host;
   const { pluginEntries } = activation;
   const { runtimeEnv, compactionFailures, budgetSource } = model;
+
+  const cleanupUninstalledPlugin = async (pluginId: string): Promise<void> => {
+    host.appScheduler.replacePlugin(pluginId, () => {});
+    host.configFlows.replacePlugin(pluginId, () => {});
+    host.providerSources.invalidatePlugin(pluginId);
+    rpc.rpcApprovalGate.revokePlugin(pluginId);
+    await Promise.all([
+      secretVault?.deletePlugin(pluginId) ?? Promise.resolve(0),
+      store.deletePluginInstanceData(pluginId),
+      trust.permissions?.deletePluginGrant(pluginId) ?? Promise.resolve(),
+    ]);
+  };
 
   const app = new Hono();
   const applicationWork = config.applicationWork ?? createApplicationWork();
@@ -119,6 +132,10 @@ export function mountApiRoutes(args: {
     c.set("hookPipeline", host.hookPipeline);
     c.set("pluginFaults", host.pluginFaults);
     c.set("eventDirectory", catalog.eventDirectory);
+    if (secretVault) {
+      c.set("secretVault", secretVault);
+    }
+    c.set("cleanupUninstalledPlugin", cleanupUninstalledPlugin);
     c.set("memorySystem", memorySystem);
     c.set("rpcExecutor", rpc.rpcExecutor);
     c.set("rpcRegistry", rpc.rpcRegistry);

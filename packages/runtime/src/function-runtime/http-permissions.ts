@@ -26,6 +26,12 @@ export interface HttpPermissionOptions {
   readonly httpPermissions: readonly HttpPermissionDecl[];
   /** For explanatory error messages. */
   readonly runtimeId: string;
+  /**
+   * Optional live host-policy gate for `net.httpDeclared`. Evaluated on every
+   * request so L1/L2/L3 denials take effect immediately for function and
+   * presentation runtimes (including `ctx.media.ingestUrl`).
+   */
+  readonly canUseDeclaredHttp?: () => boolean;
 }
 
 /** Canonical origin (scheme + host + port) of a URL, or undefined if unparseable. */
@@ -52,6 +58,11 @@ export function enforceHttpPermissions(
   return {
     validateBaseUrl: (url) => utils.validateBaseUrl(url),
     async fetchWithRetry(input, init) {
+      if (opts.canUseDeclaredHttp?.() === false) {
+        throw new Error(
+          `Capability "net.httpDeclared" is not allowed for runtime "${opts.runtimeId}"`,
+        );
+      }
       const urlStr = typeof input === "string" ? input : input.href;
       const requestOrigin = canonicalOrigin(urlStr);
       const method = (init?.method ?? "GET").toUpperCase();

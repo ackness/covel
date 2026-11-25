@@ -220,5 +220,9 @@ declare module "hono" {
      * `emit-event` builtin tool registered in `setupPluginTools`.
      */
     eventDirectory?: EventDirectory;
+    /** Per-plugin secret vault backing `covel.secrets` and uninstall cleanup. */
+    secretVault?: import("./trust/secret-vault.js").SecretVault;
+    /** Cleans up secrets, instance data, caches, timers, flows, and grants on plugin uninstall. */
+    cleanupUninstalledPlugin?: (pluginId: string) => Promise<void>;
   }
 }

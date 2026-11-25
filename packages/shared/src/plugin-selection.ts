@@ -570,12 +570,14 @@ export function resolveSessionPlugins(args: {
     pruneUnprovided(replacements);
     if (unsupported.size === before) break;
   }
-  // A provider added only for the world has no requesting plugin; without this
-  // seed it would be pruned as an orphaned dependency.
+  // A provider added only for the world or via globalDefaults has no requesting
+  // plugin; without this seed it would be pruned as an orphaned dependency.
+  const globalDefaultSet = new Set(fixed ? [] : (args.globalDefaults ?? []));
   const reachable = new Set(
     [...active].filter(
       (id) =>
         requested.has(id) ||
+        globalDefaultSet.has(id) ||
         registry.get(id)!.kind === "core" ||
         dataRequired.some((contract) =>
           registry.get(id)!.acceptsWorldData?.includes(contract),
@@ -590,7 +592,11 @@ export function resolveSessionPlugins(args: {
       for (const candidate of active)
         if (contracts(registry.get(candidate)!).includes(required))
           reachable.add(candidate);
-  for (const id of active) if (!reachable.has(id)) active.delete(id);
+  for (const id of active)
+    if (!reachable.has(id)) {
+      active.delete(id);
+      autoAdded.delete(id);
+    }
   const ids = (plugins: readonly SessionPluginCandidate[]) =>
     plugins.map((plugin) => plugin.id);
   const missingRequirements = (

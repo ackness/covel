@@ -222,7 +222,22 @@ describe("permissionsPolicySchema and server setting", () => {
           `${key} should allow deny`,
         ).toBe(true);
       }
+      if (CAPABILITY_CATALOG[key].reserved) {
+        expect(
+          permissionsPolicySchema.safeParse({ [key]: "ask" }).success,
+          `${key} reserved capability should reject non-default ask`,
+        ).toBe(false);
+        expect(
+          pluginGrantDecisionsSchema.safeParse({ [key]: "allow" }).success,
+          `${key} reserved capability should reject plugin grant allow`,
+        ).toBe(false);
+        expect(
+          pluginGrantDecisionsSchema.safeParse({ [key]: "deny" }).success,
+          `${key} reserved capability should reject plugin grant deny`,
+        ).toBe(false);
+      }
     }
+    expect(CAPABILITY_CATALOG["exec.localBridge"].reserved).toBe(true);
   });
 
   it("parses COVEL_PERMISSIONS_POLICY env overrides and resolves precedence", () => {

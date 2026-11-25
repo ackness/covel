@@ -90,6 +90,10 @@ function withPluginWrite(
   mutate: () => Promise<Response>,
 ): Promise<Response> {
   const registry = c.get("pluginRegistry");
+  const bridgeDenied = c
+    .get("permissionService")
+    ?.requireCapabilityForPlugin(c, "session.bridgeWrite", pluginId);
+  if (bridgeDenied) return Promise.resolve(bridgeDenied);
   return withLockedSessionMutation({
     c,
     store: c.get("store"),

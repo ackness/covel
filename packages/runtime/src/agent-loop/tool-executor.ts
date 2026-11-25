@@ -202,6 +202,16 @@ export interface ManagedToolExecutor extends ToolExecutor {
 
 // ── Implementation ───────────────────────────────────────────────
 
+export interface ToolPolicyCheckInput {
+  readonly toolName: string;
+  readonly pluginId: string;
+  readonly runtimeId: string;
+  readonly toolSource: ToolSource;
+  readonly annotations: Readonly<ToolAnnotations>;
+  readonly sessionId: string;
+  readonly turnId: string;
+}
+
 export interface ToolExecutorConfig {
   /** Tool lookup function — returns the tool module by name. Context enables per-plugin scoping. */
   readonly findTool?: (
@@ -214,6 +224,13 @@ export interface ToolExecutorConfig {
   readonly approval?: ApprovalPipeline;
   /** Optional function to determine tool source category. */
   readonly getToolSource?: (toolName: string) => ToolSource;
+  /**
+   * Optional dynamic host capability check (e.g. `runtime.highRiskTools`),
+   * evaluated with the resolved tool's annotations before execution.
+   */
+  readonly checkPolicy?: (
+    input: ToolPolicyCheckInput,
+  ) => { readonly decision: "allow" | "deny"; readonly reason: string } | undefined;
 }
 
 function toolLabel(pluginId: string, toolName: string): string {
@@ -489,59 +506,75 @@ export function createToolExecutor(
         };
       }
 
-      // 2. Check approval
+      // 2. Check approval and dynamic host capability policy
       let approvalStatus: ApprovalStatus = "auto-allowed";
       const toolSource = config.getToolSource?.(call.name) ?? "local";
 
-      if (config.approval) {
-        const checkResult = config.approval.check(
-          {
-            toolName: call.name,
-            pluginId: context.pluginId,
-            runtimeId: context.runtimeId,
-            input: tryParseJson(call.arguments),
-            turnId: context.turnId,
-            sessionId: context.sessionId,
-          },
-          toolSource,
-        );
+      const policyCheck = config.checkPolicy?.({
+        toolName: call.name,
+        pluginId: context.pluginId,
+        runtimeId: context.runtimeId,
+        toolSource,
+        annotations: tool.annotations ?? {
+          readOnly: false,
+          stagesWrites: true,
+          idempotent: false,
+          concurrencySafe: false,
+        },
+        sessionId: context.sessionId,
+        turnId: context.turnId,
+      });
 
-        if (checkResult.decision === "deny") {
-          approvalStatus = "policy-denied";
-          const denyResult = toolError(
-            "refused",
-            `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}.`,
-            "Do not retry this call.",
-          );
-          await recordCall(
-            config.store,
-            call,
-            context,
-            denyResult,
-            startTime,
-            false,
-            approvalStatus,
-          );
-          await emitToolFailed(
-            context,
-            call,
-            "refused",
-            checkResult.reason ?? "denied by approval policy",
-            undefined,
-            Date.now() - startTime,
-            approvalStatus,
-            "Do not retry this call.",
-          );
-          return {
-            toolCallId: call.toolCallId,
-            name: call.name,
-            result: denyResult,
-            error: errorFromText(denyResult),
-            parsedResult: null,
-            success: false,
-            approvalStatus,
-          };
-        }
+      const checkResult =
+        policyCheck?.decision === "deny"
+          ? policyCheck
+          : config.approval?.check(
+              {
+                toolName: call.name,
+                pluginId: context.pluginId,
+                runtimeId: context.runtimeId,
+                input: tryParseJson(call.arguments),
+                turnId: context.turnId,
+                sessionId: context.sessionId,
+              },
+              toolSource,
+            );
+
+      if (checkResult?.decision === "deny") {
+        approvalStatus = "policy-denied";
+        const denyResult = toolError(
+          "refused",
+          `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}.`,
+          "Do not retry this call.",
+        );
+        await recordCall(
+          config.store,
+          call,
+          context,
+          denyResult,
+          startTime,
+          false,
+          approvalStatus,
+        );
+        await emitToolFailed(
+          context,
+          call,
+          "refused",
+          checkResult.reason ?? "denied by approval policy",
+          undefined,
+          Date.now() - startTime,
+          approvalStatus,
+          "Do not retry this call.",
+        );
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: denyResult,
+          error: errorFromText(denyResult),
+          parsedResult: null,
+          success: false,
+          approvalStatus,
+        };
       }
 
       // 3. Parse arguments. The slips `parseJsonText` settles do not fail

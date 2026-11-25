@@ -723,4 +723,255 @@ describe("provider-source gateway and OpenAI Responses request shaping", () => {
       unregister();
     }
   });
+
+  it("blocks provider.source@1 credentials from reaching another plugin's media wires while allowing same-plugin and built-in wires", async () => {
+    const { registerImageWire } = await import("../src/image/wire-registry.js");
+    const { registerSpeechWire, registerTranscriptionWire } = await import(
+      "../src/speech/wire-registry.js"
+    );
+    const { registerMusicWire } = await import("../src/music/wire-registry.js");
+
+    const leakedHeaders: Array<Record<string, string> | undefined> = [];
+    const ownHeaders: Array<Record<string, string> | undefined> = [];
+
+    const unregs = [
+      registerImageWire(
+        {
+          id: "evil-plugin/img",
+          async generate(config) {
+            leakedHeaders.push(config.headers);
+            return {
+              images: [
+                {
+                  kind: "bytes" as const,
+                  bytes: new Uint8Array([1]),
+                  mime: "image/png",
+                },
+              ],
+              usage: null,
+              warnings: [],
+            };
+          },
+        },
+        { pluginId: "evil-plugin", builtin: false },
+      ),
+      registerSpeechWire(
+        {
+          id: "evil-plugin/tts",
+          async synthesize(config) {
+            leakedHeaders.push(config.headers);
+            return {
+              audio: { data: new Uint8Array([1]), mimeType: "audio/mpeg" },
+              usage: null,
+              warnings: [],
+            };
+          },
+        },
+        { pluginId: "evil-plugin", builtin: false },
+      ),
+      registerTranscriptionWire(
+        {
+          id: "evil-plugin/stt",
+          async transcribe(config) {
+            leakedHeaders.push(config.headers);
+            return { text: "leaked", usage: null, warnings: [] };
+          },
+        },
+        { pluginId: "evil-plugin", builtin: false },
+      ),
+      registerMusicWire(
+        {
+          id: "evil-plugin/music",
+          async compose(config) {
+            leakedHeaders.push(config.headers);
+            return {
+              audio: { data: new Uint8Array([1]), mimeType: "audio/mpeg" },
+              usage: null,
+              warnings: [],
+            };
+          },
+        },
+        { pluginId: "evil-plugin", builtin: false },
+      ),
+      registerImageWire(
+        {
+          id: "owner-plugin/img",
+          async generate(config) {
+            ownHeaders.push(config.headers);
+            return {
+              images: [
+                {
+                  kind: "bytes" as const,
+                  bytes: new Uint8Array([1]),
+                  mime: "image/png",
+                },
+              ],
+              usage: null,
+              warnings: [],
+            };
+          },
+        },
+        { pluginId: "owner-plugin", builtin: false },
+      ),
+      registerMusicWire(
+        {
+          id: "owner-plugin/music",
+          async compose(config) {
+            ownHeaders.push(config.headers);
+            return {
+              audio: { data: new Uint8Array([2]), mimeType: "audio/mpeg" },
+              usage: null,
+              warnings: [],
+            };
+          },
+        },
+        { pluginId: "owner-plugin", builtin: false },
+      ),
+    ];
+
+    const resolver: ProviderSourceResolver = {
+      inspectSync(sourceId) {
+        return {
+          sourceId,
+          ready: true,
+          baseUrl: "https://media.example.test/v1",
+          protocol: "openai-chat-v1",
+          modes: ["image", "speech", "transcription", "music"],
+        };
+      },
+      async resolve(req) {
+        return {
+          sourceId: req.sourceId,
+          approvedInstanceOwner: "owner-plugin",
+          declaredBaseUrl: "https://media.example.test/v1",
+          declaredProtocol: "openai-chat-v1",
+          baseUrl: "https://media.example.test/v1",
+          protocol: "openai-chat-v1",
+          headers: { authorization: "Bearer owner-oauth-secret" },
+          credentialGeneration: 1,
+        };
+      },
+      async refresh() {
+        return null;
+      },
+    };
+
+    const providerRegistry = createProviderRegistry();
+    const presetRegistry = createPresetRegistry({
+      profiles: [],
+      presets: [
+        {
+          id: "cross-img",
+          name: "Cross Img",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "img-1",
+          supportedModes: ["image"],
+          tag: "image",
+          enabled: true,
+          providerRequestMetadata: { imageWire: "evil-plugin/img" },
+        },
+        {
+          id: "cross-tts",
+          name: "Cross TTS",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "tts-1",
+          supportedModes: ["speech"],
+          tag: "speech",
+          enabled: true,
+          providerRequestMetadata: { speechWire: "evil-plugin/tts" },
+        },
+        {
+          id: "cross-stt",
+          name: "Cross STT",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "stt-1",
+          supportedModes: ["transcription"],
+          tag: "transcription",
+          enabled: true,
+          providerRequestMetadata: { transcriptionWire: "evil-plugin/stt" },
+        },
+        {
+          id: "cross-music",
+          name: "Cross Music",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "music-1",
+          supportedModes: ["music"],
+          tag: "music",
+          enabled: true,
+          providerRequestMetadata: { musicWire: "evil-plugin/music" },
+        },
+        {
+          id: "own-img",
+          name: "Own Img",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "img-1",
+          supportedModes: ["image"],
+          tag: "image",
+          enabled: true,
+          providerRequestMetadata: { imageWire: "owner-plugin/img" },
+        },
+        {
+          id: "own-music",
+          name: "Own Music",
+          tier: "large",
+          provider: "sub-media",
+          source: "owner-plugin/media",
+          model: "music-1",
+          supportedModes: ["music"],
+          tag: "music",
+          enabled: true,
+          providerRequestMetadata: { musicWire: "owner-plugin/music" },
+        },
+      ],
+    });
+    const slotRegistry = createSlotRegistry();
+    const gateway = createGateway({
+      providerRegistry,
+      presetRegistry,
+      slotRegistry,
+      getProviderSources: () => resolver,
+    });
+
+    try {
+      await expect(
+        gateway.generateImage({ presetId: "cross-img", prompt: "castle" }),
+      ).rejects.toThrow(/cannot receive credentials from provider source plugin "owner-plugin"/);
+      await expect(
+        gateway.synthesizeSpeech({ presetId: "cross-tts", text: "hello" }),
+      ).rejects.toThrow(/cannot receive credentials from provider source plugin "owner-plugin"/);
+      await expect(
+        gateway.transcribeAudio({
+          presetId: "cross-stt",
+          audio: { data: new Uint8Array([1]), mimeType: "audio/wav" },
+        }),
+      ).rejects.toThrow(/cannot receive credentials from provider source plugin "owner-plugin"/);
+      await expect(
+        gateway.composeMusic({ presetId: "cross-music", prompt: "tavern" }),
+      ).rejects.toThrow(/cannot receive credentials from provider source plugin "owner-plugin"/);
+      expect(leakedHeaders).toEqual([]);
+
+      await expect(
+        gateway.generateImage({ presetId: "own-img", prompt: "castle" }),
+      ).resolves.toMatchObject({ provider: "sub-media" });
+      await expect(
+        gateway.composeMusic({ presetId: "own-music", prompt: "tavern" }),
+      ).resolves.toMatchObject({ provider: "sub-media" });
+      expect(ownHeaders).toEqual([
+        { authorization: "Bearer owner-oauth-secret" },
+        { authorization: "Bearer owner-oauth-secret" },
+      ]);
+    } finally {
+      for (const unregister of unregs) unregister();
+    }
+  });
 });

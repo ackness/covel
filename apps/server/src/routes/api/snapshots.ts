@@ -28,6 +28,7 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 
 import { withWritableWorld } from "./worlds/mutation-guard.js";
 import { requireAccess } from "../../host-profile.js";
+import { isDeclarativeAdmitted } from "../../trust/plugin-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -348,7 +349,11 @@ snapshotRoutes.post("/:id/fork", rateLimiter({ max: 10 }), async (c) => {
           if (!entry) return true;
           return (
             getPluginTrustInfo(pluginId, entry?.source).autoLoad ||
-            Boolean(c.get("trustedSources")?.isDeclarative(pluginId))
+            isDeclarativeAdmitted(
+              c.get("trustedSources"),
+              c.get("permissionService"),
+              pluginId,
+            )
           );
         },
       );

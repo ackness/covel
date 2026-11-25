@@ -28,6 +28,7 @@ import {
   resolveSessionParam,
   sessionIncarnationIdentity,
 } from "./session/session-guard.js";
+import { isDeclarativeAdmitted } from "../../trust/plugin-admission.js";
 import { mergePluginCommands } from "./session/commands.js";
 import { buildSessionPluginView } from "./session/plugins.js";
 
@@ -171,6 +172,9 @@ interface PluginDiagnosticsDeps {
   readonly getTrustedSources?: () =>
     | import("../../trust/trusted-source-service.js").TrustedSourceService
     | undefined;
+  readonly getPermissionService?: () =>
+    | import("../../trust/permission-service.js").PermissionService
+    | undefined;
   readonly isEntryPublished: (pluginId: string) => boolean;
   readonly isServerCodeApproved: (
     session: SessionRecord,
@@ -195,15 +199,18 @@ export function createPluginDiagnostics(deps: PluginDiagnosticsDeps) {
     session: SessionRecord,
     pluginId?: string,
   ): PluginDiagnosticsSnapshot => {
+    const trustedSources = deps.getTrustedSources?.();
+    const permissionService = deps.getPermissionService?.();
     const view = buildSessionPluginView(session, deps.registry, {
       isEntryPublished: deps.isEntryPublished,
-      trustedSources: deps.getTrustedSources?.(),
+      trustedSources,
+      permissionService,
       isServerCodeApproved: (id) => deps.isServerCodeApproved(session, id),
       authorized: [...deps.registry.getAll().values()]
         .filter(
           (entry) =>
             getPluginTrustInfo(entry.id, entry.source).autoLoad ||
-            deps.getTrustedSources?.()?.isDeclarative(entry.id) ||
+            isDeclarativeAdmitted(trustedSources, permissionService, entry.id) ||
             deps.isServerCodeApproved(session, entry.id),
         )
         .map((entry) => entry.id),

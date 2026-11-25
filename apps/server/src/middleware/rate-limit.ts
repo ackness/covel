@@ -30,21 +30,44 @@ const DEFAULT_MAX_ENTRIES = 10_000;
 /** One client's budget across every value of a path parameter, in budgets of one path. */
 const TEMPLATE_BUDGET_FACTOR = 8;
 
-function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
-  return new Set(
-    (raw ?? "")
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean),
-  );
-}
-
 function normalizeIp(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
   if (trimmed.startsWith("::ffff:")) return trimmed.slice("::ffff:".length);
   return trimmed;
+}
+
+function parseTrustedProxyIps(raw: string | undefined): ReadonlySet<string> {
+  const ips = new Set<string>();
+  for (const part of (raw ?? "").split(",")) {
+    const normalized = normalizeIp(part);
+    if (normalized) ips.add(normalized);
+  }
+  return ips;
+}
+
+function resolveForwardedClientIp(
+  headerValue: string | undefined,
+  trustedProxyIps: ReadonlySet<string>,
+): string | undefined {
+  if (!headerValue) return undefined;
+  const hops: string[] = [];
+  for (const part of headerValue.split(",")) {
+    const normalized = normalizeIp(part);
+    if (normalized) hops.push(normalized);
+  }
+  if (hops.length === 0) return undefined;
+  // Walk right-to-left: trusted reverse proxies append the peer IP on the right,
+  // so client-spoofed entries on the left are ignored once the first untrusted
+  // hop is reached.
+  for (let i = hops.length - 1; i >= 0; i--) {
+    const hop = hops[i]!;
+    if (!trustedProxyIps.has(hop)) {
+      return hop;
+    }
+  }
+  return hops[0];
 }
 
 function requestRemoteAddr(c: Context): string | undefined {
@@ -60,19 +83,19 @@ function requestRemoteAddr(c: Context): string | undefined {
   }
 }
 
-function clientIp(c: Context): string {
+export function resolveClientIp(c: Context): string {
   const env = readRuntimeEnv();
   const remote = requestRemoteAddr(c);
   const trustedProxyIps = parseTrustedProxyIps(env.trustedProxyIps);
   const canTrustForwarded = !!remote && trustedProxyIps.has(remote);
 
   if (canTrustForwarded) {
-    const forwarded = c.req.header("x-forwarded-for")?.split(",")[0];
+    const forwarded = resolveForwardedClientIp(
+      c.req.header("x-forwarded-for"),
+      trustedProxyIps,
+    );
     return (
-      normalizeIp(forwarded) ??
-      normalizeIp(c.req.header("x-real-ip")) ??
-      remote ??
-      "unknown"
+      forwarded ?? normalizeIp(c.req.header("x-real-ip")) ?? remote ?? "unknown"
     );
   }
 
@@ -100,7 +123,7 @@ export function rateLimiter({
       }
     }
 
-    const ip = clientIp(c);
+    const ip = resolveClientIp(c);
     // Two counters. One per concrete path keeps the budget of each session.
     // One per route template, with a larger budget, stops a client that walks
     // a path parameter to open a fresh counter for every value it tries.

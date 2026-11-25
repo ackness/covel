@@ -166,6 +166,11 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
    * test harnesses; handlers must null-check before use.
    */
   readonly utils?: PluginRuntimeUtils;
+  /**
+   * Optional live host-policy gate for `net.httpDeclared`, checked by function
+   * and presentation runtimes before every declared outbound HTTP request.
+   */
+  readonly canUseDeclaredHttp?: (pluginId: string) => boolean;
   /** Called when a runtime starts execution. */
   readonly onRuntimeStart?: (info: {
     runtimeId: string;

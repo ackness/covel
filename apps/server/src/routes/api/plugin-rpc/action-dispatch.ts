@@ -141,6 +141,13 @@ export async function dispatchPluginAction(
   const inactive = inactiveAction(session);
   if (inactive) return inactive;
 
+  if (pluginId !== FRAMEWORK_PLUGIN_ID) {
+    const bridgeDenied = c
+      .get("permissionService")
+      ?.requireCapabilityForPlugin(c, "session.bridgeWrite", pluginId);
+    if (bridgeDenied) return bridgeDenied;
+  }
+
   // Community modules execute in the server process and register global
   // capabilities. Hosted deployments therefore require the operator
   // credential in addition to the session owner token.

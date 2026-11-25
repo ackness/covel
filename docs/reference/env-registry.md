@@ -442,7 +442,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 
 **`TRUSTED_PROXY_IPS`**
 
-- 限流中间件（`middleware/rate-limit.ts`）用它判断是否信任 `X-Forwarded-For`。
+- 限流中间件（`middleware/rate-limit.ts`）用它判断是否信任 `X-Forwarded-For`；解析时自右向左跳过受信任代理跳数（自动归一化 `::ffff:` IPv4 映射地址），防止客户端伪造头部前缀绕过按 IP 限流或中继配额。
 - 出站请求的 SSRF 防护默认对所有公网 `https` 主机开放，所以没有“允许的模型主机”这样的变量。
 
 **`COVEL_PG_LOCK_POOL_MAX`**
@@ -472,13 +472,13 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 **`COVEL_PERMISSIONS_POLICY`**
 
 - 逗号分隔的 `CapabilityKey=allow|ask|deny` 映射列表，用于在启动时固定 `permissions.policy` 实例级能力策略（优先级：`env > stored > default`）。
-- 解析成功后，`/api/config/server-settings` 与 `/api/permissions/snapshot` 会将其报告为 `source: "env"`、`settable: false`，写入策略会返回 `409 server_setting_fixed`；对禁止实例自动放行的高风险能力配置 `allow` 会被视为无效并忽略该变量覆盖。
+- 解析成功后，`/api/config/server-settings` 与 `/api/permissions/snapshot` 会将其报告为 `source: "env"`、`settable: false`，写入策略会返回 `409 server_setting_fixed`；对禁止实例自动放行的高风险能力配置 `allow` 或尝试修改 `reserved` 预留能力会被视为无效并忽略该变量覆盖。
 - 详见 [安全边界 · 实例策略与持久化授权](../internals/security.md#实例策略与持久化授权)。
 
 **`COVEL_CREDENTIALS_KEY`**
 
-- 可选对称加密口令（使用 SHA-256 派生 256 位密钥并采用 AES-256-GCM 认证加密），用于保护 `<config>/secrets/` 下由 `ctx.secrets` 托管的插件机密文件。
-- 未设置时文件仍以 `0600` 权限与原子重命名方式保存于本地配置目录，不进入数据库与 `/api/config/raw/*` 接口；切勿使用空字符串覆盖或丢失既有密钥。
+- 可选对称加密口令（使用每文件随机盐的 `scrypt` 派生 256 位密钥并采用 AES-256-GCM 认证加密，严格校验 12 字节 IV 与 16 字节认证标签），用于保护 `<config>/secrets/` 下由 `ctx.secrets` 托管的插件机密文件。
+- 配置该变量后，读取磁盘上未加密的 `encrypted: false` 机密文件会被严格拒绝（防止降级为明文读取）；如从无密钥的早期开发目录切换为加密模式，需重新写入对应插件凭据。未设置时文件仍以 `0600` 权限与原子重命名方式保存于本地配置目录，不进入数据库与 `/api/config/raw/*` 接口。
 
 ### 桌面代理
 

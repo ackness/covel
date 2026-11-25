@@ -42,7 +42,9 @@ import {
 } from "../plugin-rpc/settled-session-lock.js";
 import { scopeSessionEvents } from "../session/session-events.js";
 import { publicIncarnationTag } from "../session/session-guard.js";
+import type { PermissionService } from "../../../trust/permission-service.js";
 import type { ApiBootstrapConfig } from "./config.js";
+import { isPluginCapabilityEffectivelyAllowed } from "./instance-plugins.js";
 import type { BootstrapModelContext } from "./model-context.js";
 import type { BootstrapPluginActivation } from "./plugin-activation.js";
 import type { BootstrapPluginCatalog } from "./plugin-catalog.js";
@@ -74,8 +76,18 @@ export function createBootstrapRuntimeJobs(args: {
   readonly activation: BootstrapPluginActivation;
   readonly model: BootstrapModelContext;
   readonly memorySystem: MemorySystem;
+  readonly getPermissionService?: () => PermissionService | undefined;
 }): BootstrapRuntimeJobs {
-  const { config, storage, eventBus, catalog, host, activation, model } = args;
+  const {
+    config,
+    storage,
+    eventBus,
+    catalog,
+    host,
+    activation,
+    model,
+    getPermissionService,
+  } = args;
   const { store, sessionLock, tryWithCommitLock } = storage;
   const { registry, eventDirectory } = catalog;
   const { services, extensions, hookPipeline, pluginFaults, loadRuntimeFn } =
@@ -131,6 +143,22 @@ export function createBootstrapRuntimeJobs(args: {
           ? { gateway: requestServices.gateway }
           : {}),
         ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
+        ...(getPermissionService
+          ? {
+              canUseDeclaredHttp: (pluginId: string) => {
+                const perms = getPermissionService();
+                return (
+                  !perms ||
+                  isPluginCapabilityEffectivelyAllowed(
+                    perms,
+                    registry,
+                    "net.httpDeclared",
+                    pluginId,
+                  )
+                );
+              },
+            }
+          : {}),
         ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
         toolExecutor,
         resolveModel,

@@ -1687,6 +1687,7 @@
           "description": "预留给声明式白名单本地子进程（如 stdio 工具）的高危桥接能力。"
         }
       },
+      "reservedBadge": "预留（暂未启用）",
       "pluginsTitle": "按插件持久化授权与审计（L3）",
       "pluginsDescription": "社区插件的持久化决策绑定至当前内容摘要与能力快照；显式拒绝具备粘性，会覆盖全局可信来源并在版本变更后继续生效直至清除。",
       "pluginsOperatorRequired": "请先在上方输入运维 token，再查看该宿主上的插件权限审计与持久化授权。",

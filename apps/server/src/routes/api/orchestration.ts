@@ -10,6 +10,7 @@ import {
 } from "@covel/shared";
 import type { SessionRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../api-error.js";
+import { allowsAccess } from "../../host-profile.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 import { withLockedSessionMutation } from "./session/locked-mutation.js";
 import {
@@ -26,6 +27,10 @@ function view(c: Context, session: SessionRecord): OrchestrationResponse {
       c.get("rpcApprovalGate"),
       session,
       c.get("trustedSources"),
+      {
+        permissionService: c.get("permissionService"),
+        allowCommunityCode: allowsAccess(c, "plugin.community"),
+      },
     ),
   );
   const active = new Set(runnablePluginIds(session.activePlugins, registry));

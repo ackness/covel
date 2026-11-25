@@ -116,7 +116,11 @@ export async function activatePluginEntries(args: {
       providerSources: host.providerSources,
       isCommunityServerCodeApproved,
       isDeclarativePackage: (pluginId) =>
-        refreshDeclarativeEligibility(trust.current, pluginId),
+        refreshDeclarativeEligibility(
+          trust.current,
+          pluginId,
+          trust.permissions,
+        ),
       isCommunityHookApproved,
       hostId: args.hostId,
       secretVault: args.secretVault,
@@ -170,6 +174,7 @@ export async function activatePluginEntries(args: {
   pluginEntries.watch();
   const pluginDiagnostics = createPluginDiagnostics({
     getTrustedSources: () => trust.current,
+    getPermissionService: () => trust.permissions,
     registry,
     tools: host.tools.tools,
     hooks: host.hookPipeline,

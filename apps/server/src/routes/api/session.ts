@@ -70,7 +70,12 @@ import {
   decorateSessionList,
   withEmbeddingMetadata,
 } from "./session/embedding.js";
-import { allowsAccess, requireAccess } from "../../host-profile.js";
+import {
+  allowsAccess,
+  hostProfileOf,
+  isOperatorRequest,
+  requireAccess,
+} from "../../host-profile.js";
 import {
   mintSessionOwnerToken,
   mintSessionApprovalScope,
@@ -84,6 +89,7 @@ import {
   SESSION_OWNER_TOKEN_HASH_KEY,
 } from "./session/session-guard.js";
 import {
+  globalDefaultSessionPluginIds,
   resolveSessionPluginPlan,
   confirmedPluginIds,
   storedPluginSelection,
@@ -362,6 +368,12 @@ sessionRoutes.post("/", async (c) => {
     ]),
   ];
   const requiredDataContracts = [...(inventory?.requiredDataContracts ?? [])];
+  const profile = hostProfileOf(c);
+  const globalDefaults = globalDefaultSessionPluginIds(catalogue, {
+    permissionService: c.get("permissionService"),
+    profile,
+    isOperator: isOperatorRequest(c, profile),
+  });
   const selection = resolveSessionPluginPlan(
     parsedCreate.requestedPlugins,
     catalogue,
@@ -370,6 +382,7 @@ sessionRoutes.post("/", async (c) => {
       requiredContracts,
       requiredDataContracts,
       authorized: [...authorized],
+      globalDefaults,
     },
   );
   // A plugin whose dependency is missing is turned off, not a reason to
@@ -410,6 +423,7 @@ sessionRoutes.post("/", async (c) => {
     entries,
     selected: [
       ...plugins,
+      ...globalDefaults,
       ...parsedCreate.requestedPlugins,
       ...selection.rejected.flatMap((item) => [
         item.pluginId,

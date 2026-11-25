@@ -109,7 +109,7 @@ export async function createPluginHost(args: {
     store,
     getApprovalGate: () => rpc.rpcApprovalGate,
     refreshDeclarativeEligibility: (pluginId) =>
-      refreshDeclarativeEligibility(trust.current, pluginId),
+      refreshDeclarativeEligibility(trust.current, pluginId, trust.permissions),
   });
   const loadRuntimeFn = runtimeLoader.loadRuntimeFn;
 
@@ -117,7 +117,11 @@ export async function createPluginHost(args: {
   // the framework tool registry, per-session character-tool overrides, and
   // the approval-gated executor. The registry remains mutable so the memory
   // system can register its tools in a later stage.
-  const tools = await setupPluginTools({ store, eventDirectory });
+  const tools = await setupPluginTools({
+    store,
+    eventDirectory,
+    getPermissionService: () => trust.permissions,
+  });
   owned.closeTools = () => tools.toolExecutor.close();
 
   const rpc = createBootstrapPluginRpc({

@@ -108,12 +108,14 @@ browser-private 一列只对访客开放他们用自己的密钥和存档做的�
 
 在 L1 宿主能力天花板之下，服务端通过统一的 L1 → L2 → L3 → L4 决策链管理实例策略与按插件持久化授权：
 
-- **L2 实例策略（`permissions.policy`）**：由 `@covel/shared/permissions` 的默认目录策略、`permissions.policy` 服务端设置以及 `COVEL_PERMISSIONS_POLICY` 环境变量合并而成，生效优先级为 `env > stored > default`。Schema 禁止把 `allowAutoPolicy` 为 `false` 的高风险能力设为默认 `allow`，且 L2 只能保持默认或在 L1 允许范围内向下收紧为 `deny`，无法重新打开 L1 关闭的能力；写入仅在 personal 形态开放。
+- **L2 实例策略（`permissions.policy`）**：由 `@covel/shared/permissions` 的默认目录策略、`permissions.policy` 服务端设置以及 `COVEL_PERMISSIONS_POLICY` 环境变量合并而成，生效优先级为 `env > stored > default`。Schema 禁止把 `allowAutoPolicy` 为 `false` 的高风险能力设为默认 `allow`，也禁止修改标记为 `reserved: true` 的预留能力（如 `exec.localBridge` 始终保持 `deny`）；L2 只能保持默认或在 L1 允许范围内向下收紧为 `deny`，无法重新打开 L1 关闭的能力；写入仅在 personal 形态开放。
 - **L3 持久化插件授权（`plugin_grants`）**：社区插件按 `pluginId` 在数据库 `plugin_grants` 表中存储每项能力的 `allow` / `deny` 决策，并与写入时的 `version`、`contentDigest` 以及声明能力快照 `grantedCapabilities` 绑定：
   - 若包文件发生修改（`stale-digest`）、升级后声明了超出授权快照的新能力（`capability-escalated`）或包清单/摘要不可读（`unreadable`），所有先前的 `allow` 决策自动失效，不再免审批放行。
   - 显式记录的 `deny` 决策保持**粘性**：即使包摘要变化或发生能力升级，已有 `deny` 仍持续阻止该能力，并优先覆盖全局 `trust.sources` 的隐式放行，直到管理员显式更新或清除该插件的授权记录。
-  - 写入或清除 L3 授权（包含新增 `deny`、撤销既有 `allow` 或删除记录）时，会同步清除 `RpcApprovalGate` 中该插件已缓存的 L4 会话授权。
-- **门控前检查（`RpcApprovalGate`）**：评估需要权限的插件操作时先运行统一策略检查（`evaluateRpcApproval`）：先检查 L1 天花板（`ceiling`）、L2 实例策略（`policy`）与 L3 显式拒绝（`grant`），任一层拒绝即返回 `403`（`capability_disabled`、`capability_denied_by_policy`、`capability_denied_by_grant`）；若均未拒绝，再对服务端代码与 runtime 动作检查有效 L3 持久放行（`persistent-grant`）或可信来源策略（`trusted-source`）；仍未决议时才进入 L4 会话级 / 一次性审批队列（`202 approval-required`）。新鲜的 `declarative` 插件在非代码级 RPC 与事件上不触发 `plugin.communityCode` 检查，保留独立的 L4 审批语义。
+  - 写入或清除 L3 授权（包含新增 `deny`、撤销既有 `allow` 或删除记录）时，会同步清除 `RpcApprovalGate` 中该插件已缓存的 L4 会话授权并失效对应的 `provider.source@1` 缓存。
+- **统一执行面覆盖**：
+  - **门控前检查（`RpcApprovalGate`）**：评估需要权限的插件操作时先运行统一策略检查（`evaluateRpcApproval`）：先检查 L1 天花板（`ceiling`）、L2 实例策略（`policy`）与 L3 显式拒绝（`grant`），任一层拒绝即返回 `403`（`capability_disabled`、`capability_denied_by_policy`、`capability_denied_by_grant`）；若均未拒绝，再对服务端代码与 runtime 动作检查有效 L3 持久放行（`persistent-grant`）或可信来源策略（`trusted-source`）；仍未决议时才进入 L4 会话级 / 一次性审批队列（`202 approval-required`）。在共享形态下，`plugin.communityCode: "operator-only"` 同时约束会话插件列表、世界数据投影与编排查询，非运维调用方不会获得社区代码授权。
+  - **声明式插件与运行时能力**：`plugin.declarative` 的 L1–L3 策略统一应用于启用、动作预检、插件 RPC、事件派发、浏览器检查点导入、后台任务重试与会话分叉；`net.httpDeclared` 在入口 `covel.http`、function runtime 与 presentation runtime 的全部声明出站请求中实时生效；`plugin.globalAutoEnable` 门控新建会话时声明 `globalSessionDefault: "optional"` 的辅助插件自动加入；`session.bridgeWrite` 门控非框架插件 RPC 与 `plugin-data` 写入；`runtime.highRiskTools` 门控非只读且非幂等的模型工具调用。
 
 ## Outbound requests (SSRF guard)
 
@@ -287,10 +289,10 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 
 面向实例级与 OAuth/多账号供应商源的能力受到更细粒度的宿主凭据边界保护，且在 `browser-private` 与托管形态通过 [L1 天花板](#能力天花板l1) 硬关闭（`plugin.instanceScope`、`plugin.providerSource`、`secrets.own`、`net.loopbackCallback`、`net.authProxy`、`app.scheduler`、`channel.bridge`、`compute.sandboxWorker`、`exec.localBridge`）：
 
-- **`SecretVault` 包私有凭据**：仅声明 `permissions.secrets: true` 且取得 L1–L3 `secrets.own` 授权的插件可以通过 `covel.secrets` 读写宿主加密存储的包私有凭据（`apps/server/src/trust/secret-vault.ts`）。凭据按 `pluginId` 严格隔离，摘要或权限变更不放宽跨包读取，值也绝不发送给浏览器或记录到日志与 trace。
+- **`SecretVault` 包私有凭据**：仅声明 `permissions.secrets: true` 且取得 L1–L3 `secrets.own` 授权的插件可以通过 `covel.secrets` 读写宿主加密存储的包私有凭据（`apps/server/src/trust/secret-vault.ts`）。配置 `COVEL_CREDENTIALS_KEY` 时采用每文件随机盐的 `scrypt` 派生密钥与 AES-256-GCM（校验 12 字节 IV 与 16 字节标签），并严格拒绝读取未加密的 `encrypted: false` 文件以防降级攻击。凭据按 `pluginId` 严格隔离，摘要或权限变更不放宽跨包读取，卸载插件时同步清除，值也绝不发送给浏览器或记录到日志与 trace。
 - **临时回环回调（`net.loopbackCallback`）**：配置流的 `browser` 步骤需声明 `permissions.loopbackCallback` 并获授权。把 `ctx.startLoopbackCallback()` 返回的 `session.state` 放进授权 URL 的 `state` 参数。回环监听与手工粘贴都检查该值，并在推进流程前重新检查权限。监听器在接收有效回调、取消或超时后关闭。
-- **受限认证代理（`net.authProxy`）**：声明 `permissions.authProxy: true` 且通过 `net.authProxy` 门控后，实例插件的登录/刷新请求方可使用配置好的出站代理通道。
-- **`provider.source@1` 来源锁定与零泄露**：供应商源解析返回的 `baseUrl` 在宿主端校验是否命中该插件 `permissions.http` 的声明允许源；解析得到的短期 Bearer token 与自定义请求头仅用于当次服务端模型调用，从不写入 `X-Provider-Keys`、Web 响应、错误详情或执行 trace。
+- **受限认证代理（`net.authProxy`）**：声明 `permissions.authProxy: true` 且通过 `net.authProxy` 门控后，实例插件的登录/刷新请求方可使用配置好的出站代理通道；当代理模式回退到直连（`direct`）时仍强制使用严格非私有地址 DNS 钉住路径。
+- **`provider.source@1` 来源锁定与零泄露**：供应商源解析返回的 `baseUrl` 在宿主端校验是否命中该插件 `permissions.http` 的声明允许源，自定义请求头严格按 RFC 9110 过滤逐跳与危险头并限制总大小；权限或授权变更会立即失效缓存；解析得到的短期 Bearer token 与自定义请求头仅用于当次服务端模型调用，从不写入 `X-Provider-Keys`、Web 响应、错误详情或执行 trace。
 
 ## Local model relay
 
@@ -317,7 +319,7 @@ Web 客户端只发送它的请求用得到的供应商的密钥：
 - 不满足条件的请求只回答失败，不会发出。
 - 在允许的范围内，服务端可以对这个地址发任何 GET 或 POST，等同于拿到 API 密钥的服务端能调用那家服务商的任何接口。所以玩家应当把地址写到具体的 API 路径（例如 `http://localhost:11434/v1`），让模型服务的管理接口留在范围之外。
 
-**上限。** 每个通道最多 16 个进行中的请求；请求正文 16 MiB，回答 64 MiB（网络路径的上限更高，见 [Response size ceiling](#response-size-ceiling)）；每个分块还受 1 MiB 请求体上限约束；回答头最多等 15 分钟；模型调用最多等 10 秒让通道连上。打开通道和事件流一样按 IP 限流（`RATE_LIMIT_RPM`），每个进程最多 512 个通道，超出时 `503 model_relay_busy`。一个通道只有一条流：同一个通道号再连一次，旧的流被关闭，正在进行的请求失败。服务端拒绝格式不对的状态行和响应头（`400 model_relay_invalid_answer`），浏览器的失败说明在进入日志前被压成一行。
+**上限。** 每个通道最多 16 个进行中的请求；请求正文 16 MiB，回答 64 MiB（网络路径的上限更高，见 [Response size ceiling](#response-size-ceiling)）；每个分块还受 1 MiB 请求体上限约束；回答头最多等 15 分钟，正文分块空闲超时 60 秒；响应流按字节背压缓冲（单请求上限 4 MiB、进程总计上限 64 MiB）；模型调用最多等 10 秒让通道连上。打开通道和事件流一样按 IP 限流（`RATE_LIMIT_RPM`），每个客户端 IP 最多 4 个并发通道、每个进程最多 512 个通道，超出时 `503 model_relay_busy`。一个通道只有一条流：同一个通道号再连一次，旧的流被关闭，正在进行的请求失败。服务端拒绝格式不对的状态行和响应头（`400 model_relay_invalid_answer`），浏览器的失败说明在进入日志前被压成一行。
 
 **多实例。** 通道只在打开它的那个进程里。多实例部署时，模型请求必须到达持有该通道的实例，否则得到“浏览器没有连接”的错误。
 

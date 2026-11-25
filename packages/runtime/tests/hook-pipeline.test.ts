@@ -764,4 +764,41 @@ describe("handler fault outcomes", () => {
     );
     expect(onHandlerOutcome).not.toHaveBeenCalled();
   });
+
+  it("skips match, hook.fired, handler, and outcome tracking when runsFor returns false", async () => {
+    const onHandlerOutcome = vi.fn();
+    const emitted: string[] = [];
+    const pipeline = createHookPipeline({ onHandlerOutcome });
+    const matchSpy = vi.fn(() => {
+      throw new Error("unapproved match must never execute");
+    });
+    const handlerSpy = vi.fn(async () => ({ action: "abort" as const, reason: "nope" }));
+    pipeline.register({
+      id: "community-unapproved:PreToolUse",
+      pluginId: "plugin-a",
+      event: "PreToolUse",
+      runsFor: async () => false,
+      match: matchSpy,
+      handler: handlerSpy,
+    });
+
+    const result = await pipeline.run(
+      "PreToolUse",
+      makeCtx("PreToolUse"),
+      { toolName: "test", args: {} },
+      {
+        emitter: {
+          emit: async (ev: { type: string }) => {
+            emitted.push(ev.type);
+          },
+        } as never,
+      },
+    );
+
+    expect(result.action).toBe("continue");
+    expect(matchSpy).not.toHaveBeenCalled();
+    expect(handlerSpy).not.toHaveBeenCalled();
+    expect(onHandlerOutcome).not.toHaveBeenCalled();
+    expect(emitted).toEqual([]);
+  });
 });

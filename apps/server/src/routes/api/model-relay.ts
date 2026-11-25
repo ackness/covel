@@ -13,7 +13,7 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../api-error.js";
-import { rateLimiter } from "../../middleware/rate-limit.js";
+import { rateLimiter, resolveClientIp } from "../../middleware/rate-limit.js";
 import { streamOwnedSSE } from "../../application-work.js";
 import { hostProfileOf } from "../../host-profile.js";
 import {
@@ -120,7 +120,8 @@ export function createModelRelayRoutes(registry: ModelRelayRegistry): Hono<{
     rateLimiter({ max: readRuntimeEnv().rateLimitRpm }),
     (c) => {
       const channel = c.get("modelRelayChannel");
-      if (!registry.canAttach(channel)) {
+      const clientKey = resolveClientIp(c);
+      if (!registry.canAttach(channel, clientKey)) {
         return c.json(
           errorBody("Too many relay channels are open on this server", {
             code: "model_relay_busy",
@@ -128,6 +129,7 @@ export function createModelRelayRoutes(registry: ModelRelayRegistry): Hono<{
           503,
         );
       }
+      const shutdownSignal = c.get("requestWork")?.signal;
       return streamOwnedSSE(c, async (stream) => {
         // Every frame (ready, request, cancel, heartbeat) shares one serialized
         // write chain so concurrent writes never interleave mid-frame.
@@ -135,7 +137,9 @@ export function createModelRelayRoutes(registry: ModelRelayRegistry): Hono<{
         const enqueueWrite = (write: () => Promise<unknown>): Promise<void> => {
           const next = writing
             .then(async () => {
-              if (stream.aborted || stream.closed) return;
+              if (stream.aborted || stream.closed || shutdownSignal?.aborted) {
+                return;
+              }
               await write();
             })
             .catch(() => {});
@@ -151,19 +155,56 @@ export function createModelRelayRoutes(registry: ModelRelayRegistry): Hono<{
           );
         };
         // A newer stream for the same channel ends this one.
-        const detach = registry.attach(channel, sink, () => stream.abort());
+        const detach = registry.attach(
+          channel,
+          sink,
+          () => stream.abort(),
+          clientKey,
+        );
         if (!detach) return; // the channel limit was reached meanwhile
-        stream.onAbort(detach);
+        const wakeWaiters = new Set<() => void>();
+        const wakeAll = () => {
+          for (const wake of wakeWaiters) wake();
+          wakeWaiters.clear();
+        };
+        const onShutdown = () => {
+          stream.abort();
+          wakeAll();
+        };
+        shutdownSignal?.addEventListener("abort", onShutdown, { once: true });
+        stream.onAbort(() => {
+          detach();
+          wakeAll();
+        });
+        const waitHeartbeat = (): Promise<void> => {
+          if (stream.aborted || stream.closed || shutdownSignal?.aborted) {
+            return Promise.resolve();
+          }
+          return new Promise<void>((resolve) => {
+            const done = () => {
+              clearTimeout(timer);
+              wakeWaiters.delete(done);
+              resolve();
+            };
+            const timer = setTimeout(done, HEARTBEAT_MS);
+            timer.unref?.();
+            wakeWaiters.add(done);
+          });
+        };
         try {
           await enqueueWrite(() =>
             stream.writeSSE({ event: "ready", data: "{}" }),
           );
-          while (!stream.aborted && !stream.closed) {
-            await stream.sleep(HEARTBEAT_MS);
-            if (stream.aborted || stream.closed) break;
+          while (!stream.aborted && !stream.closed && !shutdownSignal?.aborted) {
+            await waitHeartbeat();
+            if (stream.aborted || stream.closed || shutdownSignal?.aborted) {
+              break;
+            }
             await enqueueWrite(() => stream.write(": ping\n\n"));
           }
         } finally {
+          shutdownSignal?.removeEventListener("abort", onShutdown);
+          wakeAll();
           detach();
           await writing;
         }

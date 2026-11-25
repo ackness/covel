@@ -67,10 +67,13 @@ import {
 import {
   CONCEALED_FAILURE_MESSAGE,
   concealedRuntimeIds,
+  concealOperationsOf,
+  concealRuntimeResult,
   DEFAULT_LOCALE,
   type RuntimeManifest,
   type SuspensionSummary,
 } from "@covel/shared";
+import { registeredConcealedRuntimeIds } from "./concealed-runtimes.js";
 import type { EventBus } from "@covel/events";
 import {
   errorBody,
@@ -488,12 +491,23 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
               .join("; ");
           const message = `Resume commit failed: ${detail}. The suspension remains unresolved and can be retried.`;
           logRequestError(c, "[resume] commit failed", new Error(message));
-          return c.json(errorBody(message), 500);
+          return c.json(
+            errorBody(
+              effectiveManifest?.concealed
+                ? `Resume failed: ${CONCEALED_FAILURE_MESSAGE}`
+                : message,
+            ),
+            500,
+          );
         }
         const events = outcome.events;
         await announceDeferredRuntimeJobs(c, queuedRuntimeJobs);
 
-        return c.json({ result, events });
+        const concealedIds = registeredConcealedRuntimeIds(pluginRegistry);
+        const visibleResult = effectiveManifest?.concealed
+          ? concealRuntimeResult(result)
+          : concealOperationsOf(result, concealedIds);
+        return c.json({ result: visibleResult, events });
       });
     });
   } catch (err: unknown) {

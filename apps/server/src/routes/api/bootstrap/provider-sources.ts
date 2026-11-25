@@ -95,6 +95,7 @@ export interface ProviderSourceHost {
   register(pluginId: string, source: PluginProviderSource): () => void;
   replacePlugin<T>(pluginId: string, fn: () => T): T;
   invalidatePlugin(pluginId: string): void;
+  invalidateAll(): void;
   warmStatus(): Promise<void>;
   refreshPluginStatus(pluginId: string): Promise<void>;
   listSummaries(
@@ -198,6 +199,23 @@ function deriveStatusFromAccounts(
   return { ready: false, reason: preferred.status };
 }
 
+/** RFC 9110 header field name token. */
+const HEADER_NAME_RE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]{1,200}$/;
+/** Header value without CR/LF or control characters. */
+const HEADER_VALUE_RE = /^[\t\x20-\x7e\x80-\xff]*$/;
+const MAX_HEADER_VALUE_LENGTH = 16 * 1024;
+const FORBIDDEN_SOURCE_HEADERS = new Set([
+  "host",
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "keep-alive",
+  "te",
+  "trailer",
+  "upgrade",
+  "expect",
+]);
+
 function validateHeadersObject(
   headers: unknown,
   qualifiedId: string,
@@ -212,11 +230,32 @@ function validateHeadersObject(
   }
   const normalized: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
-    if (typeof value !== "string") {
+    if (!HEADER_NAME_RE.test(key)) {
       throw new AiProviderError({
         code: "CONFIG_ERROR",
         provider: qualifiedId,
-        message: `Provider source "${qualifiedId}" returned non-string header "${key}"`,
+        message: `Provider source "${qualifiedId}" returned invalid header name`,
+        retriable: false,
+      });
+    }
+    const lower = key.toLowerCase();
+    if (FORBIDDEN_SOURCE_HEADERS.has(lower) || lower.startsWith("proxy-")) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: qualifiedId,
+        message: `Provider source "${qualifiedId}" returned forbidden header "${lower}"`,
+        retriable: false,
+      });
+    }
+    if (
+      typeof value !== "string" ||
+      value.length > MAX_HEADER_VALUE_LENGTH ||
+      !HEADER_VALUE_RE.test(value)
+    ) {
+      throw new AiProviderError({
+        code: "CONFIG_ERROR",
+        provider: qualifiedId,
+        message: `Provider source "${qualifiedId}" returned invalid header value for "${key}"`,
         retriable: false,
       });
     }
@@ -232,6 +271,7 @@ export function createProviderSourceHost(
   const entries = new Map<string, RegisteredProviderSource>();
   const statusCache = new Map<string, CachedSourceStatus>();
   const latestGenerations = new Map<string, number>();
+  const pluginEpochs = new Map<string, number>();
   const inFlightRefreshes = new Map<
     string,
     Promise<ProviderSourceAttemptContext | null>
@@ -768,6 +808,10 @@ export function createProviderSourceHost(
     async listReadyAccounts(qualifiedId, signal) {
       const declared = lookupDeclared(qualifiedId);
       if (declared?.decl.accounts !== "many") return [];
+      if (!evaluateGateSync(declared).allowed) {
+        statusCache.delete(qualifiedId);
+        return [];
+      }
       let cached = statusCache.get(qualifiedId);
       if (!cached) {
         cached = await inspectDeclaredStatus(declared, {
@@ -871,13 +915,25 @@ export function createProviderSourceHost(
       const declared = lookupDeclared(request.sourceId);
       if (!declared) return Promise.resolve(null);
 
-      const lockKey = generationKey(declared.qualifiedId, request.accountId);
+      // Canonicalize omitted accountId to the known default account when cached
+      // so concurrent refreshes for default vs explicit default ID share one flight.
+      const cachedAccounts = statusCache.get(declared.qualifiedId)?.accounts;
+      const canonicalAccountId =
+        request.accountId ??
+        cachedAccounts?.find((acc) => acc.isDefault)?.id ??
+        cachedAccounts?.[0]?.id;
+      const lockKey = generationKey(declared.qualifiedId, canonicalAccountId);
       const existingFlight = inFlightRefreshes.get(lockKey);
       if (existingFlight) {
         return existingFlight;
       }
 
-      const latest = latestGenerations.get(lockKey) ?? 0;
+      const latest = Math.max(
+        latestGenerations.get(lockKey) ?? 0,
+        latestGenerations.get(
+          generationKey(declared.qualifiedId, request.accountId),
+        ) ?? 0,
+      );
       if (
         request.failedGeneration !== undefined &&
         latest > request.failedGeneration
@@ -893,6 +949,7 @@ export function createProviderSourceHost(
           .catch(() => null);
       }
 
+      const startEpoch = pluginEpochs.get(declared.pluginId) ?? 0;
       const flight: {
         promise?: Promise<ProviderSourceAttemptContext | null>;
       } = {};
@@ -902,14 +959,17 @@ export function createProviderSourceHost(
             undefined,
             REFRESH_TIMEOUT_MS,
           );
+          const isStaleEpoch = () =>
+            (pluginEpochs.get(declared.pluginId) ?? 0) !== startEpoch;
           try {
             const gate = await evaluateGateAsync(declared);
-            if (!gate.allowed) return null;
+            if (!gate.allowed || isStaleEpoch()) return null;
 
             const registered = await awaitLlmRequest(
               ensureActivatedSource(declared),
               timeout.signal,
             );
+            if (isStaleEpoch()) return null;
             const refreshFn = registered.source.refresh;
             if (!refreshFn) {
               return null;
@@ -930,8 +990,12 @@ export function createProviderSourceHost(
               ),
               timeout.signal,
             );
+            if (isStaleEpoch()) return null;
             if (!refreshed) {
-              markSourceNeedsReauth(declared.qualifiedId, request.accountId);
+              markSourceNeedsReauth(
+                declared.qualifiedId,
+                request.accountId ?? canonicalAccountId,
+              );
               return null;
             }
             const baseGen = Math.max(
@@ -951,8 +1015,11 @@ export function createProviderSourceHost(
               nextGeneration,
             );
           } catch {
-            if (!timeout.signal.aborted) {
-              markSourceNeedsReauth(declared.qualifiedId, request.accountId);
+            if (!timeout.signal.aborted && !isStaleEpoch()) {
+              markSourceNeedsReauth(
+                declared.qualifiedId,
+                request.accountId ?? canonicalAccountId,
+              );
             }
             return null;
           } finally {
@@ -1083,6 +1150,7 @@ export function createProviderSourceHost(
     },
 
     invalidatePlugin(pluginId: string): void {
+      pluginEpochs.set(pluginId, (pluginEpochs.get(pluginId) ?? 0) + 1);
       const prefix = `${pluginId}/`;
       for (const key of statusCache.keys()) {
         if (key.startsWith(prefix)) {
@@ -1094,6 +1162,26 @@ export function createProviderSourceHost(
           latestGenerations.delete(key);
         }
       }
+      for (const key of inFlightRefreshes.keys()) {
+        if (key.startsWith(prefix)) {
+          inFlightRefreshes.delete(key);
+        }
+      }
+    },
+
+    invalidateAll(): void {
+      const seen = new Set<string>(pluginEpochs.keys());
+      for (const entry of entries.values()) seen.add(entry.pluginId);
+      for (const key of statusCache.keys()) {
+        const slash = key.indexOf("/");
+        if (slash > 0) seen.add(key.slice(0, slash));
+      }
+      for (const pluginId of seen) {
+        pluginEpochs.set(pluginId, (pluginEpochs.get(pluginId) ?? 0) + 1);
+      }
+      statusCache.clear();
+      latestGenerations.clear();
+      inFlightRefreshes.clear();
     },
 
     warmStatus,
@@ -1113,7 +1201,7 @@ export function createProviderSourceHost(
         return [];
       }
 
-      const items: ProviderSourceSummary[] = [];
+      const targets: DeclaredSourceLookup[] = [];
       const sortedPlugins = [...registry.getAll().values()].sort((a, b) =>
         compareText(a.id, b.id),
       );
@@ -1123,12 +1211,17 @@ export function createProviderSourceHost(
         for (const decl of decls) {
           const qualifiedId = qualifiedProviderSourceId(entry.id, decl.id);
           const declared = lookupDeclared(qualifiedId);
-          if (!declared) continue;
+          if (declared) targets.push(declared);
+        }
+      }
+      return Promise.all(
+        targets.map(async (declared): Promise<ProviderSourceSummary> => {
+          const { entry, decl, qualifiedId } = declared;
           const status = await inspectDeclaredStatus(declared, {
             allowActivation: true,
             hostProfile,
           });
-          items.push({
+          return {
             id: qualifiedId,
             pluginId: entry.id,
             sourceId: decl.id,
@@ -1141,10 +1234,9 @@ export function createProviderSourceHost(
             ready: status.ready,
             ...(status.reason ? { reason: status.reason } : {}),
             accounts: status.accounts,
-          });
-        }
-      }
-      return items;
+          };
+        }),
+      );
     },
 
     listModels(args): Promise<readonly string[]> {

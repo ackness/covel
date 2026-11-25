@@ -233,6 +233,12 @@ export async function createPresentationContext(
     ? enforceHttpPermissions(withDefaultUtilsSignal(deps.utils, abort.signal), {
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
+        ...(deps.canUseDeclaredHttp
+          ? {
+              canUseDeclaredHttp: () =>
+                deps.canUseDeclaredHttp!(manifest.pluginId),
+            }
+          : {}),
       })
     : undefined;
   const mediaOptions = {

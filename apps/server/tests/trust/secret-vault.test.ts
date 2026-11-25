@@ -274,4 +274,137 @@ describe("SecretVault", () => {
       code: "capability_denied",
     });
   });
+
+  it("uses salted scrypt and enforces strict GCM IV/tag lengths", async () => {
+    const vault = createSecretVault({
+      configDir: dir,
+      credentialsKey: "strong-passphrase",
+    });
+    await vault.set("plugin-a", "k1", { v: 1 });
+    await vault.set("plugin-a", "k2", { v: 1 });
+
+    const file1 = path.join(dir, "secrets", "plugin-a", "k1.json");
+    const file2 = path.join(dir, "secrets", "plugin-a", "k2.json");
+    const env1 = JSON.parse(await readFile(file1, "utf8")) as {
+      kdf: string;
+      salt: string;
+      iv: string;
+      tag: string;
+      ciphertext: string;
+      version: number;
+      encrypted: true;
+      alg: "aes-256-gcm";
+      generation: number;
+      updatedAt: string;
+    };
+    const env2 = JSON.parse(await readFile(file2, "utf8")) as {
+      kdf: string;
+      salt: string;
+    };
+
+    expect(env1.kdf).toBe("scrypt");
+    expect(env2.kdf).toBe("scrypt");
+    expect(Buffer.from(env1.salt, "base64").length).toBe(16);
+    expect(env1.salt).not.toBe(env2.salt);
+
+    // Truncated 4-byte GCM auth tag must be rejected.
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(
+      file1,
+      JSON.stringify({
+        ...env1,
+        tag: Buffer.from(env1.tag, "base64").subarray(0, 4).toString("base64"),
+      }),
+      "utf8",
+    );
+    await expect(vault.get("plugin-a", "k1")).rejects.toMatchObject({
+      code: "decrypt_failed",
+    });
+
+    // Non-12-byte IV must be rejected.
+    await writeFile(
+      file1,
+      JSON.stringify({
+        ...env1,
+        iv: Buffer.alloc(16, 1).toString("base64"),
+      }),
+      "utf8",
+    );
+    await expect(vault.get("plugin-a", "k1")).rejects.toMatchObject({
+      code: "decrypt_failed",
+    });
+  });
+
+  it("rejects plaintext secrets when credentialsKey is configured, while allowing set() to overwrite", async () => {
+    const plainVault = createSecretVault({ configDir: dir });
+    await plainVault.set("plugin-a", "oauth", { token: "plain-tok" });
+
+    const encryptedVault = createSecretVault({
+      configDir: dir,
+      credentialsKey: "enforced-master-key",
+    });
+    await expect(encryptedVault.get("plugin-a", "oauth")).rejects.toMatchObject(
+      { code: "decrypt_failed" },
+    );
+
+    // Re-authenticating via set() cleanly replaces the plaintext entry with an
+    // encrypted one.
+    const rotated = await encryptedVault.set("plugin-a", "oauth", {
+      token: "reauthed-tok",
+    });
+    expect(rotated.generation).toBe(1);
+    expect(await encryptedVault.get("plugin-a", "oauth")).toEqual(rotated);
+  });
+
+  it("tolerates concurrent deletes during list() and synchronizes deletePlugin() with key locks", async () => {
+    const vault = createSecretVault({ configDir: dir });
+    await vault.set("plugin-a", "a", 1);
+    await vault.set("plugin-a", "b", 2);
+
+    const events: string[] = [];
+    const lockedWork = vault.withLock("plugin-a", "a", async () => {
+      events.push("lock-start");
+      await new Promise((r) => setTimeout(r, 30));
+      await vault.set("plugin-a", "a", 2);
+      events.push("lock-end");
+    });
+
+    // Start deletePlugin while withLock holds the key; deletePlugin must wait
+    // for the in-flight lock to finish before removing the directory.
+    await new Promise((r) => setTimeout(r, 5));
+    const deletePromise = vault.deletePlugin("plugin-a").then((count) => {
+      events.push(`deleted-${count}`);
+      return count;
+    });
+
+    // A new set() issued after deletePlugin started must wait until deletePlugin
+    // finishes so it is not torn down mid-write.
+    await new Promise((r) => setTimeout(r, 5));
+    const postDeleteSet = vault.set("plugin-a", "c", 3).then((entry) => {
+      events.push("post-delete-set");
+      return entry;
+    });
+
+    const [, deletedCount] = await Promise.all([
+      lockedWork,
+      deletePromise,
+      postDeleteSet,
+    ]);
+    expect(deletedCount).toBe(2);
+    expect(events).toEqual([
+      "lock-start",
+      "lock-end",
+      "deleted-2",
+      "post-delete-set",
+    ]);
+    expect(await vault.get("plugin-a", "a")).toBeNull();
+    expect(await vault.get("plugin-a", "c")).toMatchObject({ value: 3 });
+
+    // Concurrent list() + delete() does not throw ENOENT.
+    await vault.set("plugin-b", "x", 1);
+    await vault.set("plugin-b", "y", 2);
+    await expect(
+      Promise.all([vault.list("plugin-b"), vault.delete("plugin-b", "y")]),
+    ).resolves.toBeDefined();
+  });
 });

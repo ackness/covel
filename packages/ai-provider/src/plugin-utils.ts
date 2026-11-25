@@ -150,9 +150,12 @@ async function runRetryingPluginFetch(
       ...(effectiveSignal ? { signal: effectiveSignal } : {}),
     };
     if (options.useAuthProxy) {
-      // Proxy resolves destination DNS at the proxy hop; URL string SSRF checks
-      // and unconditional 3xx refusal still run in this process.
-      const response = await outboundFetch(input, requestInit);
+      // Proxy resolves destination DNS at the proxy hop; when direct/DIRECT
+      // fallback is chosen, strictDirect keeps plugin requests on the strict
+      // non-private DNS policy, and 3xx redirects are still refused.
+      const response = await outboundFetch(input, requestInit, {
+        strictDirect: true,
+      });
       if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel().catch(() => {});
         throw new Error(

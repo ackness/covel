@@ -266,6 +266,12 @@ describe("PermissionsPane", () => {
     ) as HTMLSelectElement;
     expect(installSelect.disabled).toBe(true);
 
+    const localBridgeSelect = screen.getByLabelText(
+      "Local subprocess bridge",
+    ) as HTMLSelectElement;
+    expect(localBridgeSelect.disabled).toBe(true);
+    expect(screen.getByText("Reserved")).toBeTruthy();
+
     const workerSelect = screen.getByLabelText(
       "Sandboxed compute workers",
     ) as HTMLSelectElement;

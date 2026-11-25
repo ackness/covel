@@ -1747,6 +1747,7 @@
           "description": "Reserved capability for allowlisted local subprocess bridges such as stdio tools."
         }
       },
+      "reservedBadge": "Reserved",
       "pluginsTitle": "Per-plugin grants (L3)",
       "pluginsDescription": "Persistent grants bind to each community package's content digest and capability snapshot. Explicit denials override trusted-source auto-approval and survive updates until cleared.",
       "pluginsOperatorRequired": "Enter an operator token above to inspect per-plugin capability audits and persistent grants on this host.",

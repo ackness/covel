@@ -494,13 +494,25 @@ export function buildEntryApi(
           ctx.signal?.throwIfAborted();
           return batch.invoke(() => handler(ctx, payload));
         };
+        const matchOption = options?.match;
         batch.track(
           hookPipeline.register({
             id: `${pluginId}:${event}:entry#${hookSeq}`,
             event,
             pluginId,
             handler: sessionGuardedHandler,
-            ...(options?.match ? { match: options.match } : {}),
+            ...(matchOption
+              ? {
+                  match: (payload) => {
+                    const release = batch.retain();
+                    try {
+                      return matchOption(payload);
+                    } finally {
+                      release();
+                    }
+                  },
+                }
+              : {}),
             ...(typeof options?.timeoutMs === "number"
               ? { timeoutMs: options.timeoutMs }
               : {}),

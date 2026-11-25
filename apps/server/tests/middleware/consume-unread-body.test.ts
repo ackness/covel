@@ -134,4 +134,28 @@ describe("consume unread request bodies", () => {
     expect(response.status).toBe(401);
     expect(read).toBe(expected);
   });
+
+  it("caps default unread body draining to the route's own limit (1 MiB for standard routes)", async () => {
+    const app = new Hono();
+    let read: boolean | undefined;
+    app.use("*", async (c, next) => {
+      await next();
+      read = c.req.raw.bodyUsed;
+    });
+    app.use("*", createConsumeUnreadBodyMiddleware());
+    app.patch("/reject", (c) => c.json({ error: "no" }, 401));
+
+    const oversized = 1 * 1024 * 1024 + 64;
+    const response = await app.request("/reject", {
+      method: "PATCH",
+      headers: {
+        "content-length": String(oversized),
+        "content-type": "text/plain",
+      },
+      body: "x".repeat(oversized),
+    });
+
+    expect(response.status).toBe(401);
+    expect(read).toBe(false);
+  });
 });
