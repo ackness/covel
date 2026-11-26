@@ -22,6 +22,7 @@
             "component": "Text",
             "props": {
               "content": { "$state": "/segment/speaker" },
+              "variant": "accent",
               "weight": "bold"
             }
           }

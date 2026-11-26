@@ -344,4 +344,101 @@ describe("story segment templates in the chat view", () => {
     expect(document.body.textContent).toContain('"segments"');
     expect(document.body.textContent).toContain('"speakerId": "char-aya"');
   });
+
+  it("flows action segments as prose without a default nameplate while keeping dialogue blocks and templates distinct", () => {
+    const mixed: StreamMessage = {
+      ...story,
+      id: "story-mixed",
+      segments: [
+        { kind: "narration", text: "走廊尽头的灯亮了起来。" },
+        {
+          kind: "dialogue",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+          text: "「先去二楼看看吧。」",
+        },
+        {
+          kind: "dialogue",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+          text: "「我陪你一起。」",
+        },
+        {
+          kind: "action",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+          text: "她把目录放回门内的桌角，回身按亮了灯。",
+        },
+      ],
+      content:
+        "走廊尽头的灯亮了起来。\n\n「先去二楼看看吧。」\n\n「我陪你一起。」\n\n她把目录放回门内的桌角，回身按亮了灯。",
+    };
+    renderMessage(mixed, {
+      specs: [
+        {
+          pluginId: "scene-stage",
+          specs: [
+            {
+              ...dialogueLine,
+              reveal: revealPolicySchema.parse(dialogueLine.reveal),
+              label: undefined,
+              match: segmentTemplateMatchSchema.parse(dialogueLine.match),
+            },
+          ],
+        },
+      ],
+    });
+    const body = screen.getByTestId("story-segments");
+    const parts = [
+      ...body.querySelectorAll("[data-reveal-unit] > div"),
+    ] as HTMLElement[];
+    expect(parts.map((part) => part.dataset.segmentKind)).toEqual([
+      "narration",
+      "dialogue",
+      "dialogue",
+      "action",
+    ]);
+    expect(parts[1]!.dataset.segmentSameSpeaker).toBeUndefined();
+    expect(parts[2]!.dataset.segmentSameSpeaker).toBe("true");
+    // Action segment renders as plain prose without a default speaker header.
+    expect(parts[3]!.dataset.segmentTemplate).toBeUndefined();
+    expect(parts[3]!.querySelector(".ui-story-speaker")).toBeNull();
+    expect(parts[3]!.textContent).toBe(
+      "她把目录放回门内的桌角，回身按亮了灯。",
+    );
+    // Bundled dialogue template renders speaker names with accent emphasis.
+    const speakerLabel = within(parts[1]!).getByText("阿雅");
+    expect(speakerLabel.className).toContain("text-(--accent-primary)");
+    expect(speakerLabel.className).toContain("font-semibold");
+  });
+
+  it("still lets an explicit plugin template render action segments", () => {
+    const actionStory: StreamMessage = {
+      ...story,
+      id: "story-action-template",
+      segments: [
+        {
+          kind: "action",
+          speaker: "阿雅",
+          speakerId: "char-aya",
+          text: "她点了点头。",
+        },
+      ],
+      content: "她点了点头。",
+    };
+    renderMessage(actionStory, {
+      specs: [
+        {
+          pluginId: "action-plate",
+          specs: [{ ...nameplate, match: { kind: "action" as const } }],
+        },
+      ],
+    });
+    const part = screen
+      .getByTestId("story-segments")
+      .querySelector("[data-reveal-unit] > div") as HTMLElement;
+    expect(part.dataset.segmentKind).toBe("action");
+    expect(part.dataset.segmentTemplate).toBe("action-plate");
+    expect(within(part).getByText("阿雅")).toBeDefined();
+  });
 });

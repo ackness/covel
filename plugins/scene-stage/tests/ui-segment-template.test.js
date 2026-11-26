@@ -43,7 +43,11 @@ describe("scene-stage dialogue template", () => {
         },
         {
           component: "Text",
-          props: { content: { $state: "/segment/speaker" }, weight: "bold" },
+          props: {
+            content: { $state: "/segment/speaker" },
+            variant: "accent",
+            weight: "bold",
+          },
         },
       ],
     });

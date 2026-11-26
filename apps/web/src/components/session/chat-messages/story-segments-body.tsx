@@ -4,13 +4,14 @@ import { useStoryReveal } from "@/lib/reveal/story-reveal-context.js";
  * The body of a committed story in the chat view, drawn through the plugin
  * segment templates (`contributes.ui.segment`) that match its segments.
  *
- * A story with no matching template and no named speaker renders as plain
- * narrative (`NarrativeMessageBody` of its content). Otherwise each segment
- * renders in order: a matched one through its template, inside a boundary
- * that falls back to that segment's default, and an unmatched one as the
- * default: its text, headed by the speaker's name for a non-narration
- * segment that names one. Templates are display-only json-render views with
- * no actions, drawn with the display components alone
+ * A story with no matching template and no named dialogue speaker renders as
+ * plain narrative (`NarrativeMessageBody` of its content). Otherwise each
+ * segment renders in order: a matched one through its template, inside a
+ * boundary that falls back to that segment's default, and an unmatched one as
+ * the default: its text, headed by the speaker's name for a dialogue segment
+ * that names one (action segments flow with narration as prose unless a plugin
+ * template explicitly matches them). Templates are display-only json-render
+ * views with no actions, drawn with the display components alone
  * (`segmentTemplateRegistry`).
  */
 import {
@@ -137,21 +138,30 @@ const TemplatedStory = memo(function TemplatedStory({
             characters,
             visuals,
           );
+          const sameSpeaker = sameDialogueSpeaker(segments[index - 1], segment);
           const fallback = (
             <DefaultSegment state={state} sessionId={sessionId} />
           );
-          if (!template) return <div key={index}>{fallback}</div>;
           return (
-            <div key={index} data-segment-template={template.pluginId}>
-              <SegmentTemplateBoundary fallback={fallback}>
-                <div className="not-prose">
-                  <SegmentTemplateView
-                    sessionId={sessionId}
-                    view={template.spec.view}
-                    state={state}
-                  />
-                </div>
-              </SegmentTemplateBoundary>
+            <div
+              key={index}
+              data-segment-kind={segment.kind}
+              data-segment-same-speaker={sameSpeaker ? "true" : undefined}
+              data-segment-template={template?.pluginId}
+            >
+              {template ? (
+                <SegmentTemplateBoundary fallback={fallback}>
+                  <div className="ui-story-template not-prose">
+                    <SegmentTemplateView
+                      sessionId={sessionId}
+                      view={template.spec.view}
+                      state={state}
+                    />
+                  </div>
+                </SegmentTemplateBoundary>
+              ) : (
+                fallback
+              )}
             </div>
           );
         })}
@@ -165,7 +175,21 @@ type Segment = NonNullable<StreamMessage["segments"]>[number];
 /** The speaker a segment's default rendering names, if any. */
 function speakerOf(segment: Segment): string | undefined {
   const speaker = segment.speaker?.trim();
-  return segment.kind !== "narration" && speaker ? speaker : undefined;
+  return segment.kind === "dialogue" && speaker ? speaker : undefined;
+}
+
+/** Whether two consecutive dialogue segments share the same speaker. */
+function sameDialogueSpeaker(
+  previous: Segment | undefined,
+  current: Segment,
+): boolean {
+  if (!previous || previous.kind !== "dialogue" || current.kind !== "dialogue")
+    return false;
+  if (previous.speakerId && current.speakerId)
+    return previous.speakerId === current.speakerId;
+  const prevName = previous.speaker?.trim();
+  const currName = current.speaker?.trim();
+  return Boolean(prevName && currName && prevName === currName);
 }
 
 /** A segment without a template: its text, headed by its speaker's name. */
