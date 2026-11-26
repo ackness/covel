@@ -1,3 +1,0 @@
-### Breaking
-
-- **Plugin actions and commands can no longer write plugin data.** `context.store.setPluginData` is removed from RPC action and command handlers; the scoped store only reads (`getSession`, `listTurnMessages`, `getPluginData`, `listPluginData`). Move interface writes to a manual function runtime called with `invokeRuntime`, whose `ctx.pluginData` writes commit through the proposal transaction. The management REST `PUT` / `DELETE` overrides are unchanged. See [plugin communication](../en/reference/plugin-extensions.md#writes-triggered-by-the-interface-how-the-three-actions-differ). No development data needs rebuilding.

@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.54-8b5cf6)](./docs/CHANGELOG.md#0054---2026-11-04)
+[![Version](https://img.shields.io/badge/version-v0.0.55-8b5cf6)](./docs/CHANGELOG.md#0055---2026-11-26)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
@@ -16,10 +16,10 @@
 Covel is both a playable AI RPG studio and an open-source framework where NPC relationships, almanac lore, quests, bags, story memory, stage direction, and media evolve turn by turn.
 
 > [!WARNING]
-> **Early access (v0.0.54)**: APIs, world data, and plugin manifests may change between releases.
+> **Early access (v0.0.55)**: APIs, world data, and plugin manifests may change between releases.
 > - **Platforms & runtime**: Unsigned desktop builds target macOS Apple Silicon (13.5+) and Windows x64 (`SHA256SUMS.txt` included; macOS builds are not notarized). Source and Docker setups require Node 26.12.1.
-> - **Breaking storage change**: **v0.0.54 refuses SQLite or PostgreSQL databases and browser-private saves from v0.0.53 or earlier—back up and recreate your storage before upgrading** (sessions are not migrated), and update community plugins and session pages to the new contracts.
-> - See the [v0.0.54 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0054), [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0054), and [Data, backups, and upgrades](./docs/en/start/data-and-upgrade.md). When upgrading across multiple earlier versions, follow the matching sections in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) (and the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md) for pre-v0.0.42 data).
+> - **Upgrade & compatibility**: Existing **v0.0.54** SQLite and PostgreSQL databases stay compatible (schema version 8; new `plugin_grants` and `instance_data` tables are created on startup), but recreate `emberback` / revised bundled-world / nested-suspension sessions and update community plugins to the `v0.0.55` contracts. **Upgrading from v0.0.53 or earlier still requires backing up and recreating databases and browser-private saves.**
+> - See the [v0.0.55 breaking changes](./docs/CHANGELOG.md#breaking-changes-in-v0055), [upgrade notes](./docs/CHANGELOG.md#upgrade-notes-for-v0055), and [Data, backups, and upgrades](./docs/en/start/data-and-upgrade.md). When upgrading across multiple earlier versions, follow the matching sections in [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) (and the [v0.0.42 upgrade guide](./docs/en/internals/upgrade-0.0.42.md) for pre-v0.0.42 data).
 
 ## Highlights
 
