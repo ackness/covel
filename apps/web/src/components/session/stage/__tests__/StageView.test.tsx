@@ -273,8 +273,11 @@ describe("stage decision lifecycle", () => {
     };
     view.rerender(<StageView {...props} messages={[previousStory, message]} />);
     const line = () => screen.getByTestId("stage-reader-line").textContent;
+    const readerBox = () =>
+      screen.getByTestId("stage-reader-line").closest('[role="button"]');
     expect(line()).toBe("雨停了。");
     expect(screen.queryByTestId("stage-reader-speaker")).toBeNull();
+    expect(readerBox()?.getAttribute("data-speaking")).toBeNull();
     expect(screen.getByTestId("stage-reader-progress").textContent).toBe(
       "1 / 2",
     );
@@ -282,6 +285,7 @@ describe("stage decision lifecycle", () => {
     fireEvent.keyDown(window, { key: " " });
     expect(line()).toBe("「走吧。」");
     expect(screen.getByTestId("stage-reader-speaker").textContent).toBe("阿雅");
+    expect(readerBox()?.getAttribute("data-speaking")).toBe("true");
     expect(screen.getByTestId("stage-reader-progress").textContent).toBe(
       "2 / 2",
     );

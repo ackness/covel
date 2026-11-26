@@ -442,7 +442,7 @@ const ChatMessagesContent = memo(function ChatMessagesContent({
             variant="secondary"
             onClick={jumpToBottom}
             aria-label={t("session.jumpToLatest", "Jump to latest")}
-            className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 h-8 gap-1.5 rounded-full px-3 shadow-md"
+            className="absolute right-4 bottom-3 z-10 h-8 gap-1.5 rounded-full border border-border/70 bg-background/90 px-3 shadow-md backdrop-blur-md hover:border-(--accent-primary)/50"
           >
             <ArrowDown className="h-3.5 w-3.5" />
             {t("session.jumpToLatest", "Jump to latest")}

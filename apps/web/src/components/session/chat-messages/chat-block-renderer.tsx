@@ -200,11 +200,11 @@ function HistoryBlock({
     <details
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
+      className="ui-history-disclosure ui-disclosure"
       data-testid="history-interaction"
     >
-      <summary className="cursor-pointer">{label}</summary>
-      {open && <div className="mt-3">{children}</div>}
+      <summary>{label}</summary>
+      {open && <div className="ui-disclosure-body">{children}</div>}
     </details>
   );
 }

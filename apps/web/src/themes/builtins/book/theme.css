@@ -463,6 +463,7 @@ html[data-theme="book"] .ui-turn-updates {
   border: 0;
   border-top: 1px solid var(--rule-color);
   border-radius: 0;
+  background: transparent;
   font-size: 0.78125rem;
   line-height: 1.7;
 }
@@ -470,7 +471,12 @@ html[data-theme="book"] .ui-turn-updates {
 /* The label carries the open/closed mark; the default triangle would sit on
    a line of its own above it. */
 html[data-theme="book"] .ui-turn-updates > summary {
+  display: block;
   list-style: none;
+}
+
+html[data-theme="book"] .ui-turn-updates > summary::before {
+  content: none;
 }
 
 html[data-theme="book"] .ui-turn-updates > summary::-webkit-details-marker {

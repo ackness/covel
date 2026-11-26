@@ -93,46 +93,62 @@ export function SummaryLines({
 }) {
   if (lines.length === 0) return null;
   return (
-    <dl className="ui-summary grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-1.5 text-xs">
-      {lines.map((line) => (
-        <Fragment key={line.id}>
-          <dt
-            className="ui-summary-label max-w-36 truncate text-muted-foreground"
-            title={line.label}
-          >
-            {line.label}
-          </dt>
-          <dd
-            className="ui-summary-value min-w-0"
-            data-tone={"tone" in line ? line.tone : undefined}
-          >
-            {line.kind === "text" && line.value}
-            {line.kind === "meter" && (
-              <span className="flex items-center gap-2">
-                <span className="min-w-0 flex-1">
-                  <MeterBar meter={line} />
-                </span>
-                <span className="shrink-0 tabular-nums">
+    <dl className="ui-summary grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2 text-xs leading-relaxed">
+      {lines.map((line) => {
+        if (line.kind === "meter") {
+          return (
+            <div
+              key={line.id}
+              data-summary-kind="meter"
+              className="ui-summary-meter col-span-2 grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-2 gap-y-1.5"
+            >
+              <dt
+                className="ui-summary-label truncate text-muted-foreground"
+                title={line.label}
+              >
+                {line.label}
+              </dt>
+              <dd className="ui-summary-value contents" data-tone={line.tone}>
+                <span className="shrink-0 text-[11px] font-medium tabular-nums">
                   {line.value} / {line.max}
                 </span>
-              </span>
-            )}
-            {line.kind === "list" && (
-              <ul className="ui-status-items flex flex-wrap gap-1.5">
-                {line.items.map((item, index) => (
-                  // Items are free text and may repeat.
-                  <li key={`${index}:${item}`} className="ui-status-item">
-                    {item}
-                  </li>
-                ))}
-                {line.more > 0 && (
-                  <li className="ui-status-item">+{line.more}</li>
-                )}
-              </ul>
-            )}
-          </dd>
-        </Fragment>
-      ))}
+                <span className="col-span-2 block">
+                  <MeterBar meter={line} />
+                </span>
+              </dd>
+            </div>
+          );
+        }
+        return (
+          <Fragment key={line.id}>
+            <dt
+              className="ui-summary-label max-w-28 truncate text-muted-foreground"
+              title={line.label}
+            >
+              {line.label}
+            </dt>
+            <dd
+              className="ui-summary-value min-w-0"
+              data-tone={"tone" in line ? line.tone : undefined}
+            >
+              {line.kind === "text" && line.value}
+              {line.kind === "list" && (
+                <ul className="ui-status-items flex flex-wrap gap-1.5">
+                  {line.items.map((item, index) => (
+                    // Items are free text and may repeat.
+                    <li key={`${index}:${item}`} className="ui-status-item">
+                      {item}
+                    </li>
+                  ))}
+                  {line.more > 0 && (
+                    <li className="ui-status-item">+{line.more}</li>
+                  )}
+                </ul>
+              )}
+            </dd>
+          </Fragment>
+        );
+      })}
     </dl>
   );
 }

@@ -54,6 +54,7 @@ it("draws text, gauge and list entries in the interface language", () => {
   const meter = screen.getByRole("meter", { name: "失踪的公会长" });
   expect(meter.getAttribute("aria-valuenow")).toBe("1");
   expect(meter.getAttribute("aria-valuemax")).toBe("3");
+  expect(meter.closest('[data-summary-kind="meter"]')).not.toBeNull();
   expect(screen.getByText("潮币 ×12")).toBeTruthy();
   // Three more items than the list shows.
   expect(screen.getByText("+3")).toBeTruthy();

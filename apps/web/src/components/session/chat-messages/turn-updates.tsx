@@ -70,21 +70,21 @@ export function TurnUpdates({
     <details
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
-      className="ui-turn-updates group rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
+      className="ui-turn-updates ui-disclosure group"
       data-testid="turn-updates"
     >
-      <summary className="cursor-pointer select-none">
-        <span className="font-medium text-foreground/80">
+      <summary>
+        <span className="font-medium text-foreground/85">
           {t("session.turnUpdates", { count: messages.length })}
         </span>
         {preview && (
-          <span className="ml-2">
+          <span className="min-w-0 truncate opacity-80">
             {preview}
             {titles.length > PREVIEW_TITLES && " …"}
           </span>
         )}
       </summary>
-      {open && <div className="mt-3 space-y-3">{children}</div>}
+      {open && <div className="ui-disclosure-body space-y-3">{children}</div>}
     </details>
   );
 }

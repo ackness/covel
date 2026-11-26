@@ -57,6 +57,19 @@ describe("committed stage reader", () => {
         .getAllByTestId("stage-dialog-speaker")
         .map((node) => node.textContent),
     ).toEqual(["Mio", "Rin"]);
+    expect(
+      document.querySelector("[data-stage-reader]")?.getAttribute("data-multi"),
+    ).toBe("true");
+    expect(
+      document
+        .querySelector('[data-stage-paragraph="0"]')
+        ?.getAttribute("data-has-speaker"),
+    ).toBe("true");
+    expect(
+      document
+        .querySelector('[data-stage-paragraph="2"]')
+        ?.getAttribute("data-has-speaker"),
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "下一段" }));
     expect(screen.getByText("The wind quiets.")).toBeDefined();
   });
