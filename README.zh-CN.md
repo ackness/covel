@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.54-8b5cf6)](./docs/CHANGELOG.md#0054---2026-11-04)
+[![Version](https://img.shields.io/badge/version-v0.0.55-8b5cf6)](./docs/CHANGELOG.md#0055---2026-11-26)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://img.shields.io/badge/Ask-DeepWiki-0b7285?logo=readthedocs&logoColor=white)](https://deepwiki.com/ackness/covel)
@@ -16,10 +16,10 @@
 Covel 既是一套开箱即玩的 AI RPG 工作室，也是一个模块化开源框架：NPC 关系、世界图鉴、任务、背包、故事记忆、舞台调度与多媒体内容都会随回合演进。
 
 > [!WARNING]
-> **当前处于早期预览阶段（v0.0.54）**：API、世界数据格式与插件清单仍在快速演进。
+> **当前处于早期预览阶段（v0.0.55）**：API、世界数据格式与插件清单仍在快速演进。
 > - **桌面端与运行环境**：当前发布未签名测试安装包（macOS Apple Silicon 13.5+ 与 Windows x64，附 `SHA256SUMS.txt` 校验；macOS 构建未公证）。源码与 Docker 部署需 Node 26.12.1。
-> - **数据不兼容提示**：**v0.0.54 不会读取或迁移 v0.0.53 及更早版本的 SQLite / PostgreSQL 数据库（含桌面端）与浏览器私有存档，升级前请先备份并重建数据**（会话不会自动迁移），并同步更新社区插件与会话页面。
-> - 详见 [v0.0.54 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0054)、[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0054)与[数据、备份与升级](./docs/start/data-and-upgrade.md)。跨多版本升级时请一并对照 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) 中对应版本的说明（v0.0.42 之前版本见 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)）。
+> - **升级与兼容提示**：**v0.0.54** 创建的 SQLite / PostgreSQL 数据库可直接沿用（数据 schema 版本仍为 8，启动时自动补建 `plugin_grants` 与 `instance_data` 表），但已移除的 `emberback`、改版后的内置世界及含嵌套挂起的旧会话需重建，社区插件需同步适配 `v0.0.55` 契约。**从 v0.0.53 及更早版本跨版本升级仍须先备份并重建数据库与浏览器私有存档。**
+> - 详见 [v0.0.55 破坏性变更](./docs/CHANGELOG.md#breaking-changes-in-v0055)、[升级说明](./docs/CHANGELOG.md#upgrade-notes-for-v0055)与[数据、备份与升级](./docs/start/data-and-upgrade.md)。跨多版本升级时请一并对照 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) 中对应版本的说明（v0.0.42 之前版本见 [v0.0.42 升级指南](./docs/internals/upgrade-0.0.42.md)）。
 
 ## 亮点
 
