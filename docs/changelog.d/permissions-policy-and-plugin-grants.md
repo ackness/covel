@@ -1,6 +1,6 @@
 ### Added
 
-- **Instance permission policy and per-plugin persistent grants (`/api/permissions/*`).** Added the L2 `permissions.policy` server setting (overridable via `COVEL_PERMISSIONS_POLICY`) and the L3 `plugin_grants` store table bound to each community package's content digest and capability snapshot; unified `GET /api/permissions/snapshot`, `PUT /api/permissions/policy`, `GET /api/permissions/plugins`, and `PUT` / `DELETE /api/permissions/plugins/:pluginId/grants` endpoints, plus additive `grants` listing on `GET /api/sessions/:id/approvals` and `"persistent-grant"` on `serverCodeApprovedBy`. See [HTTP API](../reference/api.md), [Environment registry](../reference/env-registry.md), and [Security](../internals/security.md).
+- **Instance permission policy and per-plugin persistent grants (`/api/permissions/*`).** Added the L2 `permissions.policy` server setting (overridable via `COVEL_PERMISSIONS_POLICY`) and the L3 `plugin_grants` store table bound to each community package's content digest and capability snapshot; unified `GET /api/permissions/snapshot`, `PUT /api/permissions/policy`, `GET /api/permissions/plugins`, and `PUT` / `DELETE /api/permissions/plugins/:pluginId/grants` endpoints, plus additive `grants` listing on `GET /api/sessions/:id/approvals` and `"persistent-grant"` on `serverCodeApprovedBy`. See [HTTP API](../en/reference/api.md), [Environment registry](../en/reference/env-registry.md), and [Security](../en/internals/security.md).
 
 ### Security
 

@@ -3,14 +3,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { prepareRelease } from "../lib/release-prepare.mjs";
 
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 const BADGE_LINE = (version, anchor, date) =>
   `[![Version](https://img.shields.io/badge/version-v${version}-8b5cf6)](./docs/CHANGELOG.md#${anchor}---${date})`;
 const README = (version, anchor, date) =>
-  `# Covel\n\n${BADGE_LINE(version, anchor, date)}\n\n> **Source version: v${version}**, early access. Read the [v${version} upgrade notes](./docs/CHANGELOG.md).\n`;
+  `# Covel\n\n${BADGE_LINE(version, anchor, date)}\n\n> [!WARNING]\n> **Early access (v${version})**: APIs may change.\n> - Read the [v${version} upgrade notes](./docs/CHANGELOG.md).\n`;
 const README_ZH = (version, anchor, date) =>
-  `# Covel\n\n${BADGE_LINE(version, anchor, date)}\n\n> **当前源码版本：v${version}**，早期阶段。\n`;
+  `# Covel\n\n${BADGE_LINE(version, anchor, date)}\n\n> [!WARNING]\n> **当前处于早期预览阶段（v${version}）**：API 可能变化。\n`;
 
 function manifest(name, version) {
   return `${JSON.stringify({ name, version, private: true }, null, 2)}\n`;
@@ -83,8 +88,11 @@ test("sets the framework version, the badges and the changelog, and leaves plugi
     read(root, "README.md"),
     /version-v0\.2\.0-8b5cf6\)\]\(\.\/docs\/CHANGELOG\.md#020---2026-02-03\)/,
   );
-  assert.match(read(root, "README.md"), /Source version: v0\.2\.0\*\*/);
-  assert.match(read(root, "README.zh-CN.md"), /当前源码版本：v0\.2\.0/);
+  assert.match(read(root, "README.md"), /Early access \(v0\.2\.0\)\*\*/);
+  assert.match(
+    read(root, "README.zh-CN.md"),
+    /当前处于早期预览阶段（v0\.2\.0）/,
+  );
   const changelog = read(root, "docs/CHANGELOG.md");
   assert.match(
     changelog,
@@ -238,4 +246,30 @@ test("nothing pending and no section for the version is an error", () => {
     /Nothing to release/,
   );
   assert.equal(version(root, "package.json"), "0.1.0");
+});
+
+test("matches the repository README.md and README.zh-CN.md", () => {
+  const current = JSON.parse(
+    fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
+  ).version;
+  const [major, minor, patch] = current.split(".").map(Number);
+  const next = `${major}.${minor}.${patch + 1}`;
+  const root = fixture({ version: current });
+  for (const name of ["README.md", "README.zh-CN.md"]) {
+    fs.copyFileSync(path.join(REPO_ROOT, name), path.join(root, name));
+  }
+  const { changes } = prepareRelease(root, {
+    version: next,
+    date: "2099-01-01",
+    dryRun: true,
+    isClean: clean,
+  });
+  assert.ok(
+    changes.some((line) => line.startsWith("README.md:")),
+    "expected README.md update",
+  );
+  assert.ok(
+    changes.some((line) => line.startsWith("README.zh-CN.md:")),
+    "expected README.zh-CN.md update",
+  );
 });

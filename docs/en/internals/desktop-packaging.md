@@ -293,7 +293,7 @@ Follow the steps in order. Finish each step before you start the next one.
 
 1. **Set the version number.** In a clean working tree, first run `pnpm release:prepare <version> --dry-run`, and then run `pnpm release:prepare <version>`. It does these things:
    - Sets the versions of the root, `apps/*`, and `packages/*`. Plugins and worlds keep their own versions, and they are not changed.
-   - Updates the version badges and the "source version" line in `README.md` and `README.zh-CN.md`.
+   - Updates the version badges and the early-access version line in `README.md` and `README.zh-CN.md`.
    - Compiles the changelog (the next step).
    - It refuses to run if the version is lower than the current one, or if the working tree has uncommitted changes. It does not commit, tag, or push.
    - Running it again with the same version only adds the fragments that were merged since the last run.
@@ -301,7 +301,7 @@ Follow the steps in order. Finish each step before you start the next one.
    - Write a summary under the heading.
    - Check the `Breaking changes in v<version>` and `Upgrade notes for v<version>` sections that the README links to.
    - If new fragments are merged later, run this again before you create the tag.
-3. **Update the upgrade notice in the README.** Rewrite the upgrade sentence for the current version in `README.md` and `README.zh-CN.md`. The script only changes the badges and the "source version" line, and it points out which lines still have the old version number. Check the Release links.
+3. **Update the upgrade notice in the README.** Rewrite the upgrade sentence for the current version in `README.md` and `README.zh-CN.md`. The script only changes the badges and the early-access version line, and it points out which lines still have the old version number. Check the Release links.
 4. **Onboarding.** When the onboarding flow changes, increase `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` by one.
 5. **Local checks.** Run `pnpm check`, `pnpm test`, `pnpm test:pg`, `pnpm e2e`, and `pnpm release:preflight` in turn. Fix any known failures before you push.
 6. **Build the desktop resources.** Run `pnpm --filter @covel/desktop build`.
