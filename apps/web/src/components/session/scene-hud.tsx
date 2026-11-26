@@ -95,7 +95,7 @@ export function SceneHud({
         <div
           role="group"
           aria-label={t("session.playerStatus")}
-          className="ui-scene-card ui-scene-status pointer-events-auto flex w-72 flex-col gap-2.5 px-4 py-3"
+          className="ui-scene-card ui-scene-status pointer-events-auto flex w-76 flex-col gap-2.5 px-4 py-3.5"
         >
           {status?.name && (
             <span className="ui-title text-base leading-tight">
@@ -163,7 +163,7 @@ function CastCard({
       />
       <span
         aria-hidden="true"
-        className="absolute inset-x-0 bottom-0 h-20 bg-linear-to-t from-black/90 to-transparent"
+        className="absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-black/90 via-black/45 to-transparent"
       />
       <span className="absolute inset-x-3 bottom-2.5 flex flex-col items-start gap-1">
         {speakingTag}

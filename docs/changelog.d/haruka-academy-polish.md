@@ -8,4 +8,4 @@
 
 ### Upgrade notes
 
-- **Create a new Harukaze Academy session to use the revised starting data.** Existing sessions retain their imported characters, dimensions, and events; this update does not migrate them. See [world data](../reference/world-data.md) for the countdown and route-event structure.
+- **Create a new Harukaze Academy session to use the revised starting data.** Existing sessions retain their imported characters, dimensions, and events; this update does not migrate them. See [world data](../en/reference/world-data.md) for the countdown and route-event structure.

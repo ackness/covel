@@ -105,11 +105,11 @@ export const CandidateList: ComponentRenderer = ({ element }) => {
             }
             disabled={!sessionId || pendingAction !== null}
             aria-busy={pendingAction === "regenerate" || undefined}
-            className="inline-flex items-center gap-1 rounded-(--radius-control) border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-(--radius-control) border border-border px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-foreground/35 hover:bg-foreground/5 hover:text-foreground disabled:pointer-events-none disabled:opacity-45"
           >
             <RefreshCw
               className={clsx(
-                "w-3 h-3",
+                "h-3 w-3",
                 pendingAction === "regenerate" && "animate-spin",
               )}
             />
@@ -117,81 +117,84 @@ export const CandidateList: ComponentRenderer = ({ element }) => {
           </button>
         )}
       </div>
-      {variants.length === 0 && (
-        <p className="text-[11px] italic text-muted-foreground">
+      {variants.length === 0 ? (
+        <p className="rounded-(--radius-control) border border-dashed border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
           {t(
             "catalog.candidateList.regenerateHint",
             "Generate another set of candidates.",
           )}
         </p>
-      )}
-      {/* Each variant is an option: choosing it accepts that version of the
-          reply. Drafting or sending its text stays a secondary action. */}
-      <div role="group" className="ui-choice-list">
-        {variants.map((candidate) => {
-          const accepted = candidate.id === acceptedCandidateId;
-          const details = (data?.detailFields ?? [])
-            .map((field) => resolvePath(candidate.row, field))
-            .filter(Boolean)
-            .join(" · ");
-          return (
-            <div key={candidate.id} className="ui-choice-row">
-              <button
-                type="button"
-                className="ui-choice"
-                onClick={() =>
-                  void invokeAction("accept", data?.acceptAction, candidate)
-                }
-                disabled={
-                  !sessionId || !data?.acceptAction || pendingAction !== null
-                }
-                aria-pressed={accepted}
-                aria-busy={pendingAction === "accept" || undefined}
-                data-selected={accepted ? "true" : undefined}
-              >
-                <span aria-hidden="true" className="ui-choice-index" />
-                <span className="ui-choice-content">
-                  <span className="ui-choice-title whitespace-pre-wrap">
-                    {candidate.content}
+      ) : (
+        /* Each variant is an option: choosing it accepts that version of the
+           reply. Drafting or sending its text stays a secondary action. */
+        <div role="group" className="ui-choice-list">
+          {variants.map((candidate) => {
+            const accepted = candidate.id === acceptedCandidateId;
+            const details = (data?.detailFields ?? [])
+              .map((field) => resolvePath(candidate.row, field))
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <div key={candidate.id} className="ui-choice-row">
+                <button
+                  type="button"
+                  className="ui-choice"
+                  onClick={() =>
+                    void invokeAction("accept", data?.acceptAction, candidate)
+                  }
+                  disabled={
+                    !sessionId || !data?.acceptAction || pendingAction !== null
+                  }
+                  aria-pressed={accepted}
+                  aria-busy={pendingAction === "accept" || undefined}
+                  data-selected={accepted ? "true" : undefined}
+                >
+                  <span aria-hidden="true" className="ui-choice-index" />
+                  <span className="ui-choice-content">
+                    <span className="ui-choice-title whitespace-pre-wrap">
+                      {candidate.content}
+                    </span>
                   </span>
-                </span>
-                <span className="ui-choice-eyebrow inline-flex items-center gap-1">
-                  {pendingAction === "accept" ? (
-                    <Loader2
-                      aria-hidden="true"
-                      className="h-3 w-3 animate-spin"
-                    />
-                  ) : (
-                    accepted && <Check aria-hidden="true" className="h-3 w-3" />
+                  <span className="ui-choice-eyebrow inline-flex items-center gap-1">
+                    {pendingAction === "accept" ? (
+                      <Loader2
+                        aria-hidden="true"
+                        className="h-3 w-3 animate-spin"
+                      />
+                    ) : (
+                      accepted && (
+                        <Check aria-hidden="true" className="h-3 w-3" />
+                      )
+                    )}
+                    {acceptLabel}
+                  </span>
+                </button>
+                <div className="ui-choice-actions flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => draftCandidate(candidate)}
+                    className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
+                  >
+                    {draftLabel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => sendCandidate(candidate)}
+                    className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
+                  >
+                    {sendLabel}
+                  </button>
+                  {details && (
+                    <span className="font-mono text-[9px] text-muted-foreground/60">
+                      {details}
+                    </span>
                   )}
-                  {acceptLabel}
-                </span>
-              </button>
-              <div className="ui-choice-actions flex flex-wrap items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => draftCandidate(candidate)}
-                  className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
-                >
-                  {draftLabel}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => sendCandidate(candidate)}
-                  className="ui-btn ui-btn-quiet h-7 px-2 text-[11px] text-muted-foreground"
-                >
-                  {sendLabel}
-                </button>
-                {details && (
-                  <span className="font-mono text-[9px] text-muted-foreground/60">
-                    {details}
-                  </span>
-                )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

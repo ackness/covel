@@ -123,8 +123,9 @@ export function StageDialog({
       data-testid="stage-dialog"
     >
       <div
-        className="max-h-52 overflow-y-auto overscroll-contain"
+        className="ui-stage-dialog-scroll max-h-56 space-y-1.5 overflow-y-auto overscroll-contain pr-1"
         data-stage-reader=""
+        data-multi={navigationCount > 1 || undefined}
       >
         <Reveal
           revealKey={message.id}
@@ -140,6 +141,9 @@ export function StageDialog({
             const speaker = structured
               ? (speakers?.[position] ?? undefined)
               : undefined;
+            const segmentKind = structured
+              ? message.segments?.[position]?.kind
+              : undefined;
             return (
               <article
                 key={position}
@@ -149,12 +153,14 @@ export function StageDialog({
                 }}
                 data-stage-paragraph={position}
                 data-reader-current={index === position}
-                className="py-1.5 text-sm leading-relaxed"
+                data-segment-kind={segmentKind}
+                data-has-speaker={Boolean(speaker) || undefined}
+                className="ui-stage-dialog-entry"
               >
                 {speaker && (
                   <span
                     data-testid="stage-dialog-speaker"
-                    className="font-semibold text-(--accent-primary)"
+                    className="ui-stage-dialog-speaker"
                   >
                     {speaker}
                   </span>
@@ -170,26 +176,40 @@ export function StageDialog({
       {navigationCount > 1 && (
         <nav
           data-covel-host-controls=""
-          className="mt-2 flex flex-wrap gap-3 text-xs"
+          className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-2.5 text-xs text-muted-foreground"
           aria-label={t("stage.readAgain")}
         >
-          <button
-            type="button"
-            disabled={index === 0}
-            onClick={() => move(index - 1)}
-          >
-            {t("stage.previousParagraph")}
-          </button>
-          <button
-            type="button"
-            disabled={index === navigationCount - 1}
-            onClick={() => move(index + 1)}
-          >
-            {t("stage.nextParagraph")}
-          </button>
-          <button type="button" onClick={() => move(0)}>
-            {t("stage.readAgain")}
-          </button>
+          <div className="flex flex-wrap items-center gap-1">
+            <button
+              type="button"
+              className="ui-stage-nav-btn"
+              disabled={index === 0}
+              onClick={() => move(index - 1)}
+            >
+              {t("stage.previousParagraph")}
+            </button>
+            <button
+              type="button"
+              className="ui-stage-nav-btn"
+              disabled={index === navigationCount - 1}
+              onClick={() => move(index + 1)}
+            >
+              {t("stage.nextParagraph")}
+            </button>
+            <button
+              type="button"
+              className="ui-stage-nav-btn"
+              onClick={() => move(0)}
+            >
+              {t("stage.readAgain")}
+            </button>
+          </div>
+          <span className="tabular-nums opacity-80">
+            {t("stage.readerProgress", {
+              current: index + 1,
+              total: navigationCount,
+            })}
+          </span>
         </nav>
       )}
     </section>

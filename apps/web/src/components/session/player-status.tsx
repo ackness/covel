@@ -239,10 +239,10 @@ export function MeterBar({
       aria-valuemin={meter.min}
       aria-valuemax={meter.max}
       aria-valuenow={meter.value}
-      className="ui-meter-track h-1 overflow-hidden rounded-full"
+      className="ui-meter-track h-1.5 overflow-hidden rounded-full"
     >
       <div
-        className="ui-meter-fill h-full rounded-full"
+        className="ui-meter-fill h-full rounded-full transition-[width] duration-300 ease-out"
         style={{ width: `${Math.round(ratio * 100)}%` }}
       />
     </div>

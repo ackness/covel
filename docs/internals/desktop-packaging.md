@@ -292,7 +292,7 @@ pnpm --filter @covel/desktop test
 
 1. **设置版本号。** 在干净的工作区里先运行 `pnpm release:prepare <version> --dry-run`，再运行 `pnpm release:prepare <version>`。它做这些事：
    - 设置根目录、`apps/*` 和 `packages/*` 的版本。插件和世界包各自维护版本，不会被改。
-   - 更新 `README.md` 和 `README.zh-CN.md` 里的版本徽章和“源码版本”一行。
+   - 更新 `README.md` 和 `README.zh-CN.md` 里的版本徽章和早期预览版本行。
    - 汇总变更日志（下一步）。
    - 版本号比当前低，或者工作区有未提交的改动时，它会拒绝运行。它不提交、不打标签、不推送。
    - 用同一个版本号再跑一次，只会加入上次之后合并进来的片段。
@@ -300,7 +300,7 @@ pnpm --filter @covel/desktop test
    - 在标题下写一段总结。
    - 检查 README 链接到的 `Breaking changes in v<version>` 和 `Upgrade notes for v<version>` 两节。
    - 之后又合并了新片段的话，打标签前要再跑一次。
-3. **改 README 的升级提示。** 重写 `README.md` 和 `README.zh-CN.md` 里当前版本提示的那句升级说明。脚本只改徽章和“源码版本”，并会指出哪些行还带着旧版本号。检查 Release 链接。
+3. **改 README 的升级提示。** 重写 `README.md` 和 `README.zh-CN.md` 里当前版本提示的那句升级说明。脚本只改徽章和早期预览版本行，并会指出哪些行还带着旧版本号。检查 Release 链接。
 4. **新手引导。** 引导流程有变化时，把 `apps/web/src/components/onboarding-wizard/constants.ts` 里的 `ONBOARDING_VERSION` 加一。
 5. **本地检查。** 依次运行 `pnpm check`、`pnpm test`、`pnpm test:pg`、`pnpm e2e` 和 `pnpm release:preflight`。已知的失败先修好再推送。
 6. **构建桌面资源。** 运行 `pnpm --filter @covel/desktop build`。

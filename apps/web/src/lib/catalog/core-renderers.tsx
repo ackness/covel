@@ -83,8 +83,12 @@ export const Text: ComponentRenderer = ({ element, children }) => {
   return (
     <p
       className={clsx(
-        "leading-relaxed text-foreground",
-        variant === "muted" && "text-muted-foreground",
+        "leading-relaxed",
+        variant === "muted"
+          ? "text-muted-foreground"
+          : variant === "accent"
+            ? "text-(--accent-primary)"
+            : "text-foreground",
         weight === "bold" && "font-semibold",
         size === "xs" && "text-[10px]",
         size === "sm" && "text-xs",

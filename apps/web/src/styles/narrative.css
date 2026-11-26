@@ -45,9 +45,9 @@
   --tw-prose-pre-code: var(--story-color);
 }
 
-.ui-narrative.prose p,
+.ui-narrative.prose p:not(.not-prose p),
 .ui-narrative .prose,
-.ui-narrative .prose p {
+.ui-narrative .prose p:not(.not-prose p) {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
@@ -57,8 +57,8 @@
   margin: 0;
 }
 
-.ui-narrative.prose p + p,
-.ui-narrative .prose p + p {
+.ui-narrative.prose p:not(.not-prose p) + p:not(.not-prose p),
+.ui-narrative .prose p:not(.not-prose p) + p:not(.not-prose p) {
   margin-top: 1.25rem;
 }
 
@@ -66,15 +66,44 @@
   margin-block-start: 0.85em;
 }
 
+.ui-narrative
+  [data-reveal-unit]:has(> [data-segment-kind="dialogue"])
+  + [data-reveal-unit]:not(:has(> [data-segment-kind="dialogue"])),
+.ui-narrative
+  [data-reveal-unit]:not(:has(> [data-segment-kind="dialogue"]))
+  + [data-reveal-unit]:has(> [data-segment-kind="dialogue"]) {
+  margin-block-start: 1.1em;
+}
+
+.ui-narrative
+  [data-reveal-unit]
+  + [data-reveal-unit]:has(> [data-segment-same-speaker="true"]) {
+  margin-block-start: 0.5em;
+}
+
+.ui-narrative [data-segment-kind="dialogue"] {
+  border-inline-start: 2px solid
+    color-mix(in oklab, var(--accent-primary) 45%, transparent);
+  background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  padding: 0.5rem 0.875rem 0.6rem 0.9rem;
+}
+
+.ui-story-template {
+  font-family: var(--type-body);
+  font-size: max(0.875rem, calc(var(--story-font-size) * 0.875));
+  line-height: 1.4;
+}
+
 .ui-story-speaker {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  margin-block-end: 0.375rem;
+  gap: 0.5rem;
+  margin-block-end: 0.3rem;
   color: var(--accent-primary);
   font-family: var(--type-body);
-  font-size: max(0.9375rem, calc(var(--story-font-size) * 0.9));
-  font-weight: 650;
+  font-size: max(0.875rem, calc(var(--story-font-size) * 0.875));
+  font-weight: 600;
   line-height: 1.35;
 }
 

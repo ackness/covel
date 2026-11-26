@@ -1,7 +1,7 @@
 ### Fixed
 
-- **Default story providers remain available until plugin selection stabilizes.** Overlapping default replacements and conflicts can no longer remove every story provider when a replacement subsequently loses its required contract. Dependent plugins can use a retained default. See [framework contracts](../reference/plugins.md#framework-contracts).
-- **Nested stories cannot release paid presentation work.** Story messages retain kernel-owned call identity through suspension release and selector recovery, including when the same runtime also runs at top level. See [presentation runtimes](../reference/plugins.md#presentation-runtimes).
+- **Default story providers remain available until plugin selection stabilizes.** Overlapping default replacements and conflicts can no longer remove every story provider when a replacement subsequently loses its required contract. Dependent plugins can use a retained default. See [framework contracts](../en/reference/plugins.md#framework-contracts).
+- **Nested stories cannot release paid presentation work.** Story messages retain kernel-owned call identity through suspension release and selector recovery, including when the same runtime also runs at top level. See [presentation runtimes](../en/reference/plugins.md#presentation-runtimes).
 
 ### Upgrade notes
 

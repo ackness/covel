@@ -1,0 +1,3 @@
+### Changed
+
+- **Read mode renders character action segments as prose and frames dialogue consistently.** Unmatched `action` segments no longer display a default speaker nameplate in Read mode (Stage mode continues to highlight acting speakers, and explicit `action` segment templates still match). Dialogue blocks use a subtle left accent rail, soft surface tint, and distinct vertical spacing against surrounding narration, and the bundled `scene-stage` dialogue template uses the new `Text` `variant: "accent"` style so templated and default speaker nameplates match across themes ([UI components](../en/reference/ui-components.md)).

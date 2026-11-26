@@ -149,7 +149,7 @@ export function StageReader({
   if (!unit && !status) return null;
   return (
     <section
-      className="border-b border-border/50 px-4 pt-5 pb-2"
+      className="border-b border-border/50 px-4 pt-5 pb-2.5"
       data-testid="stage-reader"
       aria-label={t("stage.readerLabel")}
     >
@@ -157,7 +157,7 @@ export function StageReader({
         {unit?.speaker && (
           <span
             data-testid="stage-reader-speaker"
-            className="ui-stage-panel ui-stage-nameplate absolute -top-3.5 left-3 rounded-(--radius-card) px-3 py-0.5 text-sm font-semibold"
+            className="ui-stage-panel ui-stage-nameplate absolute -top-3.5 left-3 z-1 rounded-(--radius-card) px-3 py-0.5 text-sm font-semibold"
           >
             {unit.speaker}
           </span>
@@ -165,6 +165,7 @@ export function StageReader({
         <div
           role="button"
           tabIndex={0}
+          data-speaking={Boolean(unit?.speaker) || undefined}
           aria-label={
             last && !pending
               ? t("stage.readerShowAll")
@@ -177,7 +178,7 @@ export function StageReader({
               next();
             }
           }}
-          className="relative min-h-24 cursor-pointer rounded-(--radius-card) border border-border/60 px-4 pt-5 pb-6 text-left"
+          className="ui-stage-reader-box relative min-h-24 cursor-pointer rounded-(--radius-card) px-4 pt-5 pb-6 text-left"
         >
           {!unit && (
             <p className="ui-eyebrow animate-pulse text-sm text-muted-foreground">
@@ -191,7 +192,7 @@ export function StageReader({
               data-testid="stage-reader-line"
               data-narration={unit.narration || undefined}
               className={clsx(
-                "text-base leading-relaxed",
+                "ui-stage-reader-text",
                 unit.narration && "text-muted-foreground",
                 !reducedMotion && "ui-stage-line",
               )}
@@ -210,37 +211,49 @@ export function StageReader({
         </div>
         <nav
           data-covel-host-controls=""
-          className="mt-1.5 flex items-center justify-end gap-3 px-1 text-xs text-muted-foreground"
+          className="mt-2 flex items-center justify-between gap-2 px-0.5 text-xs text-muted-foreground"
         >
-          {unit && status && (
-            <span
-              role="status"
-              data-testid="stage-reader-status"
-              className="animate-pulse"
+          <div className="flex min-w-0 items-center gap-2.5">
+            {units.length > 1 && (
+              <span
+                data-testid="stage-reader-progress"
+                className="tabular-nums opacity-85"
+              >
+                {t("stage.readerProgress", {
+                  current: index + 1,
+                  total: units.length,
+                })}
+              </span>
+            )}
+            {unit && status && (
+              <span
+                role="status"
+                data-testid="stage-reader-status"
+                className="animate-pulse"
+              >
+                {status}
+              </span>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {index > 0 && (
+              <button
+                type="button"
+                className="ui-stage-nav-btn"
+                onClick={previous}
+              >
+                {t("stage.previousParagraph")}
+              </button>
+            )}
+            <button
+              type="button"
+              className="ui-stage-nav-btn"
+              data-testid="stage-reader-show-all"
+              onClick={onFinish}
             >
-              {status}
-            </span>
-          )}
-          {units.length > 1 && (
-            <span data-testid="stage-reader-progress">
-              {t("stage.readerProgress", {
-                current: index + 1,
-                total: units.length,
-              })}
-            </span>
-          )}
-          {index > 0 && (
-            <button type="button" onClick={previous}>
-              {t("stage.previousParagraph")}
+              {t("stage.readerShowAll")}
             </button>
-          )}
-          <button
-            type="button"
-            data-testid="stage-reader-show-all"
-            onClick={onFinish}
-          >
-            {t("stage.readerShowAll")}
-          </button>
+          </div>
         </nav>
       </div>
     </section>

@@ -149,6 +149,7 @@
     background: var(--surface-story, rgb(9 12 17 / 0.72));
     color: #fff;
     backdrop-filter: blur(14px);
+    box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.45);
   }
 
   .ui-scene-card .ui-meter-track {
@@ -159,8 +160,21 @@
     color: rgb(255 255 255 / 0.72);
   }
 
+  .ui-scene-card .ui-summary-meter:not(:first-child) {
+    border-top-color: rgb(255 255 255 / 0.14);
+  }
+
+  .ui-scene-cast {
+    transition:
+      border-color 200ms ease,
+      box-shadow 200ms ease;
+  }
+
   .ui-scene-cast[data-focused="true"] {
-    border-color: var(--accent-primary);
+    border-color: color-mix(in oklab, var(--accent-primary) 85%, white);
+    box-shadow:
+      0 8px 24px -6px rgb(0 0 0 / 0.55),
+      0 0 0 1px color-mix(in oklab, var(--accent-primary) 35%, transparent);
   }
 
   .ui-scene-card .ui-status-item {

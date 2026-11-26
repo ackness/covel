@@ -21,7 +21,8 @@ const VERSION = /^\d+\.\d+\.\d+$/;
 const VERSION_FIELD = /("version"\s*:\s*")([^"]+)(")/;
 const BADGE =
   /(img\.shields\.io\/badge\/version-v)(\d+\.\d+\.\d+)(-[0-9a-f]{6}\)\]\(\.\/docs\/CHANGELOG\.md#)(\d+)(---)(\d{4}-\d{2}-\d{2})(\))/;
-const SOURCE_VERSION = /(Source version: v|当前源码版本：v)(\d+\.\d+\.\d+)/;
+const EARLY_ACCESS_VERSION =
+  /(Early access \(v|当前处于早期预览阶段（v)(\d+\.\d+\.\d+)/;
 const READMES = ["README.md", "README.zh-CN.md"];
 
 function compareVersions(a, b) {
@@ -120,10 +121,12 @@ export function prepareRelease(
         return `${a}${version}${b}${keep ? oldAnchor : anchor}${dash}${keep ? oldDate : date}${c}`;
       },
     );
-    if (!SOURCE_VERSION.test(next)) {
-      throw new Error(`${relative}: the "Source version" line was not found.`);
+    if (!EARLY_ACCESS_VERSION.test(next)) {
+      throw new Error(
+        `${relative}: the early-access version line was not found.`,
+      );
     }
-    next = next.replace(SOURCE_VERSION, `$1${version}`);
+    next = next.replace(EARLY_ACCESS_VERSION, `$1${version}`);
     if (next !== text) readmeEdits.push({ relative, text: next });
     for (const [index, line] of next.split("\n").entries()) {
       if (
@@ -150,7 +153,7 @@ export function prepareRelease(
   }
   for (const edit of readmeEdits) {
     changes.push(
-      `${edit.relative}: version badge and source-version line -> v${version}`,
+      `${edit.relative}: version badge and early-access version line -> v${version}`,
     );
   }
   if (assembled.moved > 0) {

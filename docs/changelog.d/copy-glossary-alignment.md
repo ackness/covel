@@ -4,4 +4,4 @@
 
 ### Documentation
 
-- **Synchronized Chinese and English documentation, READMEs, and plugin docs.** Updated [the glossary](../reference/glossary.md), getting-started guides, reference pages, and bundled plugin READMEs for natural phrasing and consistent cross-edition terminology.
+- **Synchronized Chinese and English documentation, READMEs, and plugin docs.** Updated [the glossary](../en/reference/glossary.md), getting-started guides, reference pages, and bundled plugin READMEs for natural phrasing and consistent cross-edition terminology.
