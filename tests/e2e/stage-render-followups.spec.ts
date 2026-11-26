@@ -51,11 +51,20 @@ async function openSession(page: Page, host: Host) {
   await waitForTurnIdle(page);
 }
 
+/**
+ * Install and pause the Playwright clock at the current wall-clock time without
+ * racing against real-time ticks between `install()` and `pauseAt()`.
+ */
+async function pauseClock(page: Page) {
+  const now = Date.now();
+  await page.clock.install({ time: now - 10_000 });
+  await page.clock.pauseAt(now);
+}
+
 const actor = (page: Page, id: string) =>
   page.locator(`.ui-stage-sprite[data-character-id="${id}"]`);
 async function freezeDepartures(page: Page) {
-  await page.clock.install();
-  await page.clock.pauseAt(new Date());
+  await pauseClock(page);
   await page.evaluate(() => {
     const paused = new WeakSet<Animation>();
     new MutationObserver(() => {
@@ -302,8 +311,7 @@ test("committed segment reveal supports keyboard Show all, reduced motion and in
   });
   try {
     await openSession(page, host);
-    await page.clock.install();
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     await composerInput(page).fill("Continue with a complete story");
     await composerInput(page).press("Enter");
     await expect(page.getByTestId("story-segments").last()).toContainText(
@@ -381,8 +389,7 @@ test("sticky chat follows readable tall segments before returning to the full bo
       element.style.maxHeight = "240px";
       element.scrollTop = element.scrollHeight;
     });
-    await page.clock.install();
-    await page.clock.pauseAt(new Date());
+    await pauseClock(page);
     await composerInput(page).fill("Continue with tall paragraphs");
     await composerInput(page).press("Enter");
     const story = page.getByTestId("story-segments").last();
