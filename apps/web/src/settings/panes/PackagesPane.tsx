@@ -1,17 +1,32 @@
+import { SettingsListFilter, SettingsListSearch } from "../list-controls.js";
 import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Boxes, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
+import {
+  Boxes,
+  FolderGit2,
+  Globe,
+  Package,
+  Puzzle,
+  RotateCw,
+  Upload,
+} from "lucide-react";
 import type { GithubBatchInstallResult } from "@covel/shared";
+import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs.js";
 import { SettingsPaneHeader } from "../pane-layout.js";
 import {
   getDesktopInfo,
   hasElectronIpc,
   reloadServerAndWait,
 } from "@/lib/desktop-bridge.js";
-import { text } from "@/components/world/editor-helpers.js";
 import {
   installCollectionZip,
   installPackage,
@@ -21,30 +36,34 @@ import {
   type InstallKind,
   type InstallResult,
 } from "@/services/api.js";
-import {
-  PackageValidationButton,
-  PackageValidationZip,
-} from "./PackageValidation.js";
-import { GithubPackageUpdater } from "./GithubPackageUpdater.js";
-import { pluginPackageInfo } from "@/lib/package-info.js";
+import { PackageValidationZip } from "./PackageValidation.js";
+import { InstalledPackageRow } from "./InstalledPackageRow.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { useSessionActions } from "@/stores/session-store.js";
-import { PackageCredits } from "@/components/shared/package-credits.js";
-import { PluginLoadWarnings } from "@/components/shared/plugin-load-warnings.js";
 import { StImportCard } from "./StImportCard.js";
 import { TrustedSourcesCard } from "./TrustedSourcesCard.js";
 import { GithubCollectionInstaller } from "./GithubCollectionInstaller.js";
 import type { PluginInstallation, PluginSummary } from "@covel/shared";
 import { ignoreError } from "@/lib/ignore-error.js";
 
+type PackagesTab = "github" | "installed" | "local";
+type InstalledKindFilter = "all" | "plugin" | "world";
+
 /**
- * Drag-and-drop install pane for plugin + world .zip packages.
- *
- * Uploads to POST /api/install/{plugin|world}. On success, prompts the user
- * that a server restart is required (plugins only — worlds reload on demand).
+ * Tabbed workspace for discovering, installing, updating, validating, and
+ * removing third-party plugins and worlds.
  */
-export function PackagesPane() {
-  const { t } = useTranslation();
+export function PackagesPane({
+  onNavigate,
+}: {
+  onNavigate?: (nodeId: string) => void;
+} = {}) {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const { boot } = useSessionActions();
+  const [activeTab, setActiveTab] = useState<PackagesTab>("github");
+  const [installedQuery, setInstalledQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<InstalledKindFilter>("all");
   const [busy, setBusy] = useState<UploadKind | null>(null);
   const { notice, show: flash } = usePaneNotice();
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
@@ -211,17 +230,84 @@ export function PackagesPane() {
     }
   }
 
-  const rows =
-    installations === null
-      ? installed.map((plugin) => ({
-          id: plugin.id,
-          version: plugin.version ?? null,
-          source: null,
-          pendingUpdate: null,
-          integrity: "no-receipt" as const,
-          trustedSource: false,
-        }))
-      : installations;
+  const rows = useMemo(
+    () =>
+      installations === null
+        ? installed.map((plugin) => ({
+            id: plugin.id,
+            version: plugin.version ?? null,
+            source: null,
+            pendingUpdate: null,
+            integrity: "no-receipt" as const,
+            trustedSource: false,
+          }))
+        : installations,
+    [installations, installed],
+  );
+
+  const installedById = useMemo(
+    () => new Map(installed.map((plugin) => [plugin.id, plugin] as const)),
+    [installed],
+  );
+
+  const installedPluginIds = useMemo(
+    () =>
+      new Set([
+        ...installed.map((plugin) => plugin.id),
+        ...(installations ?? []).map((item) => item.id),
+      ]),
+    [installed, installations],
+  );
+  const installedWorldIds = useMemo(
+    () => new Set(worldInstallations.map((item) => item.id)),
+    [worldInstallations],
+  );
+
+  const totalInstalledCount = rows.length + worldInstallations.length;
+  const hasBothKinds = rows.length > 0 && worldInstallations.length > 0;
+  const installedKindFilter = hasBothKinds ? kindFilter : "all";
+  const normalizedInstalledQuery = installedQuery.trim().toLowerCase();
+
+  const matchesQuery = (item: PluginInstallation, name?: string) =>
+    !normalizedInstalledQuery ||
+    [item.id, name, item.version, item.source?.repository, item.source?.path]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedInstalledQuery);
+  const visibleGroups = (
+    [
+      {
+        kind: "plugin",
+        title: t("settings.packages.installedTitle"),
+        items: rows,
+      },
+      {
+        kind: "world",
+        title: t("settings.worldGithub.installed"),
+        items: worldInstallations,
+      },
+    ] as const
+  )
+    .filter(
+      ({ kind }) =>
+        installedKindFilter === "all" || kind === installedKindFilter,
+    )
+    .map((group) => ({
+      ...group,
+      items: group.items.flatMap((item) => {
+        const summary =
+          group.kind === "plugin" ? installedById.get(item.id) : undefined;
+        const name =
+          resolveDisplayText(summary?.displayName, locale) || item.id;
+        return matchesQuery(item, name) ? [{ item, summary, name }] : [];
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  const anyBusy = !!busy || !!removing || githubBusy || updateBusy;
+  const openProxySettings = onNavigate
+    ? () => onNavigate("desktop")
+    : undefined;
 
   return (
     <div className="space-y-5">
@@ -235,7 +321,7 @@ export function PackagesPane() {
       {(lastResult?.restartRequired ||
         installations?.some((item) => item.pendingUpdate) ||
         worldInstallations.some((item) => item.pendingUpdate)) && (
-        <div className="flex items-start gap-3 text-xs px-3 py-2.5 rounded border border-(--accent-warning)/30 bg-(--accent-warning)/10 text-(--accent-warning)">
+        <div className="flex items-start gap-3 rounded-lg border border-(--accent-warning)/30 bg-(--accent-warning)/10 px-3 py-2.5 text-xs text-(--accent-warning)">
           <div className="flex-1">
             {t(
               !isDesktop
@@ -253,7 +339,7 @@ export function PackagesPane() {
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs shrink-0"
+              className="h-7 shrink-0 text-xs"
               onClick={() => {
                 setDesktopInfo({ status: "loading" });
                 setDesktopInfoAttempt((attempt) => attempt + 1);
@@ -266,7 +352,7 @@ export function PackagesPane() {
             <Button
               size="sm"
               variant="outline"
-              className="h-7 text-xs shrink-0 border-(--accent-warning)/40 hover:border-(--accent-warning)"
+              className="h-7 shrink-0 border-(--accent-warning)/40 text-xs hover:border-(--accent-warning)"
               disabled={desktopInfo.status !== "ready" || desktopInfo.isDev}
               onClick={() => {
                 if (desktopInfo.status !== "ready" || desktopInfo.isDev) return;
@@ -283,213 +369,282 @@ export function PackagesPane() {
                 );
               }}
             >
-              <RotateCw className="w-3 h-3 mr-1.5" />
+              <RotateCw className="mr-1.5 h-3 w-3" />
               {t("settings.packages.restartNow")}
             </Button>
           )}
         </div>
       )}
 
-      <TrustedSourcesCard />
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as PackagesTab)}
+      >
+        <div className="ui-workspace-rule">
+          <TabsList
+            aria-label={t("settings.packages.tabsLabel", "Package sections")}
+            className="grid h-auto w-full grid-cols-3 gap-1 bg-transparent p-0 @lg:flex @lg:w-auto @lg:justify-start @lg:gap-3"
+          >
+            <TabsTrigger
+              value="github"
+              className="ui-tab-item min-w-0 gap-1.5 px-2 whitespace-normal wrap-break-word data-[state=active]:shadow-none @lg:px-3"
+            >
+              <FolderGit2 className="hidden size-3.5 shrink-0 @lg:block" />
+              <span>{t("settings.packages.tabGithub")}</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="installed"
+              className="ui-tab-item min-w-0 gap-1.5 px-2 whitespace-normal wrap-break-word data-[state=active]:shadow-none @lg:px-3"
+            >
+              <Package className="hidden size-3.5 shrink-0 @lg:block" />
+              <span>{t("settings.packages.tabInstalled")}</span>
+              <Badge
+                aria-hidden="true"
+                variant={totalInstalledCount > 0 ? "secondary" : "outline"}
+                className="h-4 px-1.5 text-[10px] tabular-nums"
+              >
+                {totalInstalledCount}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger
+              value="local"
+              className="ui-tab-item min-w-0 gap-1.5 px-2 whitespace-normal wrap-break-word data-[state=active]:shadow-none @lg:px-3"
+            >
+              <Upload className="hidden size-3.5 shrink-0 @lg:block" />
+              <span>{t("settings.packages.tabLocal")}</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-      <GithubCollectionInstaller
-        disabled={!!busy || !!removing || updateBusy || githubBusy}
-        onBusyChange={setGithubBusy}
-        onInstalled={(result) => {
-          showBatch(result);
-          void refreshInstalled();
-          refreshWorlds();
-        }}
-      />
+        <TabsContent
+          forceMount
+          value="github"
+          hidden={activeTab !== "github"}
+          className="mt-5 space-y-5 data-[state=inactive]:hidden"
+        >
+          <GithubCollectionInstaller
+            disabled={anyBusy}
+            onBusyChange={setGithubBusy}
+            installedPluginIds={installedPluginIds}
+            installedWorldIds={installedWorldIds}
+            onOpenProxySettings={openProxySettings}
+            onInstalled={(result) => {
+              showBatch(result);
+              void refreshInstalled();
+              refreshWorlds();
+            }}
+          />
+        </TabsContent>
 
-      <label className="flex items-start gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={zipAccepted}
-          disabled={!!busy || githubBusy || updateBusy}
-          onChange={(event) => setZipAccepted(event.target.checked)}
-        />
-        {t("settings.github.zipRisk")}
-      </label>
-      <DropZone
-        kind="plugin"
-        icon={<Puzzle className="w-5 h-5" />}
-        label={t("settings.packages.pluginLabel")}
-        hint={t("settings.packages.pluginHint")}
-        busy={busy === "plugin"}
-        disabled={
-          !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
-        }
-        onFile={(f) => uploadZip("plugin", f)}
-      />
-      <DropZone
-        kind="collection"
-        icon={<Boxes className="w-5 h-5" />}
-        label={t("settings.packages.collectionLabel")}
-        hint={t("settings.packages.collectionHint")}
-        busy={busy === "collection"}
-        disabled={
-          !zipAccepted || githubBusy || !!busy || updateBusy || !!removing
-        }
-        onFile={(f) => uploadZip("collection", f)}
-      />
-
-      <DropZone
-        kind="world"
-        icon={<Globe className="w-5 h-5" />}
-        label={t("settings.packages.worldLabel")}
-        hint={t("settings.packages.worldHint")}
-        busy={busy === "world"}
-        disabled={githubBusy || !!busy || updateBusy || !!removing}
-        onFile={(f) => uploadZip("world", f)}
-      />
-
-      <StImportCard
-        busy={githubBusy || !!busy || updateBusy || !!removing}
-        onBusyChange={setGithubBusy}
-        onImported={() => {
-          void refreshInstalled();
-          refreshWorlds();
-        }}
-      />
-
-      {rows.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="settings-section-title">
-            {t("settings.packages.installedTitle", "Installed plugins")}
-          </h3>
-          <ul className="divide-y divide-border border border-border rounded">
-            {rows.map((p) => (
-              <li key={p.id} className="space-y-3 px-3 py-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium truncate">
-                      {text(
-                        installed.find((plugin) => plugin.id === p.id)
-                          ?.displayName,
-                      ) || p.id}
+        <TabsContent
+          forceMount
+          value="installed"
+          hidden={activeTab !== "installed"}
+          className="mt-5 space-y-5 data-[state=inactive]:hidden"
+        >
+          {totalInstalledCount === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card/30 px-6 py-10 text-center">
+              <Package className="h-6 w-6 text-muted-foreground" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {t("settings.packages.installedEmptyTitle")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("settings.packages.installedEmptyHint")}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setActiveTab("github")}
+              >
+                <FolderGit2 className="mr-1.5 h-3.5 w-3.5" />
+                {t("settings.packages.tabGithub")}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {(totalInstalledCount > 1 || installedQuery) && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card/40 p-2.5">
+                  <SettingsListSearch
+                    label={t("settings.packages.searchInstalled")}
+                    value={installedQuery}
+                    onChange={setInstalledQuery}
+                  />
+                  {hasBothKinds && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(
+                        [
+                          {
+                            id: "all",
+                            label: t("settings.github.filterAll", {
+                              count: totalInstalledCount,
+                            }),
+                          },
+                          {
+                            id: "plugin",
+                            label: `${t("settings.github.kindPlugin")} (${rows.length})`,
+                          },
+                          {
+                            id: "world",
+                            label: `${t("settings.github.kindWorld")} (${worldInstallations.length})`,
+                          },
+                        ] as const
+                      ).map((pill) => (
+                        <SettingsListFilter
+                          key={pill.id}
+                          active={installedKindFilter === pill.id}
+                          onClick={() => setKindFilter(pill.id)}
+                          label={pill.label}
+                        />
+                      ))}
                     </div>
-                    <div className="text-[10px] font-mono text-muted-foreground truncate">
-                      {p.id}
-                      {p.version ? ` · ${p.version}` : ""}
-                    </div>
-                    {(p.integrity === "modified" ||
-                      p.integrity === "unreadable") && (
-                      <p className="text-xs text-(--accent-warning)">
-                        {t("settings.trustedSources.modified")}
-                      </p>
-                    )}
-                    {p.source && (
-                      <a
-                        className="block text-xs underline wrap-break-word"
-                        href={`${p.source.repository}/tree/${p.source.commit}/${p.source.path}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {p.source.repository.replace("https://github.com/", "")}{" "}
-                        · {p.source.commit.slice(0, 12)}
-                      </a>
-                    )}
-                    {!installed.some((plugin) => plugin.id === p.id) && (
-                      <p className="text-xs text-muted-foreground">
-                        {t("settings.github.pending")}
-                      </p>
-                    )}
-                    <PackageCredits
-                      info={creditsOf(
-                        installed.find((plugin) => plugin.id === p.id),
-                      )}
-                      packageName={
-                        text(
-                          installed.find((plugin) => plugin.id === p.id)
-                            ?.displayName,
-                        ) || p.id
-                      }
-                      className="mt-1.5"
-                    />
-                  </div>
+                  )}
+                </div>
+              )}
+
+              {visibleGroups.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-card/30 px-4 py-8 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.github.noMatchingPackages")}
+                  </p>
                   <Button
+                    type="button"
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs shrink-0 text-destructive border-destructive/30 hover:border-destructive"
-                    disabled={!!removing || !!busy || githubBusy || updateBusy}
-                    onClick={() => void uninstall(p.id)}
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setInstalledQuery("");
+                      setKindFilter("all");
+                    }}
                   >
-                    {removing === p.id
-                      ? t("settings.packages.uninstalling", "Removing…")
-                      : t("settings.packages.uninstall", "Uninstall")}
+                    {t("settings.github.resetFilters")}
                   </Button>
                 </div>
-                <PackageValidationButton
-                  kind="plugin"
-                  id={p.id}
-                  disabled={!!busy || !!removing || githubBusy || updateBusy}
-                />
-                <PluginLoadWarnings
-                  diagnostics={installed.find((plugin) => plugin.id === p.id)}
-                />
-                <GithubPackageUpdater
-                  installation={p}
-                  disabled={!!busy || !!removing || githubBusy || updateBusy}
-                  onBusyChange={setUpdateBusy}
-                  onUpdated={() => void refreshInstalled()}
-                  onCancelled={() => void refreshInstalled()}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+              ) : (
+                visibleGroups.map(({ kind, title, items }) => (
+                  <section key={kind} className="space-y-2">
+                    <h3 className="settings-section-title flex items-baseline gap-2">
+                      {title}
+                      <span
+                        aria-hidden="true"
+                        className="text-xs font-normal text-muted-foreground tabular-nums"
+                      >
+                        {items.length}
+                      </span>
+                    </h3>
+                    <ul className="divide-y divide-border rounded-lg border border-border bg-card/40">
+                      {items.map(({ item, name, summary }) => (
+                        <InstalledPackageRow
+                          key={item.id}
+                          kind={kind}
+                          installation={item}
+                          name={name}
+                          summary={summary}
+                          disabled={anyBusy}
+                          removing={removing === item.id && kind === "plugin"}
+                          onUninstall={
+                            kind === "plugin"
+                              ? () => void uninstall(item.id)
+                              : undefined
+                          }
+                          onUpdateBusy={setUpdateBusy}
+                          onRefresh={() => void refreshInstalled()}
+                          onUpdated={() => {
+                            void refreshInstalled();
+                            if (kind === "world") refreshWorlds();
+                          }}
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              )}
+            </>
+          )}
+        </TabsContent>
 
-      {worldInstallations.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="settings-section-title">
-            {t("settings.worldGithub.installed")}
-          </h3>
-          <ul className="divide-y divide-border rounded border border-border">
-            {worldInstallations.map((item) => (
-              <li key={item.id} className="space-y-2 p-3 text-xs">
-                <p className="font-semibold">
-                  {item.id}
-                  {item.version ? ` · ${item.version}` : ""}
-                </p>
-                <PackageValidationButton
-                  kind="world"
-                  id={item.id}
-                  disabled={!!busy || !!removing || githubBusy || updateBusy}
-                />
-                <GithubPackageUpdater
-                  kind="world"
-                  installation={item}
-                  disabled={!!busy || !!removing || githubBusy || updateBusy}
-                  onBusyChange={setUpdateBusy}
-                  onUpdated={() => {
-                    void refreshInstalled();
-                    refreshWorlds();
-                  }}
-                  onCancelled={() => void refreshInstalled()}
-                />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <PackageValidationZip
-        disabled={!!busy || !!removing || githubBusy || updateBusy}
-      />
+        <TabsContent
+          forceMount
+          value="local"
+          hidden={activeTab !== "local"}
+          className="mt-5 space-y-5 data-[state=inactive]:hidden"
+        >
+          <section className="space-y-3 rounded-lg border border-border bg-card/40 p-4">
+            <div className="space-y-1">
+              <h3 className="settings-section-title flex items-center gap-1.5">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                {t("settings.packages.localZipTitle")}
+              </h3>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("settings.packages.localZipHint")}
+              </p>
+            </div>
+
+            <label className="flex items-start gap-2 rounded-md border border-(--accent-warning)/30 bg-(--accent-warning)/5 p-2.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                className="mt-0.5 shrink-0 accent-primary"
+                checked={zipAccepted}
+                disabled={!!busy || githubBusy || updateBusy}
+                onChange={(event) => setZipAccepted(event.target.checked)}
+              />
+              <span className="leading-relaxed">
+                {t("settings.github.zipRisk")}
+              </span>
+            </label>
+
+            <div className="grid gap-3 @2xl:grid-cols-3">
+              <DropZone
+                kind="plugin"
+                icon={<Puzzle className="h-4 w-4 text-muted-foreground" />}
+                label={t("settings.packages.pluginLabel")}
+                hint={t("settings.packages.pluginHint")}
+                busy={busy === "plugin"}
+                disabled={!zipAccepted || anyBusy}
+                onFile={(f) => uploadZip("plugin", f)}
+              />
+              <DropZone
+                kind="collection"
+                icon={<Boxes className="h-4 w-4 text-muted-foreground" />}
+                label={t("settings.packages.collectionLabel")}
+                hint={t("settings.packages.collectionHint")}
+                busy={busy === "collection"}
+                disabled={!zipAccepted || anyBusy}
+                onFile={(f) => uploadZip("collection", f)}
+              />
+              <DropZone
+                kind="world"
+                icon={<Globe className="h-4 w-4 text-muted-foreground" />}
+                label={t("settings.packages.worldLabel")}
+                hint={t("settings.packages.worldHint")}
+                busy={busy === "world"}
+                disabled={anyBusy}
+                onFile={(f) => uploadZip("world", f)}
+              />
+            </div>
+          </section>
+
+          <StImportCard
+            busy={anyBusy}
+            onBusyChange={setGithubBusy}
+            onImported={() => {
+              void refreshInstalled();
+              refreshWorlds();
+            }}
+          />
+
+          <PackageValidationZip disabled={anyBusy} />
+
+          <TrustedSourcesCard />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
 
 /** A collection ZIP installs plugins and worlds together. */
 type UploadKind = InstallKind | "collection";
-
-/** A plugin's credits without the version: the row shows the installed one. */
-function creditsOf(plugin: PluginSummary | undefined) {
-  if (!plugin) return undefined;
-  const { version: _version, ...credits } = pluginPackageInfo(plugin);
-  return credits;
-}
 
 interface DropZoneProps {
   kind: UploadKind;
@@ -517,10 +672,10 @@ function DropZone({
   return (
     <label
       className={
-        "flex flex-col items-center justify-center gap-2 px-4 py-6 rounded-md border-2 border-dashed cursor-pointer transition-colors " +
+        "flex cursor-pointer flex-col items-center justify-between gap-2.5 rounded-lg border border-dashed px-3.5 py-4 text-center transition-colors " +
         (active
           ? "border-primary bg-primary/5"
-          : "border-border hover:border-primary/60 hover:bg-muted/30") +
+          : "border-border bg-background/60 hover:border-primary/60 hover:bg-muted/30") +
         (disabled ? " opacity-60" : "")
       }
       onDragEnter={(e) => {
@@ -542,22 +697,27 @@ function DropZone({
         if (file && !disabled) onFile(file);
       }}
     >
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {icon}
-        {label}
+      <div className="space-y-1">
+        <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-foreground">
+          {icon}
+          {label}
+        </div>
+        <div className="text-[11px] leading-relaxed text-muted-foreground">
+          {hint}
+        </div>
       </div>
-      <div className="text-xs text-muted-foreground text-center">{hint}</div>
       <Button
         size="sm"
         variant="outline"
         type="button"
+        className="h-7 px-2.5 text-xs"
         disabled={disabled}
         onClick={(e) => {
           e.preventDefault();
           inputRef.current?.click();
         }}
       >
-        <Upload className="w-3 h-3 mr-1" />
+        <Upload className="mr-1.5 h-3 w-3" />
         {busy
           ? t("settings.packages.uploading")
           : t("settings.packages.chooseFile")}
@@ -565,15 +725,15 @@ function DropZone({
       <input
         ref={inputRef}
         type="file"
-        disabled={disabled}
         accept=".zip,application/zip"
-        className="hidden"
+        className="sr-only"
+        data-testid={`install-${kind}-file-input`}
+        disabled={disabled}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file && !disabled) onFile(file);
-          if (inputRef.current) inputRef.current.value = "";
+          if (file) onFile(file);
+          e.target.value = "";
         }}
-        data-testid={`install-${kind}-file-input`}
       />
     </label>
   );

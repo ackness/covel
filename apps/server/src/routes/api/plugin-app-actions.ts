@@ -15,7 +15,8 @@
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
-import { errorBody } from "../../api-error.js";
+import { errorBody, logRequestError } from "../../api-error.js";
+import { toOutboundNetworkErrorResponse } from "../../lib/outbound-error.js";
 import { accessGuard } from "../../host-profile.js";
 import type { PermissionService } from "../../trust/permission-service.js";
 import type { SecretVault } from "../../trust/secret-vault.js";
@@ -227,6 +228,15 @@ export function createPluginAppActionRoutes(
             ),
             504,
           );
+        }
+        const network = toOutboundNetworkErrorResponse(error);
+        if (network) {
+          logRequestError(
+            c,
+            "[plugin-app-actions] Outbound network error",
+            error,
+          );
+          return c.json(network.body, network.status);
         }
         throw error;
       } finally {

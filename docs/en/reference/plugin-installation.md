@@ -35,7 +35,7 @@ Proof binds content to the current registered definition and is refreshed for en
 
 ## Trusted sources
 
-No source is trusted by default, including the official repository. Add a GitHub owner or `owner/repo` in **Settings → Plugins → Install & manage → Trusted sources**. The suggestion button only fills the official repository; press Add to save it. Entries are trimmed, lowercased, deduplicated and sorted: at most 100 entries, 100 characters each, and 39 characters per owner. Only GitHub names are accepted, not URLs.
+No source is trusted by default, including the official repository. Add a GitHub owner or `owner/repo` in **Settings → Plugins → Install & manage → Local tools → Trusted sources**. The suggestion button only fills the official repository; press Add to save it. Entries are trimmed, lowercased, deduplicated and sorted: at most 100 entries, 100 characters each, and 39 characters per owner. Only GitHub names are accepted, not URLs.
 
 `owner` matches all repositories of that owner; `owner/repo` matches only that repository. Matching is case-insensitive and compares complete names: `owner-evil` and `repo-evil` do not match. Non-GitHub HTTPS addresses, `.git` suffixes, trailing slashes, extra paths, queries and fragments do not match. Each plugin in a collection is judged by its own receipt's `source.repository`, including members pinned to another repository.
 
@@ -79,14 +79,7 @@ Trusted sources preserve `builtin | community`, add no API or privilege, and do 
 
 ## User flow
 
-Open **Settings → Plugins → Install & manage**:
-
-1. Browse the community catalogue, or paste a public GitHub repository link, or a `/tree/<ref>/<path>` link.
-2. The link is resolved. The plugins and world packs in that directory are listed together. When the directory has a `covel-collection.yaml`, only the members named in the [collection](../ship/collections.md) manifest are listed, including packages pinned in other repositories.
-3. Tick what you want to install, check the ID, version, source, commit, and code risk, and confirm once. Plugins are installed before worlds. A failure rolls back this batch’s writes, except that a world already used to create a session, or a package that cannot be deleted, is retained and reported. See [batch rollback results](#multi-package-preview-and-batch-install).
-4. After installing a plugin, restart the backend once. Then enable the plugin in a session, and follow approval prompts for code packages; declarative packages need no code/runtime approval. A world is usable right away.
-
-The import entry in the desktop app's menu opens the same package management page. The server runs a static check on a ZIP and shows the result.
+See the [player guide](../start/packages.md) for installing, updating, and uninstalling packages, and [multi-package preview and batch install](#multi-package-preview-and-batch-install) for rollback rules.
 
 ### Integrity checks in the preview
 
@@ -247,7 +240,7 @@ A plugin's root manifest can declare a `covel` version range (for example `">=0.
 
 ### What the preview contains
 
-The preview includes the ID, package version (the `version` of `PLUGIN.md`), description, author name (`author`, `null` when the manifest does not declare one), a hint about whether code is present, the source, the signed token, and `expiresAt`.
+The preview includes the ID, optional localized `displayName` and `tags`, package version (the `version` of `PLUGIN.md`), description, author name (`author`, `null` when the manifest does not declare one), a hint about whether code is present, the source, the signed token, and `expiresAt`.
 
 - The source is `{ repository, commit, path, digest, tracking }`; `capabilities` always lists requested capabilities, and `trustedSource` marks whether the source was trusted at preview time.
 - `tracking` is `{ kind: "default-branch" }`, `{ kind: "branch", ref }`, or `{ kind: "pinned", ref }`. A repository root link tracks the default branch. A tree link first tries to resolve to an explicit branch. Anything else, such as a tag or a commit, stays locked.
@@ -399,7 +392,7 @@ Authorization is not kept across a backend restart. In particular, an old author
 
 ## In-app validation
 
-Players without a source checkout or pnpm can open **Settings → Plugins → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+Players without a source checkout or pnpm can open **Settings → Plugins → Install & manage** then click **Validate** on a package in **Installed**. To check a ZIP, open **Local tools**, choose plugin or world, and drop the file. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
 
 ZIP validation uses the [installation rules for plugin IDs](#what-the-installer-does-and-does-not-do), preserving identities derived from the package directory or `package.json.name` instead of using the temporary directory name. When no valid ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`. The static validator reports manifest parsing errors separately.
 

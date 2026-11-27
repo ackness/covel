@@ -234,8 +234,9 @@ schema_version = 1
 # data_root = "/Volumes/External/covel-data"
 
 [network]
-# Outbound LLM/model-database requests: direct | system | http | socks
-proxy_mode = "direct"
+# Outbound LLM/model-database/GitHub/auth-proxy requests: system | direct | http | socks
+# "system" follows OS proxy / PAC rules and connects directly when no system proxy is set.
+proxy_mode = "system"
 # proxy_url = "http://127.0.0.1:7890"
 
 [logging]

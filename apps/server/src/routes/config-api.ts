@@ -89,11 +89,15 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   captureBootKeySources(externalApiKeys);
   const systemProxyUrl = readRuntimeEnv().systemProxyUrl;
   const resolveSystemProxy = getDesktopSystemProxyResolver();
+  // A shell without Electron's resolver (the dev server, a headless host) uses
+  // its static system proxy when one is configured instead of going direct.
+  const defaultProxyMode =
+    resolveSystemProxy || systemProxyUrl ? "system" : "direct";
   try {
     configureOutboundProxy({
       ...(initialCovelHome
-        ? readStoredProxyConfig(initialCovelHome)
-        : { mode: "direct" as const }),
+        ? readStoredProxyConfig(initialCovelHome, defaultProxyMode)
+        : { mode: defaultProxyMode }),
       systemProxyUrl,
       resolveSystemProxy,
     });

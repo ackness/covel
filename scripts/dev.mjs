@@ -16,6 +16,30 @@ const commands = [
   },
 ];
 
+// The dev server runs without Electron's per-URL system proxy resolver. Hand
+// it the shell's proxy as the static system proxy so the default `system`
+// mode matches the installed app instead of silently going direct.
+function devEnvironment(env) {
+  if (env.COVEL_SYSTEM_PROXY_URL?.trim()) return env;
+  const shellProxy = [
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+  ]
+    .map((name) => env[name]?.trim())
+    .find(Boolean);
+  if (!shellProxy) return env;
+  // Never echo proxy credentials into the terminal.
+  const shown = shellProxy.replace(/\/\/[^@/]*@/, "//***@");
+  console.log(`[dev] using shell proxy as the system proxy: ${shown}`);
+  return { ...env, COVEL_SYSTEM_PROXY_URL: shellProxy };
+}
+
+const childEnv = devEnvironment(process.env);
+
 let shuttingDown = false;
 const children = [];
 
@@ -45,7 +69,7 @@ try {
     console.log(`[dev] starting ${name}: ${command} ${args.join(" ")}`);
     const child = spawnCommand(command, args, {
       stdio: "inherit",
-      env: process.env,
+      env: childEnv,
     });
 
     if (!child.pid) {

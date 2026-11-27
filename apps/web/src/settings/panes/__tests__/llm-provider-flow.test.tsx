@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
   act,
@@ -67,7 +68,12 @@ vi.mock("@/stores/session-store.js", () => ({
   }),
 }));
 vi.mock("@/components/shared/ping-button.js", () => ({
-  PingButton: () => <button>Test model</button>,
+  PingButton: ({ children }: { children?: ReactNode }) => (
+    <>
+      <button>Test model</button>
+      {children}
+    </>
+  ),
   invalidateAllPingResults: vi.fn(),
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({
@@ -311,6 +317,32 @@ const importedProfile = {
   baseUrl: "https://fixture.example/v1",
   models: [{ ref: "model", modelId: "original" }],
 };
+
+it("searches a large provider model list by display name without changing saved models", async () => {
+  const profile = {
+    ...importedProfile,
+    models: Array.from({ length: 7 }, (_, index) => ({
+      ref: `model-${index}`,
+      modelId: `opaque-${index}`,
+      name: `Test model ${index}`,
+    })),
+  };
+  await mocks.store.set("llm.providers", [profile]);
+  render(<LlmPresetsPane />);
+  fireEvent.click(screen.getByRole("button", { name: /fixture.*7 models/ }));
+  openModels();
+  const search = screen.getByRole("searchbox", {
+    name: /Search models by name/,
+  });
+  fireEvent.change(search, { target: { value: "TEST MODEL 6" } });
+  expect(screen.getByText("Test model 6")).toBeTruthy();
+  expect(screen.queryByText("Test model 0")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^Clear$/ }));
+  expect(screen.getByText("Test model 0")).toBeTruthy();
+  expect(mocks.store.get<ProviderModelProfile[]>("llm.providers")).toEqual([
+    profile,
+  ]);
+});
 
 function chooseImport(text: Promise<string>) {
   const file = new File([], "synthetic-providers.json", {

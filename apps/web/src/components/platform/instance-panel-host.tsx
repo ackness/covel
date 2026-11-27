@@ -234,6 +234,15 @@ export function InstancePluginPanel({
       enabled: !(forbidWebview && spec.webview),
     });
 
+  const effectiveSpec = useMemo(
+    () =>
+      ({
+        ...spec,
+        alwaysRender: spec.alwaysRender ?? (spec.emptyState === undefined),
+      }) as Record<string, unknown>,
+    [spec],
+  );
+
   if (forbidWebview && spec.webview) {
     return (
       <p className="text-xs text-muted-foreground italic">
@@ -249,7 +258,7 @@ export function InstancePluginPanel({
     <PluginPanel
       pluginId={pluginId}
       panelId={panelId ?? spec.id}
-      spec={spec as unknown as Record<string, unknown>}
+      spec={effectiveSpec}
       stateOverride={stateOverride}
       sourcesOverride={sourcesOverride}
       handlers={handlers}

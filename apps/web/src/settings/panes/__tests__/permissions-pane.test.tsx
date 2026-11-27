@@ -38,6 +38,7 @@ const apiMocks = vi.hoisted(() => ({
   isDesktopApp: vi.fn(() => false),
   isOperatorTokenRequired: vi.fn(() => false),
   getOperatorToken: vi.fn(() => undefined),
+  bumpPlatformInstanceDataVersion: vi.fn(),
 }));
 
 vi.mock("@/services/api/permissions.js", () => ({
@@ -65,6 +66,10 @@ vi.mock("@/lib/desktop-bridge.js", () => ({
   isDesktopApp: apiMocks.isDesktopApp,
 }));
 
+vi.mock("@/lib/platform-ui-events.js", () => ({
+  bumpPlatformInstanceDataVersion: apiMocks.bumpPlatformInstanceDataVersion,
+}));
+
 vi.mock("@/services/api/health.js", () => ({
   isOperatorTokenRequired: apiMocks.isOperatorTokenRequired,
 }));
@@ -80,6 +85,12 @@ vi.mock("../TrustedSourcesCard.js", () => ({
 vi.mock("../OperatorAccessPane.js", () => ({
   OperatorAccessPane: () => <div>Operator access stub</div>,
 }));
+
+function openTab(name: RegExp | string) {
+  const tab = screen.getByRole("tab", { name });
+  fireEvent.mouseDown(tab);
+  fireEvent.click(tab);
+}
 
 function buildSnapshot(options?: {
   form?: "personal" | "browser-private" | "hosted";
@@ -145,6 +156,7 @@ const COMMUNITY_CODE_PLUGIN: PermissionPluginSummary = {
   contentDigest: "sha256-abc123def456",
   integrity: "no-receipt",
   trustedSource: false,
+  sourceAutoApproved: false,
   capabilities: {
     serverCode: true,
     http: [{ origin: "https://api.example.com", methods: ["POST"] }],
@@ -162,6 +174,59 @@ const COMMUNITY_CODE_PLUGIN: PermissionPluginSummary = {
   effectiveCapabilities: emptyEffective(),
 };
 
+const providerCapabilities: NonNullable<
+  PermissionPluginSummary["capabilities"]
+> = {
+  serverCode: true,
+  instanceScope: true,
+  providerSources: ["bridge"],
+  flows: ["oauth-sign-in"],
+  appActions: ["list-accounts"],
+  secrets: true,
+  authProxy: true,
+  loopbackCallback: { path: "/auth/callback", ports: [1455] },
+  http: [{ origin: "https://auth.example.com", methods: ["POST"] }],
+  hooks: [],
+  tools: [],
+  services: [],
+  actions: [],
+  wires: [],
+  extensions: [],
+  forms: [],
+  datasets: [],
+};
+
+const INSTANCE_PROVIDER_PLUGIN: PermissionPluginSummary = {
+  pluginId: "provider-bridge",
+  name: { en: "Provider Bridge" },
+  version: "0.1.1",
+  source: "community",
+  executionMode: "code",
+  tier: 3,
+  contentDigest: "sha256-provider789",
+  integrity: "verified",
+  trustedSource: true,
+  sourceAutoApproved: false,
+  capabilities: providerCapabilities,
+  grantStatus: "valid",
+  grant: {
+    pluginId: "provider-bridge",
+    version: "0.1.1",
+    contentDigest: "sha256-provider789",
+    grantedCapabilities: providerCapabilities,
+    decisions: { "plugin.communityCode": "allow" },
+    grantedAt: "2026-11-22T00:00:00.000Z",
+    updatedAt: "2026-11-22T00:00:00.000Z",
+  },
+  effectiveCapabilities: emptyEffective({
+    "plugin.communityCode": {
+      ceiling: "enabled",
+      policy: "ask",
+      effective: "allow",
+    },
+  }),
+};
+
 const STALE_PLUGIN: PermissionPluginSummary = {
   pluginId: "stale-plugin",
   name: { en: "Stale Plugin" },
@@ -172,6 +237,7 @@ const STALE_PLUGIN: PermissionPluginSummary = {
   contentDigest: "sha256-new999",
   integrity: "verified",
   trustedSource: true,
+  sourceAutoApproved: false,
   capabilities: {
     serverCode: true,
     http: [],
@@ -249,6 +315,7 @@ describe("PermissionsPane", () => {
     render(<PermissionsPane />);
 
     expect(await screen.findByText("Personal")).toBeTruthy();
+    openTab(/Policy & sources/);
     expect(
       screen.queryByText("Desktop shell security boundaries (read-only)"),
     ).toBeNull();
@@ -283,6 +350,7 @@ describe("PermissionsPane", () => {
         "compute.sandboxWorker": "deny",
       }),
     );
+    expect(apiMocks.bumpPlatformInstanceDataVersion).toHaveBeenCalled();
   });
 
   it("requires Tier 3 Danger Zone confirmation before saving L3 allow grants and supports revoking stale grants", async () => {
@@ -315,6 +383,7 @@ describe("PermissionsPane", () => {
         },
       ),
     );
+    expect(apiMocks.bumpPlatformInstanceDataVersion).toHaveBeenCalled();
 
     const staleHeading = screen.getByText("Stale Plugin");
     const staleCard = staleHeading.closest("article")!;
@@ -332,23 +401,120 @@ describe("PermissionsPane", () => {
     );
   });
 
-  it("aggregates diagnostics, manages L4 session grants, and gates desktop security boundaries to Electron", async () => {
+  it.each([false, true])(
+    "distinguishes a matching repository from a verified automatic grant (autoApproved=%s)",
+    async (sourceAutoApproved) => {
+      apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
+      apiMocks.listPermissionPlugins.mockResolvedValue([
+        {
+          ...COMMUNITY_CODE_PLUGIN,
+          trustedSource: true,
+          sourceAutoApproved,
+        },
+      ]);
+      render(<PermissionsPane />);
+      const card = (await screen.findByText("Community Script")).closest(
+        "article",
+      )!;
+      expect(within(card).queryByText("Pending approval (1)") !== null).toBe(
+        !sourceAutoApproved,
+      );
+      expect(within(card).queryByText(/· Trusted source/) !== null).toBe(
+        sourceAutoApproved,
+      );
+    },
+  );
+
+  it("exposes and grants declared instance, provider-source, secret, proxy, and loopback capabilities per plugin", async () => {
+    apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
+    apiMocks.listPermissionPlugins.mockResolvedValue([
+      INSTANCE_PROVIDER_PLUGIN,
+    ]);
+    apiMocks.setPluginGrants.mockResolvedValue(INSTANCE_PROVIDER_PLUGIN);
+
+    render(<PermissionsPane />);
+
+    const heading = await screen.findByText("Provider Bridge");
+    const card = heading.closest("article")!;
+    expect(within(card).getByText("Pending approval (5)")).toBeTruthy();
+
+    // Single-capability toggle updates one declared capability while keeping existing grants.
+    const providerSourceSelect = within(card).getByLabelText(
+      "Provider Bridge · Provider sources",
+    ) as HTMLSelectElement;
+    fireEvent.change(providerSourceSelect, { target: { value: "allow" } });
+    await waitFor(() =>
+      expect(apiMocks.setPluginGrants).toHaveBeenCalledWith("provider-bridge", {
+        decisions: {
+          "plugin.communityCode": "allow",
+          "plugin.providerSource": "allow",
+        },
+        expectedDigest: "sha256-provider789",
+      }),
+    );
+
+    // Batch button grants all 5 remaining declared capabilities in one call.
+    fireEvent.click(
+      within(card).getByRole("button", { name: "Approve remaining (5)" }),
+    );
+    await waitFor(() =>
+      expect(apiMocks.setPluginGrants).toHaveBeenCalledWith("provider-bridge", {
+        decisions: {
+          "plugin.communityCode": "allow",
+          "plugin.instanceScope": "allow",
+          "plugin.providerSource": "allow",
+          "secrets.own": "allow",
+          "net.authProxy": "allow",
+          "net.loopbackCallback": "allow",
+        },
+        expectedDigest: "sha256-provider789",
+      }),
+    );
+    expect(apiMocks.bumpPlatformInstanceDataVersion).toHaveBeenCalled();
+  });
+
+  it("filters routine builtin classification noise, deduplicates diagnostics, and supports search and grouping", async () => {
     apiMocks.isDesktopApp.mockReturnValue(true);
     apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
     apiMocks.listPermissionPlugins.mockResolvedValue([COMMUNITY_CODE_PLUGIN]);
     apiMocks.listInstalledPlugins.mockResolvedValue([
       {
+        id: "affinity",
+        source: "builtin",
+        executionMode: "code",
+        executionDiagnostics: [
+          {
+            file: "PLUGIN.md",
+            field: "contributes.tools",
+            message: "contributes.tools requires server-code authorization.",
+          },
+          {
+            file: "PLUGIN.md",
+            field: "contributes.tools",
+            message: "contributes.tools requires server-code authorization.",
+          },
+        ],
+      } as unknown as PluginSummary,
+      {
         id: "broken-plugin",
+        source: "community",
         hostState: "error",
         error: "SyntaxError in PLUGIN.md",
+        executionMode: "code",
+        executionDiagnostics: [
+          {
+            file: "PLUGIN.md",
+            field: "entry",
+            message: "entry requires server-code authorization.",
+          },
+          {
+            file: "PLUGIN.md",
+            field: "entry",
+            message: "entry requires server-code authorization.",
+          },
+        ],
       } as unknown as PluginSummary,
     ]);
-    apiMocks.getSessionApprovals.mockResolvedValue({
-      items: [],
-      grants: [
-        { pluginId: "community-script", action: "covel:plugin-server-code" },
-      ],
-    });
     apiMocks.getPluginDiagnostics.mockResolvedValue({
       sessionId: "sess-1",
       capturedAt: "2026-11-22T00:00:00.000Z",
@@ -372,25 +538,50 @@ describe("PermissionsPane", () => {
 
     render(<PermissionsPane sessionId="sess-1" />);
 
-    expect(await screen.findByText("SyntaxError in PLUGIN.md")).toBeTruthy();
-    expect(screen.getByText(/probe@1 · probe \(error: timeout\)/)).toBeTruthy();
+    await screen.findByText("Community Script");
+
+    // Desktop boundaries live on the Policy & sources tab.
+    openTab(/Policy & sources/);
     expect(
       screen.getByText("Desktop shell security boundaries (read-only)"),
     ).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
-    await waitFor(() =>
-      expect(apiMocks.revokeSessionApprovals).toHaveBeenCalledWith(
-        "sess-1",
-        "community-script",
+    // Diagnostics tab excludes builtin routine notes and groups by plugin.
+    openTab(/Diagnostics/);
+    expect(
+      screen.queryByText(
+        /contributes\.tools requires server-code authorization/,
       ),
+    ).toBeNull();
+    expect(screen.getByText("SyntaxError in PLUGIN.md")).toBeTruthy();
+    expect(screen.getByText(/probe@1 · probe \(error: timeout\)/)).toBeTruthy();
+    // Duplicate community entry diagnostic collapsed into ×2 count badge.
+    expect(
+      screen.getAllByText(/entry requires server-code authorization/),
+    ).toHaveLength(1);
+    expect(screen.getByText("×2")).toBeTruthy();
+
+    // Search filters diagnostics cleanly.
+    const searchInput = screen.getByPlaceholderText(
+      "Search by plugin, category, or message...",
     );
+    fireEvent.change(searchInput, { target: { value: "SyntaxError" } });
+    expect(screen.getByText("SyntaxError in PLUGIN.md")).toBeTruthy();
+    expect(screen.queryByText(/probe@1 · probe/)).toBeNull();
+
+    // Switch grouping mode to "By category" after clearing search.
+    fireEvent.change(searchInput, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "By category" }));
+    expect(screen.getByRole("button", { name: /Load error/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Service call/ })).toBeTruthy();
   });
 
   it("keeps the Danger Zone confirmation checked when saving persistent grants fails", async () => {
     apiMocks.getPermissionsSnapshot.mockResolvedValue(buildSnapshot());
     apiMocks.listPermissionPlugins.mockResolvedValue([COMMUNITY_CODE_PLUGIN]);
-    apiMocks.setPluginGrants.mockRejectedValueOnce(new Error("digest mismatch"));
+    apiMocks.setPluginGrants.mockRejectedValueOnce(
+      new Error("digest mismatch"),
+    );
 
     render(<PermissionsPane />);
 
@@ -422,9 +613,7 @@ describe("PermissionsPane", () => {
     render(<PermissionsPane sessionId="sess-1" />);
 
     expect(
-      await screen.findByText(
-        "covel:plugin-server-code, covel:event:custom",
-      ),
+      await screen.findByText("covel:plugin-server-code, covel:event:custom"),
     ).toBeTruthy();
     const revokeButtons = screen.getAllByRole("button", { name: "Revoke" });
     expect(revokeButtons).toHaveLength(1);

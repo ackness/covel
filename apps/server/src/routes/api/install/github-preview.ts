@@ -1,3 +1,4 @@
+import { clipPreviewText, packagePreviewLabels } from "./preview-labels.js";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { compileManifestLabels, parseLocaleFile } from "@covel/plugin-loader";
@@ -120,16 +121,12 @@ export function inspectBundle(
   const description = i18nTextSchema.parse(data.description ?? "");
   return {
     id: pluginId,
+    ...packagePreviewLabels(
+      data.displayName ?? data.name,
+      manifest.plugin.tags,
+    ),
     version,
-    description:
-      typeof description === "string"
-        ? description.slice(0, 1000)
-        : Object.fromEntries(
-            Object.entries(description).map(([locale, text]) => [
-              locale,
-              text.slice(0, 1000),
-            ]),
-          ),
+    description: clipPreviewText(description, 1000),
     author: manifest.plugin.author?.name ?? null,
     executionMode,
     hasServerCode,

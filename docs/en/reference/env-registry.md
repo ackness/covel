@@ -487,6 +487,7 @@ This section explains, one by one, the variables whose behavior is more detailed
 - When the desktop app selects the `system` proxy, the backend asks Chromium's system proxy through IPC for each target URL. It then tries the connection in the proxy order that the system returns.
 - Electron injects the internal flag `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`. So ordinary Node IPC or cluster processes do not use this protocol by mistake.
 - `COVEL_SYSTEM_PROXY_URL` supplies a static system proxy address for hosts without dynamic IPC; Electron resolves the proxy for each request URL over IPC.
+- Without the Electron resolver, a backend with no saved proxy choice defaults to `system` mode through `COVEL_SYSTEM_PROXY_URL` when it is set, and to direct otherwise. When the variable is unset, `pnpm dev` passes it the shell's `HTTPS_PROXY`, `ALL_PROXY`, or `HTTP_PROXY`.
 - The proxy is used for the framework's own provider requests, model database updates, and GitHub plugin resolution and download. It does not apply to `fetchWithRetry` of third-party plugins.
 
 ### Model calls

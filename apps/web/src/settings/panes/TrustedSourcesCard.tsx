@@ -52,32 +52,40 @@ export function TrustedSourcesCard() {
     }
   }
   return (
-    <section className="space-y-3 rounded border border-border p-3">
-      <h3 className="text-sm font-semibold">
-        {t("settings.trustedSources.title")}
-      </h3>
-      <p className="text-xs text-muted-foreground">
-        {t("settings.trustedSources.explanation")}
-      </p>
+    <section className="space-y-3 rounded-lg border border-border bg-card/40 p-4">
+      <div className="space-y-1">
+        <h3 className="settings-section-title">
+          {t("settings.trustedSources.title")}
+        </h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {t("settings.trustedSources.explanation")}
+        </p>
+      </div>
       {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
-      <ul className="space-y-1 text-xs">
-        {(entries ?? []).map((entry) => (
-          <li key={entry} className="flex items-center justify-between gap-2">
-            <span>{entry}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={locked}
-              aria-label={t("settings.trustedSources.removeEntry", { entry })}
-              onClick={() =>
-                void save((entries ?? []).filter((value) => value !== entry))
-              }
+      {(entries ?? []).length > 0 && (
+        <ul className="divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60 text-xs">
+          {(entries ?? []).map((entry) => (
+            <li
+              key={entry}
+              className="flex items-center justify-between gap-2 px-3 py-2"
             >
-              {t("settings.trustedSources.remove")}
-            </Button>
-          </li>
-        ))}
-      </ul>
+              <span className="font-mono text-foreground">{entry}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                disabled={locked}
+                aria-label={t("settings.trustedSources.removeEntry", { entry })}
+                onClick={() =>
+                  void save((entries ?? []).filter((value) => value !== entry))
+                }
+              >
+                {t("settings.trustedSources.remove")}
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
       <form
         className="flex flex-wrap items-end gap-2"
         onSubmit={(event) => {
@@ -92,7 +100,7 @@ export function TrustedSourcesCard() {
         }}
       >
         <label
-          className="min-w-0 flex-1 text-xs"
+          className="min-w-0 flex-1 text-xs text-muted-foreground"
           htmlFor="trusted-source-entry"
         >
           {t("settings.trustedSources.entry")}
@@ -104,7 +112,7 @@ export function TrustedSourcesCard() {
               setInput(event.target.value);
               setError(null);
             }}
-            className="mt-1 w-full rounded border border-border bg-transparent p-2 text-sm"
+            className="mt-1 h-9 w-full rounded-md border border-border bg-background px-3 font-mono text-xs text-foreground outline-none focus:ring-1 focus:ring-primary"
             aria-invalid={!!error}
             aria-describedby={error ? "trusted-source-error" : undefined}
           />

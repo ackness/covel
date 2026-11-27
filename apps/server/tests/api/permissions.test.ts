@@ -367,6 +367,16 @@ describe("permissions governance API (/api/permissions/*)", () => {
     });
     await bootServer();
     await seedSession("s-gov");
+    const listedTrust = async () => {
+      const body = await (await req("/api/permissions/plugins")).json();
+      return body.items.find(
+        (item: { pluginId: string }) => item.pluginId === fixtureId,
+      );
+    };
+    expect(await listedTrust()).toMatchObject({
+      trustedSource: true,
+      sourceAutoApproved: true,
+    });
 
     // Sticky deny beats trusted-source even after file changes make digest stale.
     expect(
@@ -383,6 +393,11 @@ describe("permissions governance API (/api/permissions/*)", () => {
     expect((await req(`/api/plugins/${fixtureId}/reload`, "POST")).status).toBe(
       200,
     );
+
+    expect(await listedTrust()).toMatchObject({
+      trustedSource: true,
+      sourceAutoApproved: false,
+    });
 
     const stickyDenied = await req(
       `/api/sessions/s-gov/plugins/${fixtureId}`,
@@ -658,10 +673,9 @@ describe("permissions governance API (/api/permissions/*)", () => {
     // Register helper route before Hono builds its router matcher on first request.
     api!.app.post("/__test-exec-tool", async (c) => {
       const { name } = (await c.req.json()) as { name: string };
-      const res = await c.get("toolExecutor").execute(
-        { toolCallId: `tc-${name}`, name, arguments: "{}" },
-        toolCtx,
-      );
+      const res = await c
+        .get("toolExecutor")
+        .execute({ toolCallId: `tc-${name}`, name, arguments: "{}" }, toolCtx);
       return c.json(res);
     });
     await seedSession("s-bridge", ["bridge-probe"]);
@@ -888,12 +902,16 @@ describe("permissions governance API (/api/permissions/*)", () => {
         })
       ).status,
     ).toBe(200);
-    const rpcDenied = await req("/api/sessions/s-decl-exec/plugin-rpc", "POST", {
-      kind: "runtime",
-      pluginId: fixtureId,
-      runtimeId: fixtureId,
-      payload: {},
-    });
+    const rpcDenied = await req(
+      "/api/sessions/s-decl-exec/plugin-rpc",
+      "POST",
+      {
+        kind: "runtime",
+        pluginId: fixtureId,
+        runtimeId: fixtureId,
+        payload: {},
+      },
+    );
     expect(rpcDenied.status).toBe(403);
     expect(await rpcDenied.json()).toMatchObject({
       code: "capability_denied_by_policy",

@@ -3890,6 +3890,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 列出服务端已加载插件的安全与权限摘要（需要 `server.diagnostics` 权限），返回 `{ "items": [...] }`。社区插件会附带当前计算出的内容摘要、包完整性状态（`verified` / `modified` / `no-receipt` / `unreadable`）、是否命中 `trust.sources`、声明能力结构，以及 `plugin_grants` 记录和授权状态（`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`）。
 
+`sourceAutoApproved` 表示包符合[可信来源的自动批准条件](./plugin-installation.md#可信来源)，不代表最终授权。
+
 #### `PUT /api/permissions/plugins/:pluginId/grants`
 
 为社区插件写入或更新持久化能力授权（需要 `host.config`；若授权把 `plugin.communityCode` 设为 `"allow"`，同时需要 `plugin.community` 动作权限）。
@@ -3928,6 +3930,8 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 - `POST /api/plugins/:pluginId/flows/:flowId/start` / `GET …/runs/:runId` / `POST …/runs/:runId/step` / `DELETE …/runs/:runId`：启动、轮询、推进或取消 `contributes.flows` 声明的 Config Flow 多步骤向导，向导完结时自动刷新对应 `providerSources` 状态并可驱动浏览器设置面板重取摘要。
 - `GET /api/provider-sources`：返回 `{ sources }`，每项为各 `provider.source@1` 的状态、允许协议/模式、关联认证流、只读端点与账号摘要（不含秘密令牌）；`browser-private` / 托管形态禁用 `plugin.providerSource`。
 - `GET /api/provider-sources/:pluginId/:sourceId/usage?account=...`：按插件源和可选 `account` 查询用量或额度，返回 `{ usage }`；L1 天花板禁用时返回 `403 capability_denied`。
+
+插件实例动作、配置向导和 GitHub 安装遇到上游传输故障时，可能返回 `502` 或 `504`，错误码为 `outbound_network_error`。错误详情可包含 `transportCode`、`proxyMode`、`proxyEffective` 和 `systemProxyAvailable`，不包含代理地址或凭据。
 
 ### 插件管理
 
@@ -5577,7 +5581,7 @@ interface SseEnvelope {
 - 文本模型：发一次流式请求，测首字延迟（`ttfbMs`）。
 - 评估模型：发一次评估请求，没有 `ttfbMs`。
 - embedding 模型：发一次向量请求，没有 `ttfbMs`。
-- 每次测试只发一个 HTTP 请求，不做传输层重试。
+- 每次测试只发一个 HTTP 请求，不做传输层重试。测试的等待上限为 60 秒，连接错误或服务商拒绝时可以提前返回。
 
 **响应**
 

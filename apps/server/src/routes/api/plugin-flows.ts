@@ -10,7 +10,8 @@ import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
 import { isCapabilityKey } from "@covel/shared/permissions";
 import { z } from "zod";
-import { errorBody } from "../../api-error.js";
+import { errorBody, logRequestError } from "../../api-error.js";
+import { toOutboundNetworkErrorResponse } from "../../lib/outbound-error.js";
 import { accessGuard } from "../../host-profile.js";
 import {
   startLoopbackCallbackSession,
@@ -268,6 +269,11 @@ export function createPluginFlowRoutes(deps: PluginFlowRoutesDeps): Hono {
         errorBody(error.message, { code: error.code }),
         error.status,
       );
+    }
+    const network = toOutboundNetworkErrorResponse(error);
+    if (network) {
+      logRequestError(c, "[plugin-flows] Outbound network error", error);
+      return c.json(network.body, network.status);
     }
     throw error;
   }

@@ -793,3 +793,47 @@ it.each([true, false])(
     );
   },
 );
+
+it("includes displayName and tags in preview items and maps outbound fetch failures to 502", async () => {
+  archives[`example/pack@${sha}`] = await zip(
+    {
+      "plugins/codex-auth/package.json": JSON.stringify({
+        name: "codex-auth",
+        version: "0.1.1",
+        type: "module",
+      }),
+      "plugins/codex-auth/PLUGIN.md": [
+        "---",
+        "id: codex-auth",
+        "displayName: OpenAI Codex",
+        "description: Connect ChatGPT subscription.",
+        "tags: [provider, openai, codex]",
+        "---",
+        "",
+      ].join("\n"),
+      ...worldFiles("barrow"),
+    },
+    "pack-commit",
+  );
+  const result = await preview();
+  const pluginItem = result.items.find((item) => item.id === "codex-auth");
+  const worldItem = result.items.find((item) => item.id === "barrow");
+  expect(pluginItem?.displayName).toBe("OpenAI Codex");
+  expect(pluginItem?.tags).toEqual(["provider", "openai", "codex"]);
+  expect(worldItem?.displayName).toEqual({ "en-US": "Barrow", "zh-CN": "古冢" });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error("socket reset"), { code: "ECONNRESET" }),
+      });
+    }),
+  );
+  const failed = await request("github/preview", { url: repo });
+  expect(failed.status).toBe(502);
+  expect(await failed.json()).toMatchObject({
+    code: "outbound_network_error",
+    details: { transportCode: "ECONNRESET" },
+  });
+});

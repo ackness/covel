@@ -7,17 +7,29 @@ import {
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
-async function openProviderSettings(page: Page) {
+async function openProviderSettings(
+  page: Page,
+  entries: Record<string, unknown> = {},
+) {
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
+    ...entries,
   });
   await page.goto("/session");
   await openAppSettings(page);
   const dialog = page.getByRole("dialog");
-  await dialog
-    .getByRole("button", { name: "Providers & keys", exact: true })
-    .click();
+  const mobileNav = dialog.getByRole("combobox", {
+    name: "Settings",
+    exact: true,
+  });
+  if (await mobileNav.isVisible()) {
+    await mobileNav.selectOption({ label: "Providers & keys" });
+  } else {
+    await dialog
+      .getByRole("button", { name: "Providers & keys", exact: true })
+      .click();
+  }
   return dialog;
 }
 
@@ -25,6 +37,58 @@ async function savedEntries(page: Page) {
   return page.evaluate(
     () => JSON.parse(localStorage.getItem("covel:settings")!).entries,
   );
+}
+
+for (const width of [1280, 390]) {
+  test(`expanded probe errors fit under the model row at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const modelId = "test-responses-model";
+    const error = `Connect Timeout Error (${"upstream-host.example/".repeat(12)})`;
+    await page.route("**/api/ai/ping", (route) =>
+      route.fulfill({
+        json: { ok: false, latencyMs: 10_000, errorKind: "timeout", error },
+      }),
+    );
+    const settings = await openProviderSettings(page, {
+      "llm.providers": [
+        {
+          id: "probe-fixture",
+          name: "Probe fixture",
+          baseUrl: "https://example.invalid/v1",
+          protocol: "openai-responses-v1",
+          models: [{ ref: "probe-model", modelId }],
+        },
+      ],
+    });
+    await settings
+      .getByRole("button", { name: /probe-fixture.*1 model/i })
+      .click();
+    await settings.getByRole("tab", { name: /^Models\b/ }).click();
+    const row = settings.getByRole("group", { name: modelId, exact: true });
+    const model = row.getByText(modelId, { exact: true });
+    const testButton = row.getByRole("button", { name: "Test", exact: true });
+    const before = (await model.boundingBox())!;
+    await testButton.click();
+    const showDetails = row.getByRole("button", { name: "Show details" });
+    await expect(showDetails).toBeVisible();
+    const detailsId = await showDetails.getAttribute("aria-controls");
+    expect(detailsId).toBeTruthy();
+    await showDetails.click();
+
+    const details = row.locator(`[id=${JSON.stringify(detailsId)}]`);
+    await expect(details).toContainText(error);
+    const after = (await model.boundingBox())!;
+    const button = (await testButton.boundingBox())!;
+    const panel = (await details.boundingBox())!;
+    const bounds = (await row.boundingBox())!;
+    expect(after.width).toBeGreaterThanOrEqual(before.width);
+    expect(after.height).toBe(before.height);
+    expect(panel.y).toBeGreaterThanOrEqual(button.y + button.height);
+    expect(panel.width).toBeGreaterThan(bounds.width * 0.75);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+  });
 }
 
 test("hosted local provider setup shows provider-specific instructions and the browser origin", async ({

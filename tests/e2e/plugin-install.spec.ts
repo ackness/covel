@@ -116,14 +116,16 @@ for (const width of [1280, 390]) {
       name: /^Install \d+ selected$/,
     });
     await expect(install).toBeDisabled();
-    await expect(dialog.getByText(/without a process sandbox/)).toBeVisible();
     expect(installed).toHaveLength(0);
     const firstPackage = dialog.getByRole("checkbox", { name: /example-note/ });
     const secondPackage = dialog.getByRole("checkbox", {
       name: /example-demo/,
     });
-    await expect(firstPackage).toBeChecked();
-    await expect(secondPackage).toBeChecked();
+    await expect(firstPackage).not.toBeChecked();
+    await expect(secondPackage).not.toBeChecked();
+    await firstPackage.check();
+    await secondPackage.check();
+    await expect(dialog.getByText(/without a process sandbox/)).toBeVisible();
     const consent = dialog.getByRole("checkbox", {
       name: "I understand the risks and trust this source.",
     });
@@ -137,12 +139,11 @@ for (const width of [1280, 390]) {
       })
       .check();
     await install.click();
-    await expect(
-      dialog.getByText("Installed; restart the backend to load this plugin."),
-    ).toBeVisible();
+    await dialog.getByRole("tab", { name: "Installed", exact: true }).click();
     await expect(
       dialog.getByRole("button", { name: "Uninstall", exact: true }),
     ).toHaveCount(1);
+    await dialog.getByRole("tab", { name: "GitHub", exact: true }).click();
     await expect(firstPackage).toBeVisible();
     await expect(secondPackage).toHaveCount(0);
     await firstPackage.check();
@@ -151,6 +152,7 @@ for (const width of [1280, 390]) {
     await expect(consent).not.toBeChecked();
     await consent.check();
     await install.click();
+    await dialog.getByRole("tab", { name: "Installed", exact: true }).click();
     await expect(
       dialog.getByRole("button", { name: "Uninstall", exact: true }),
     ).toHaveCount(2);
@@ -160,7 +162,9 @@ for (const width of [1280, 390]) {
       "example-demo",
       "example-note",
     ]);
-    await expect(dialog.getByText(/Plugin or world files changed/)).toBeVisible();
+    await expect(
+      dialog.getByText(/Plugin or world files changed/),
+    ).toBeVisible();
     expect(
       await dialog.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,

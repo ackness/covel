@@ -11,6 +11,7 @@ import {
   capabilityCeilingSchema,
   capabilityKeySchema,
   capabilityPolicyModeSchema,
+  derivePluginRequestedCapabilities,
   evaluatePluginGrantValidity,
   isCapabilityKey,
   permissionsPolicyFromEnv,
@@ -389,5 +390,90 @@ describe("plugin persistent grants", () => {
     expect(
       pluginGrantDecisionFor(escalatedStatus, sampleGrant, "secrets.own"),
     ).toBe("deny");
+  });
+
+  it("derives requested capability keys from the tier and current declarations", () => {
+    const providerCaps = pluginCapabilitiesSchema.parse({
+      serverCode: true,
+      instanceScope: true,
+      providerSources: ["codex"],
+      secrets: true,
+      authProxy: true,
+      loopbackCallback: { path: "/auth/callback", ports: [1455] },
+      http: [
+        { origin: "https://auth.openai.com", methods: ["POST"] },
+        { origin: "https://chatgpt.com", methods: ["GET", "POST"] },
+      ],
+      hooks: [],
+      tools: [],
+      actions: [],
+      services: [],
+      wires: [],
+      extensions: [],
+      forms: [],
+      datasets: [],
+    });
+
+    expect(
+      derivePluginRequestedCapabilities({
+        tier: 3,
+        capabilities: providerCaps,
+      }),
+    ).toEqual([
+      "plugin.communityCode",
+      "plugin.instanceScope",
+      "plugin.providerSource",
+      "secrets.own",
+      "net.httpDeclared",
+      "net.authProxy",
+      "net.loopbackCallback",
+    ]);
+
+    const declarativeCaps = pluginCapabilitiesSchema.parse({
+      serverCode: false,
+      http: [],
+      hooks: [],
+      tools: [],
+      actions: [],
+      services: [],
+      wires: [],
+      extensions: [],
+      forms: [],
+      datasets: [],
+    });
+
+    expect(
+      derivePluginRequestedCapabilities({
+        tier: 0,
+        capabilities: declarativeCaps,
+      }),
+    ).toEqual(["plugin.declarative"]);
+
+    const bridgeAndWorkerCaps = pluginCapabilitiesSchema.parse({
+      serverCode: true,
+      scheduler: true,
+      sandboxWorker: true,
+      http: [],
+      hooks: [],
+      tools: [],
+      actions: [],
+      services: [],
+      wires: [],
+      extensions: ["channel.bridge@1/discord"],
+      forms: [],
+      datasets: [],
+    });
+
+    expect(
+      derivePluginRequestedCapabilities({
+        tier: 3,
+        capabilities: bridgeAndWorkerCaps,
+      }),
+    ).toEqual([
+      "compute.sandboxWorker",
+      "plugin.communityCode",
+      "channel.bridge",
+      "app.scheduler",
+    ]);
   });
 });

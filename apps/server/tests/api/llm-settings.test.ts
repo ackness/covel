@@ -706,6 +706,41 @@ describe("connection test by model kind and failure", () => {
       },
     });
 
+  it("waits up to one minute for a provider to respond", async () => {
+    vi.useFakeTimers();
+    try {
+      const { app, presetRegistry } = setup({ apiKeys: { groq: "test-key" } });
+      addGroqPreset(presetRegistry);
+      const dispatched = Promise.withResolvers<AbortSignal>();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn((_url: string, { signal }: { signal: AbortSignal }) => {
+          dispatched.resolve(signal);
+          return new Promise<Response>((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            });
+          });
+        }),
+      );
+      const response = ping(app, { presetId: "slot-groq" });
+      const signal = await dispatched.promise;
+
+      await vi.advanceTimersByTimeAsync(59_999);
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal.aborted).toBe(true);
+      expect(await (await response).json()).toMatchObject({
+        ok: false,
+        latencyMs: 60_000,
+        errorKind: "timeout",
+        error: "Provider did not return any content within 60s",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("sends one request and names the kind of a provider's refusal", async () => {
     const { app, presetRegistry } = setup({ apiKeys: { groq: "test-key" } });
     addGroqPreset(presetRegistry);
@@ -851,9 +886,8 @@ it.each(["saved-key", "external-key"])(
 it("redacts server baseUrl, source, and account in /api/ai/ping and /api/ai/models without server.diagnostics", async () => {
   const { Hono } = await import("hono");
   const { readRuntimeEnv } = await import("@covel/shared");
-  const { hostProfileMiddleware, resolveHostProfile } = await import(
-    "../../src/host-profile.js"
-  );
+  const { hostProfileMiddleware, resolveHostProfile } =
+    await import("../../src/host-profile.js");
 
   const unsupported = async (): Promise<never> => {
     throw new Error("unused");

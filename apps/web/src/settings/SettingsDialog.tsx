@@ -30,6 +30,10 @@ import {
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
+  clearSettingsNavigation,
+  usePlatformUiState,
+} from "@/lib/platform-ui-events.js";
+import {
   PluginSettingsSectionPane,
   type PluginSettingsSectionTarget,
 } from "@/components/platform/plugin-settings-sections.js";
@@ -98,6 +102,7 @@ export function SettingsDialog({
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage ?? i18n.language;
   const { settingsSection } = usePlatformUiSpecs(open);
+  const { pendingSettingsNavigation } = usePlatformUiState();
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
   const [storeRevision, setStoreRevision] = useState(0);
@@ -246,6 +251,15 @@ export function SettingsDialog({
     }
   }, [open, initialKey, tree, filtered, firstSelectable, selected]);
 
+  useEffect(() => {
+    if (!open || !pendingSettingsNavigation) return;
+    const target = resolveSettingsNode(tree, pendingSettingsNavigation.nodeId);
+    clearSettingsNavigation(pendingSettingsNavigation.key);
+    if (!target) return;
+    setQuery("");
+    setSelected(target.id);
+  }, [open, pendingSettingsNavigation, tree]);
+
   const selectedNode: NavNode | null =
     filtered.find((n) => n.id === selected) ?? firstSelectable ?? null;
 
@@ -370,7 +384,7 @@ export function SettingsDialog({
                   {t("settings.loadFailedReadOnly")}
                 </p>
               )}
-              {renderPane(selectedNode, t, pluginSections)}
+              {renderPane(selectedNode, t, pluginSections, setSelected)}
             </div>
           </section>
         </div>
@@ -408,6 +422,7 @@ function renderPane(
   node: NavNode | null,
   t: TranslateFn,
   pluginSections?: ReadonlyMap<string, PluginSettingsSectionTarget>,
+  onNavigate?: (nodeId: string) => void,
 ) {
   if (!node) {
     return (
@@ -421,7 +436,8 @@ function renderPane(
     return <PluginSettingsSectionPane section={dynamicSection} />;
   }
   if (node.id === "llm.slots") return <LlmSlotsPane />;
-  if (node.id === "llm.providers") return <LlmPresetsPane />;
+  if (node.id === "llm.providers")
+    return <LlmPresetsPane onNavigate={onNavigate} />;
   if (node.id === "llm.advanced")
     return (
       <>
@@ -489,7 +505,8 @@ function renderPane(
         <PermissionsPane />
       </>
     );
-  if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
+  if (node.id === PACKAGES_NODE_ID)
+    return <PackagesPane onNavigate={onNavigate} />;
   if (node.kind === "plugin")
     return (
       <>

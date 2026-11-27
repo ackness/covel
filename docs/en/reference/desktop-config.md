@@ -57,8 +57,8 @@ schema_version = 1
 # data_root = "/Volumes/External/covel-data"
 
 [network]
-# direct | system | http | socks
-proxy_mode = "direct"
+# system | direct | http | socks (desktop defaults to system: follows OS proxy / PAC, connects directly when none is set)
+proxy_mode = "system"
 # HTTP(S) example: http://127.0.0.1:7890
 # SOCKS5 example:  socks5://127.0.0.1:7891
 # proxy_url = "http://127.0.0.1:7890"
@@ -98,8 +98,9 @@ A proxy URL may contain `user:password@host`, so the file is tightened to mode `
 - Model-database updates from GitHub.
 - Resolving and downloading plugins from GitHub.
 - The desktop app version check.
+- Plugin authentication/provider requests on desktop explicitly granted the `net.authProxy` capability (such as OAuth or device-code sign-in).
 
-A third-party plugin's `fetchWithRetry` does not use the proxy. It stays direct and pins its DNS result strictly, so remote DNS on the proxy side cannot bypass the plugin's network limits.
+An ordinary third-party plugin's `fetchWithRetry` does not use the proxy. It stays direct and pins its DNS result strictly, so remote DNS on the proxy side cannot bypass the plugin's network limits.
 
 ## New-version prompt
 

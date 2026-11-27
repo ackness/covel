@@ -4,6 +4,7 @@ import {
   pluginCapabilitiesSchema,
   type PluginCapabilities,
 } from "../schemas/trusted-sources.js";
+import { isLoopbackBaseUrl } from "../utils/provider-defaults.js";
 import {
   CAPABILITY_CATALOG,
   CAPABILITY_KEYS,
@@ -115,4 +116,62 @@ export function pluginGrantDecisionFor(
   if (explicit === "deny") return "deny";
   if (status === "valid" && explicit === "allow") return "allow";
   return "unset";
+}
+
+/**
+ * Derive the ordered, deduplicated set of host capabilities relevant to a
+ * plugin from its execution tier and current capability declarations.
+ */
+export function derivePluginRequestedCapabilities(input: {
+  readonly tier: 0 | 3;
+  readonly capabilities: PluginCapabilities | null | undefined;
+}): readonly CapabilityKey[] {
+  const { tier, capabilities } = input;
+  const keys = new Set<CapabilityKey>();
+
+  if (tier === 0) {
+    keys.add("plugin.declarative");
+  }
+  if (tier === 3 || capabilities?.serverCode) {
+    keys.add("plugin.communityCode");
+  }
+  if (capabilities) {
+    if (capabilities.instanceScope) {
+      keys.add("plugin.instanceScope");
+    }
+    if ((capabilities.providerSources?.length ?? 0) > 0) {
+      keys.add("plugin.providerSource");
+    }
+    if (capabilities.secrets) {
+      keys.add("secrets.own");
+    }
+    if (capabilities.authProxy) {
+      keys.add("net.authProxy");
+    }
+    if (capabilities.loopbackCallback) {
+      keys.add("net.loopbackCallback");
+    }
+    if (capabilities.scheduler) {
+      keys.add("app.scheduler");
+    }
+    if (capabilities.sandboxWorker) {
+      keys.add("compute.sandboxWorker");
+    }
+    if (
+      capabilities.extensions.some((ext) =>
+        ext.startsWith("channel.bridge@1/"),
+      ) ||
+      capabilities.services.some((svc) => svc.startsWith("channel.bridge@1"))
+    ) {
+      keys.add("channel.bridge");
+    }
+    if (capabilities.http.length > 0) {
+      keys.add("net.httpDeclared");
+      if (capabilities.http.some((item) => isLoopbackBaseUrl(item.origin))) {
+        keys.add("network.localModels");
+      }
+    }
+  }
+
+  return CAPABILITY_KEYS.filter((key) => keys.has(key));
 }

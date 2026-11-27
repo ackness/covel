@@ -6,8 +6,9 @@ import type {
   ConfigFlowRunSnapshot,
   ConfigFlowStep,
 } from "@covel/shared/platform";
-import { Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
+import { OutboundNetworkErrorBanner } from "@/components/shared/outbound-network-error-banner.js";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,13 @@ import {
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { openExternalUrl } from "@/lib/desktop-bridge.js";
 import {
+  parseOutboundNetworkError,
+  type OutboundNetworkErrorInfo,
+} from "@/lib/outbound-network-error.js";
+import {
   bumpPlatformInstanceDataVersion,
   closePluginConfigFlow,
+  requestSettingsNavigation,
   usePlatformUiState,
 } from "@/lib/platform-ui-events.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -242,6 +248,83 @@ function FormStepView({
   );
 }
 
+function useCopyToClipboard() {
+  const { t } = useTranslation();
+  return (text: string, successMessage: string) => {
+    const fail = () =>
+      emitToast(
+        "error",
+        t("platform.copyFailed", "Could not copy to clipboard"),
+      );
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) {
+      fail();
+      return;
+    }
+    void clipboard
+      .writeText(text)
+      .then(() => emitToast("info", successMessage))
+      .catch(fail);
+  };
+}
+
+/**
+ * An authorization or verification link the user can open here or copy to
+ * another browser (another profile, device, or a signed-in session).
+ */
+function ExternalLinkActions({
+  url,
+  openLabel,
+}: {
+  readonly url: string;
+  readonly openLabel: string;
+}) {
+  const { t } = useTranslation();
+  const copy = useCopyToClipboard();
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={() => {
+            void openExternalUrl(url).then((ok) => {
+              if (!ok) {
+                emitToast(
+                  "error",
+                  t(
+                    "platform.openExternalFailed",
+                    "Could not open external URL",
+                  ),
+                );
+              }
+            });
+          }}
+        >
+          <ExternalLink className="h-4 w-4" />
+          {openLabel}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="gap-2"
+          onClick={() => copy(url, t("platform.linkCopied", "Link copied"))}
+        >
+          <Copy className="h-4 w-4" />
+          {t("platform.copyLink", "Copy link")}
+        </Button>
+      </div>
+      <p
+        title={url}
+        className="truncate rounded-(--radius-control) bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground select-all"
+      >
+        {url}
+      </p>
+    </div>
+  );
+}
+
 function BrowserStepView({
   step,
   submitting,
@@ -260,24 +343,10 @@ function BrowserStepView({
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <Button
-        type="button"
-        variant="outline"
-        className="gap-2"
-        onClick={() => {
-          void openExternalUrl(step.authorizeUrl).then((ok) => {
-            if (!ok) {
-              emitToast(
-                "error",
-                t("platform.openExternalFailed", "Could not open external URL"),
-              );
-            }
-          });
-        }}
-      >
-        <ExternalLink className="h-4 w-4" />
-        {t("platform.openInBrowser", "Open authorization page")}
-      </Button>
+      <ExternalLinkActions
+        url={step.authorizeUrl}
+        openLabel={t("platform.openInBrowser", "Open authorization page")}
+      />
       {step.completion !== "paste" && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -345,6 +414,7 @@ function DeviceStepView({
   readonly onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  const copy = useCopyToClipboard();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 rounded-(--radius-control) border border-border bg-muted/40 px-4 py-3">
@@ -356,45 +426,18 @@ function DeviceStepView({
           variant="ghost"
           size="sm"
           className="gap-1.5"
-          onClick={() => {
-            const clipboard = navigator.clipboard;
-            if (!clipboard?.writeText) {
-              emitToast(
-                "error",
-                t("platform.copyFailed", "Could not copy to clipboard"),
-              );
-              return;
-            }
-            void clipboard
-              .writeText(step.userCode)
-              .then(() => {
-                emitToast("info", t("platform.codeCopied", "Code copied"));
-              })
-              .catch(() => {
-                emitToast(
-                  "error",
-                  t("platform.copyFailed", "Could not copy to clipboard"),
-                );
-              });
-          }}
+          onClick={() =>
+            copy(step.userCode, t("platform.codeCopied", "Code copied"))
+          }
         >
           <Copy className="h-3.5 w-3.5" />
           {t("common.copy", "Copy")}
         </Button>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="gap-2"
-        onClick={() =>
-          void openExternalUrl(
-            step.verificationUriComplete ?? step.verificationUri,
-          )
-        }
-      >
-        <ExternalLink className="h-4 w-4" />
-        {t("platform.openVerificationPage", "Open verification page")}
-      </Button>
+      <ExternalLinkActions
+        url={step.verificationUriComplete ?? step.verificationUri}
+        openLabel={t("platform.openVerificationPage", "Open verification page")}
+      />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         <span>
@@ -571,6 +614,9 @@ export function ConfigFlowDialog() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [outboundError, setOutboundError] =
+    useState<OutboundNetworkErrorInfo | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [callbackInput, setCallbackInput] = useState("");
   const [importContent, setImportContent] = useState("");
@@ -631,6 +677,7 @@ export function ConfigFlowDialog() {
     if (!activeConfigFlow) {
       setRun(null);
       setErrorMessage(null);
+      setOutboundError(null);
       setLoading(false);
       setSubmitting(false);
       resetStepInputs();
@@ -639,6 +686,7 @@ export function ConfigFlowDialog() {
     let cancelled = false;
     setRun(null);
     setErrorMessage(null);
+    setOutboundError(null);
     setLoading(true);
     setSubmitting(false);
     resetStepInputs();
@@ -663,7 +711,14 @@ export function ConfigFlowDialog() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setErrorMessage(err instanceof Error ? err.message : String(err));
+          const parsed = parseOutboundNetworkError(err);
+          if (parsed) {
+            setOutboundError(parsed);
+            setErrorMessage(null);
+          } else {
+            setOutboundError(null);
+            setErrorMessage(err instanceof Error ? err.message : String(err));
+          }
         }
       })
       .finally(() => {
@@ -686,7 +741,7 @@ export function ConfigFlowDialog() {
         );
       }
     };
-  }, [flowKey]);
+  }, [flowKey, attempt]);
 
   const step = run?.step;
   const stepKind = step?.kind;
@@ -782,6 +837,7 @@ export function ConfigFlowDialog() {
       activeRunRef.current?.runId !== expectedRunId;
     setSubmitting(true);
     setErrorMessage(null);
+    setOutboundError(null);
     try {
       const res = await stepPluginConfigFlow(
         activeConfigFlow.pluginId,
@@ -793,7 +849,14 @@ export function ConfigFlowDialog() {
       applyRun(res.run);
     } catch (err) {
       if (isStaleRun()) return;
-      setErrorMessage(err instanceof Error ? err.message : String(err));
+      const parsed = parseOutboundNetworkError(err);
+      if (parsed) {
+        setOutboundError(parsed);
+        setErrorMessage(null);
+      } else {
+        setOutboundError(null);
+        setErrorMessage(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       if (activeFlowKeyRef.current === expectedFlowKey) {
         setSubmitting(false);
@@ -817,7 +880,8 @@ export function ConfigFlowDialog() {
         if (!open) void dismiss();
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      {/* A fixed column stops long links or step content from widening the dialog. */}
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? (
@@ -836,6 +900,18 @@ export function ConfigFlowDialog() {
               {t("platform.flowLoading", "Starting configuration flow...")}
             </span>
           </div>
+        )}
+
+        {outboundError && (
+          <OutboundNetworkErrorBanner
+            info={outboundError}
+            disabled={loading || submitting}
+            onRetry={!run ? () => setAttempt((count) => count + 1) : undefined}
+            onOpenProxySettings={() => {
+              void dismiss();
+              requestSettingsNavigation("desktop");
+            }}
+          />
         )}
 
         {errorMessage && (
@@ -925,6 +1001,19 @@ export function ConfigFlowDialog() {
               </p>
             )}
             <div className="flex justify-end gap-2 pt-2">
+              {!outboundError &&
+                (!run ||
+                  (step?.kind === "error" && step.retryable !== false)) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={() => setAttempt((count) => count + 1)}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {t("common.retry", "Retry")}
+                  </Button>
+                )}
               <Button type="button" onClick={() => closePluginConfigFlow()}>
                 {t("common.close", "Close")}
               </Button>

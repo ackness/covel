@@ -58,6 +58,7 @@ import {
 } from "../middleware/per-request-llm.js";
 
 const MODEL_LIST_TIMEOUT_MS = 15_000;
+const MODEL_PING_TIMEOUT_MS = 60_000;
 const MODEL_LIST_LIMIT = 2000;
 
 export function createMiscApiRoutes(
@@ -683,7 +684,11 @@ export function createMiscApiRoutes(
       const reportedBaseUrl =
         isClientOverlayPreset && preset.baseUrl
           ? preset.baseUrl
-          : visibleBaseUrl(canReadDiagnostics, preset.provider, effectiveBaseUrl);
+          : visibleBaseUrl(
+              canReadDiagnostics,
+              preset.provider,
+              effectiveBaseUrl,
+            );
       const testedTarget = {
         // Overlay presets carry internal scoped ids — echo the public form.
         presetId: publicId,
@@ -706,16 +711,14 @@ export function createMiscApiRoutes(
       let finalUsage: { inputTokens: number; outputTokens: number } | null =
         null;
 
-      // Safety timeout — a ping that can't even start streaming within 30s is
-      // effectively broken. Without this the endpoint would hang indefinitely
-      // on misconfigured providers (wrong baseUrl, unreachable host, ...).
+      // Bound the provider call, including the wait for its first content.
       timeout = setTimeout(() => {
         if (!aborted) {
           timedOut = true;
           aborted = true;
           abort.abort();
         }
-      }, 30_000);
+      }, MODEL_PING_TIMEOUT_MS);
 
       const relay = getRequestLlmOptions()?.relay;
       const gatewayOptions: import("@covel/ai-provider").GatewayOptions = {
@@ -814,7 +817,7 @@ export function createMiscApiRoutes(
             testedTarget,
           });
         }
-        // Deliberate abort — either a post-TTFB early-stop or our 30s timeout.
+        // Deliberate abort from the caller, the deadline, or the early stop.
       }
       const latencyMs = Date.now() - startedAt;
       if (ttfbMs === null) {
@@ -822,7 +825,7 @@ export function createMiscApiRoutes(
           ok: false,
           latencyMs,
           error: timedOut
-            ? "Provider did not return any content within 30s"
+            ? `Provider did not return any content within ${MODEL_PING_TIMEOUT_MS / 1000}s`
             : "Provider returned no content",
           errorKind: timedOut ? "timeout" : "unknown",
           testedTarget,

@@ -108,11 +108,14 @@ for (const width of [1280, 390]) {
       await dialog
         .getByRole("button", { name: "Install & manage", exact: true })
         .click();
+    await dialog.getByRole("tab", { name: "Installed", exact: true }).click();
     const installedPlugin = dialog
       .getByRole("heading", { name: "Installed plugins", exact: true })
       .locator("..")
       .getByRole("listitem")
-      .filter({ hasText: "example-note · 1.0.0" });
+      .filter({
+        has: page.getByRole("heading", { name: "example-note", exact: true }),
+      });
     await installedPlugin
       .getByRole("button", { name: "Check for updates", exact: true })
       .click();
@@ -155,9 +158,11 @@ for (const width of [1280, 390]) {
       ),
     ).toBeVisible();
     await expect(
-      dialog.getByText("example-note · 1.0.0", { exact: true }),
+      installedPlugin.getByText("v1.0.0", { exact: true }),
     ).toBeVisible();
-    await expect(dialog.getByText(/Plugin or world files changed/)).toBeVisible();
+    await expect(
+      dialog.getByText(/Plugin or world files changed/),
+    ).toBeVisible();
     await installedPlugin
       .getByRole("button", { name: "Cancel pending update", exact: true })
       .click();
@@ -173,6 +178,8 @@ for (const width of [1280, 390]) {
         exact: true,
       }),
     ).toHaveCount(0);
-    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(0);
+    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(
+      0,
+    );
   });
 }

@@ -102,7 +102,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
       return c.json({ items });
     } catch (error) {
       const { status, body } = errorResponse(error);
-      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
     }
   });
 
@@ -178,7 +178,7 @@ export function createGithubInstallRoutes(kind: "plugin" | "world") {
       );
     } catch (error) {
       const { status, body } = errorResponse(error);
-      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
     }
   });
 

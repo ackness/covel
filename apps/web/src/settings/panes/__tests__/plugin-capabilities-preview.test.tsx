@@ -43,3 +43,43 @@ it.each([true, false])(
     ).toBeTruthy();
   },
 );
+
+it("renders v2 instance, provider source, auth flow, and secret capabilities", () => {
+  render(
+    <PluginCapabilitiesPreview
+      preview={{
+        trustedSource: true,
+        capabilities: {
+          serverCode: true,
+          instanceScope: true,
+          providerSources: ["codex"],
+          flows: ["oauth-sign-in", "device-sign-in"],
+          appActions: ["list-accounts"],
+          secrets: true,
+          authProxy: true,
+          loopbackCallback: { path: "/auth/callback", ports: [1455] },
+          http: [{ origin: "https://auth.openai.com", methods: ["POST"] }],
+          hooks: [],
+          tools: [],
+          services: [],
+          actions: [],
+          wires: [],
+          forms: [],
+          extensions: [],
+          datasets: [],
+        },
+      }}
+    />,
+  );
+  expect(screen.getByText("Instance scope: Yes")).toBeTruthy();
+  expect(screen.getByText("Provider sources: codex")).toBeTruthy();
+  expect(
+    screen.getByText("Config / auth flows: oauth-sign-in, device-sign-in"),
+  ).toBeTruthy();
+  expect(screen.getByText("App actions: list-accounts")).toBeTruthy();
+  expect(screen.getByText("Private secret vault: Yes")).toBeTruthy();
+  expect(screen.getByText("Auth proxy network: Yes")).toBeTruthy();
+  expect(
+    screen.getByText("Loopback callback: /auth/callback (1455)"),
+  ).toBeTruthy();
+});

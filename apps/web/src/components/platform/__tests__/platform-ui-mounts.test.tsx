@@ -19,6 +19,7 @@ import {
   usePlatformUiState,
 } from "@/lib/platform-ui-events.js";
 import { ConfigFlowDialog } from "../config-flow-dialog.js";
+import { ApiError } from "@/services/api/request.js";
 import { TopbarStatusBadges } from "../topbar-status-badges.js";
 import { CommandPalette } from "../command-palette.js";
 import { PluginSettingsSectionPane } from "../plugin-settings-sections.js";
@@ -33,12 +34,15 @@ const mocks = vi.hoisted(() => ({
   invokePluginAppAction: vi.fn(),
   fetchPluginInstanceData: vi.fn(),
   openExternalUrl: vi.fn(async () => true),
+  isDesktopApp: vi.fn(() => false),
+  setDesktopProxyConfig: vi.fn(),
   toast: vi.fn(),
 }));
 
 vi.mock("@/lib/desktop-bridge.js", () => ({
   openExternalUrl: mocks.openExternalUrl,
-  isDesktopApp: () => false,
+  isDesktopApp: mocks.isDesktopApp,
+  setDesktopProxyConfig: mocks.setDesktopProxyConfig,
 }));
 
 vi.mock("@/lib/toast-channel.js", () => ({
@@ -59,6 +63,7 @@ vi.mock("@/components/session/plugin-panel.js", () => ({
   PluginPanel: (props: {
     pluginId: string;
     panelId?: string;
+    spec?: Record<string, unknown>;
     stateOverride?: Record<string, unknown>;
     handlers?: Record<
       string,
@@ -67,6 +72,7 @@ vi.mock("@/components/session/plugin-panel.js", () => ({
   }) => (
     <div
       data-testid={`mock-panel-${props.pluginId}-${props.panelId ?? "default"}`}
+      data-always-render={String(props.spec?.alwaysRender)}
     >
       <span data-testid="panel-state">
         {JSON.stringify(props.stateOverride ?? {})}
@@ -319,6 +325,70 @@ describe("Platform v2 Web UI mounts", () => {
     });
   });
 
+  it("copies the browser authorization link without opening a browser", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot({
+        kind: "browser",
+        stepId: "s-auth",
+        title: "Sign in",
+        authorizeUrl: "https://auth.example/start?state=abc",
+        completion: "paste",
+      }),
+    });
+    render(<ConfigFlowDialog />);
+    act(() => {
+      openPluginConfigFlow("demo-platform", "connect");
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        "https://auth.example/start?state=abc",
+      ),
+    );
+    expect(
+      screen.getByText("https://auth.example/start?state=abc"),
+    ).toBeTruthy();
+    expect(mocks.openExternalUrl).not.toHaveBeenCalled();
+  });
+
+  it("copies the device verification link without opening a browser", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot({
+        kind: "device",
+        stepId: "s-dev",
+        title: "Device Verification",
+        userCode: "CODE-42",
+        verificationUri: "https://device.example/verify",
+        verificationUriComplete: "https://device.example/verify?code=CODE-42",
+        intervalSec: 60,
+      }),
+    });
+    render(<ConfigFlowDialog />);
+    act(() => {
+      openPluginConfigFlow("demo-platform", "connect");
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith(
+        "https://device.example/verify?code=CODE-42",
+      ),
+    );
+    expect(mocks.openExternalUrl).not.toHaveBeenCalled();
+  });
+
   it("polls device ConfigFlowDialog step via openExternalUrl until done", async () => {
     mocks.startPluginConfigFlow.mockResolvedValueOnce({
       ok: true,
@@ -516,6 +586,11 @@ describe("Platform v2 Web UI mounts", () => {
     await waitFor(() => {
       expect(screen.getByTestId("panel-state").textContent).toContain("alice");
     });
+    expect(
+      screen
+        .getByTestId("mock-panel-demo-platform-accounts")
+        .getAttribute("data-always-render"),
+    ).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger App Action" }));
     await waitFor(() => {
@@ -837,5 +912,57 @@ describe("Platform v2 Web UI mounts", () => {
         {},
       );
     });
+  });
+
+  it("offers one-click switch to system proxy and retry in ConfigFlowDialog on outbound_network_error", async () => {
+    mocks.isDesktopApp.mockReturnValue(true);
+    mocks.setDesktopProxyConfig.mockResolvedValueOnce({
+      mode: "system",
+      effective: "system",
+      systemAvailable: true,
+    });
+    const networkErr = new ApiError(
+      502,
+      "/api/plugins/openai-codex/flows/device-sign-in/start",
+      JSON.stringify({
+        error: "Upstream network request failed (ECONNRESET)",
+        code: "outbound_network_error",
+        details: {
+          transportCode: "ECONNRESET",
+          proxyMode: "direct",
+          proxyEffective: "direct",
+          systemProxyAvailable: true,
+        },
+      }),
+    );
+    mocks.startPluginConfigFlow
+      .mockRejectedValueOnce(networkErr)
+      .mockResolvedValueOnce({
+        ok: true,
+        run: makeSnapshot({
+          kind: "device",
+          stepId: "await-device",
+          title: "Device Code Sign-In",
+          userCode: "WXYZ-1234",
+          verificationUri: "https://auth.openai.com/codex/device",
+          intervalSec: 5,
+        }),
+      });
+
+    render(<ConfigFlowDialog />);
+    act(() => openPluginConfigFlow("openai-codex", "device-sign-in"));
+
+    await screen.findByText("ECONNRESET");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Use system proxy & retry" }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.setDesktopProxyConfig).toHaveBeenCalledWith({
+        mode: "system",
+      });
+    });
+    expect(await screen.findByText("WXYZ-1234")).toBeTruthy();
+    mocks.isDesktopApp.mockReturnValue(false);
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { describeProviderFailure } from "@/lib/provider-failure-hint.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
+import { openPluginConfigFlow } from "@/lib/platform-ui-events.js";
 import {
   fetchProviderProtocols,
   listProviderModels,
@@ -18,7 +19,7 @@ import {
 import { ImportedModelReasoning } from "./model-reasoning-settings.js";
 import { LocalModelEndpointNote } from "./local-model-endpoint-note.js";
 import { useTranslation } from "react-i18next";
-import { Plus } from "lucide-react";
+import { Plus, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
@@ -33,12 +34,26 @@ import {
   type ProviderDraft,
 } from "./llm-provider-catalog.js";
 
+const PLUGIN_SOURCE_PREFIX = "source:";
+
+export function providerSourceStatusLabel(
+  source: Pick<ProviderSourceSummary, "ready" | "reason">,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (source.ready) return t("settings.providerSourceReady");
+  if (source.reason === "capability_denied") {
+    return t("settings.providerSourceNeedsPermission", "Permission required");
+  }
+  return t("settings.providerSourceNotReady");
+}
+
 export function ProviderDialog({
   open,
   busy,
   error,
   draft,
   providerSources = [],
+  onOpenPermissions,
   onOpenChange,
   onDraftChange,
   onSubmit,
@@ -48,6 +63,7 @@ export function ProviderDialog({
   error: string | null;
   draft: ProviderDraft;
   providerSources?: readonly ProviderSourceSummary[];
+  onOpenPermissions?: () => void;
   onOpenChange: (open: boolean) => void;
   onDraftChange: (draft: ProviderDraft) => void;
   onSubmit: () => void;
@@ -61,6 +77,10 @@ export function ProviderDialog({
   const selectedSource = draft.source
     ? providerSources.find((src) => src.id === draft.source)
     : undefined;
+  const selectedPresetValue = draft.source
+    ? `${PLUGIN_SOURCE_PREFIX}${draft.source}`
+    : knownProviderId;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="ui-scroll max-h-[90dvh] max-w-3xl overflow-y-auto p-4 sm:p-6">
@@ -74,55 +94,144 @@ export function ProviderDialog({
           </DialogDescription>
         </DialogHeader>
         <fieldset disabled={busy} className="min-w-0 space-y-3">
-          {providerSources.length > 0 && (
-            <label className="block space-y-1 text-xs">
-              <span>{t("settings.providerSource")}</span>
-              <select
-                value={draft.source ?? ""}
-                onChange={(event) => {
-                  const nextSourceId = event.target.value;
-                  if (!nextSourceId) {
-                    const {
-                      source: _removedSource,
-                      account: _removedAccount,
-                      ...rest
-                    } = draft;
-                    onDraftChange(rest);
-                    return;
-                  }
+          <label className="block space-y-1 text-xs">
+            <span>{t("settings.providerPreset")}</span>
+            <select
+              value={selectedPresetValue}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value.startsWith(PLUGIN_SOURCE_PREFIX)) {
+                  const sourceId = value.slice(PLUGIN_SOURCE_PREFIX.length);
                   const src = providerSources.find(
-                    (item) => item.id === nextSourceId,
+                    (item) => item.id === sourceId,
                   );
                   if (!src) return;
                   const defaultAccount =
                     src.accounts.find((acc) => acc.isDefault)?.id ??
                     src.accounts[0]?.id;
+                  const prevWasPresetOrSource =
+                    !draft.providerId.trim() ||
+                    Boolean(draft.source) ||
+                    Boolean(knownProviderId);
                   onDraftChange({
                     ...draft,
                     source: src.id,
-                    ...(defaultAccount ? { account: defaultAccount } : {}),
-                    providerId:
-                      draft.providerId.trim() ||
-                      normalizeProviderId(src.sourceId) ||
-                      src.sourceId,
+                    ...(defaultAccount
+                      ? { account: defaultAccount }
+                      : { account: undefined }),
+                    providerId: prevWasPresetOrSource
+                      ? normalizeProviderId(src.sourceId) || src.sourceId
+                      : draft.providerId,
                     baseUrl: src.baseUrl,
                     protocol: src.protocol,
                   });
-                }}
-                className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">{t("settings.providerSourceManual")}</option>
-                {providerSources.map((src) => (
-                  <option key={src.id} value={src.id}>
-                    {resolveDisplayText(src.label, locale)} (
-                    {src.ready
-                      ? t("settings.providerSourceReady")
-                      : t("settings.providerSourceNotReady")}
+                  return;
+                }
+                const {
+                  source: _removedSource,
+                  account: _removedAccount,
+                  ...rest
+                } = draft;
+                const connection = getBuiltinProviderConnection(value);
+                onDraftChange({
+                  ...rest,
+                  providerId: value,
+                  baseUrl: connection?.baseUrl ?? "",
+                  protocol: "",
+                });
+              }}
+              className="w-full rounded-md border border-border bg-background px-2.5 py-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">{t("settings.providerPresetCustom")}</option>
+              {providerSources.length > 0 && (
+                <optgroup
+                  label={t(
+                    "settings.providerPresetPlugin",
+                    "Plugin providers",
+                  )}
+                >
+                  {providerSources.map((src) => (
+                    <option
+                      key={src.id}
+                      value={`${PLUGIN_SOURCE_PREFIX}${src.id}`}
+                    >
+                      {resolveDisplayText(src.label, locale)} (
+                      {providerSourceStatusLabel(src, t)})
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {(["cloud", "local"] as const).map((kind) => (
+                <optgroup
+                  key={kind}
+                  label={t(
+                    kind === "local"
+                      ? "settings.providerPresetLocal"
+                      : "settings.providerPresetCloud",
+                  )}
+                >
+                  {listBuiltinProviderConnections()
+                    .filter(
+                      (connection) =>
+                        (connection.local === true) === (kind === "local"),
                     )
-                  </option>
-                ))}
-              </select>
-            </label>
+                    .map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.label}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          {selectedSource && !selectedSource.ready && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+              <div className="flex min-w-0 items-start gap-2">
+                <ShieldAlert className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                <p className="text-muted-foreground leading-relaxed">
+                  {selectedSource.reason === "capability_denied"
+                    ? t("settings.providerSourcePermissionHint", {
+                        plugin: selectedSource.pluginId,
+                        defaultValue:
+                          "Plugin {{plugin}} does not yet have instance-scope and provider-source permissions. Approve its requested capabilities in Permissions & Security first.",
+                      })
+                    : t("settings.providerSourceSignInHint", {
+                        defaultValue:
+                          "This provider source requires authentication before its credentials can be used.",
+                      })}
+                </p>
+              </div>
+              {selectedSource.reason === "capability_denied" &&
+                onOpenPermissions && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onOpenPermissions}
+                  >
+                    {t(
+                      "settings.providerSourceOpenPermissions",
+                      "Open Permissions & Security",
+                    )}
+                  </Button>
+                )}
+              {selectedSource.reason !== "capability_denied" &&
+                selectedSource.authFlows.length > 0 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      openPluginConfigFlow(
+                        selectedSource.pluginId,
+                        selectedSource.authFlows[0]!,
+                      )
+                    }
+                  >
+                    {t("settings.providerSourceSignIn")}
+                  </Button>
+                )}
+            </div>
           )}
           {selectedSource && selectedSource.accounts.length > 0 && (
             <ProviderSourceAccountSelect
@@ -130,49 +239,6 @@ export function ProviderDialog({
               value={draft.account ?? ""}
               onChange={(account) => onDraftChange({ ...draft, account })}
             />
-          )}
-          {!draft.source && (
-            <label className="block space-y-1 text-xs">
-              <span>{t("settings.providerPreset")}</span>
-              <select
-                value={knownProviderId}
-                onChange={(event) => {
-                  const connection = getBuiltinProviderConnection(
-                    event.target.value,
-                  );
-                  onDraftChange({
-                    ...draft,
-                    providerId: event.target.value,
-                    baseUrl: connection?.baseUrl ?? "",
-                    protocol: "",
-                  });
-                }}
-                className="w-full border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-              >
-                <option value="">{t("settings.providerPresetCustom")}</option>
-                {(["cloud", "local"] as const).map((kind) => (
-                  <optgroup
-                    key={kind}
-                    label={t(
-                      kind === "local"
-                        ? "settings.providerPresetLocal"
-                        : "settings.providerPresetCloud",
-                    )}
-                  >
-                    {listBuiltinProviderConnections()
-                      .filter(
-                        (connection) =>
-                          (connection.local === true) === (kind === "local"),
-                      )
-                      .map((connection) => (
-                        <option key={connection.id} value={connection.id}>
-                          {connection.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                ))}
-              </select>
-            </label>
           )}
           <label className="block space-y-1 text-xs">
             <span>{t("settings.providerIdLabel")}</span>

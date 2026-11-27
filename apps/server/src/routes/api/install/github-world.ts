@@ -1,3 +1,4 @@
+import { packagePreviewLabels } from "./preview-labels.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -80,10 +81,17 @@ export async function inspectWorldBundle(
         "World package contains invalid dimensions or referenced files",
       );
     const localized = z
-      .object({ description: i18nTextSchema.optional() })
+      .object({
+        name: i18nTextSchema.optional(),
+        description: i18nTextSchema.optional(),
+      })
       .safeParse(record.metadata?.[WORLD_LOCALIZED_TEXT_KEY]);
     return {
       id: worldId,
+      ...packagePreviewLabels(
+        localized.data?.name ?? manifest.name ?? record.name,
+        manifest.tags,
+      ),
       version: manifest.version ?? null,
       description: localized.data?.description ?? record.description ?? "",
       author: manifest.author?.name ?? null,

@@ -18,6 +18,7 @@ export {
   type EffectiveCapabilityState,
 } from "./evaluator.js";
 export {
+  derivePluginRequestedCapabilities,
   evaluatePluginGrantValidity,
   pluginCapabilityGrantDecisionSchema,
   pluginGrantDecisionFor,

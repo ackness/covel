@@ -398,6 +398,10 @@ describe("static package validation", () => {
       field: "entry",
       message: "entry requires server-code authorization.",
     });
+    const uniqueKeys = new Set(
+      report.execution.diagnostics.map((d) => `${d.file}\0${d.field ?? ""}`),
+    );
+    expect(uniqueKeys.size).toBe(report.execution.diagnostics.length);
     for (const module of ["entry", "handler", "guard"])
       await expect(
         access(path.join(root, `${module}-executed`)),

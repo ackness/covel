@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type {
@@ -29,8 +29,17 @@ import {
 } from "../llm-reasoning-effort.js";
 
 vi.mock("@/components/shared/ping-button.js", () => ({
-  PingButton: ({ target }: { target: unknown }) => (
-    <output data-testid="ping-target">{JSON.stringify(target)}</output>
+  PingButton: ({
+    target,
+    children,
+  }: {
+    target: unknown;
+    children?: ReactNode;
+  }) => (
+    <>
+      <output data-testid="ping-target">{JSON.stringify(target)}</output>
+      {children}
+    </>
   ),
 }));
 
