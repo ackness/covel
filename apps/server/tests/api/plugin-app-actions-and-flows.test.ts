@@ -1079,4 +1079,118 @@ describe("plugin app actions, declarative config flows, loopback & net.authProxy
       code: "flow_engine_closed",
     });
   });
+
+  it("maps OutboundFetchError in config flows and app actions to 502 outbound_network_error with safe proxy details", async () => {
+    const fetchErr = Object.assign(new TypeError("fetch failed"), {
+      cause: Object.assign(
+        new Error(
+          "Client network socket disconnected before secure TLS connection was established",
+        ),
+        { code: "ECONNRESET" },
+      ),
+    });
+    const origFetch = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        if (url === "https://device.example/usercode") {
+          throw fetchErr;
+        }
+        return origFetch(input, init);
+      },
+    );
+
+    configureOutboundProxy({
+      mode: "direct",
+      systemProxyUrl: "http://secret-user:secret-pass@127.0.0.1:7890",
+    });
+
+    await writePluginDir(
+      userDir,
+      "net-fail-plugin",
+      {
+        apiVersion: 2,
+        scope: "instance",
+        activationEvents: ["onFlow:device-sign-in", "onAppAction:probe"],
+        permissions: {
+          authProxy: true,
+          http: [{ origin: "https://device.example", methods: ["POST"] }],
+        },
+        contributes: {
+          flows: ["device-sign-in"],
+          appActions: ["probe"],
+        },
+        entry: "./server.mjs",
+      },
+      {
+        "server.mjs": `
+          export default function (covel) {
+            covel.registerConfigFlow("device-sign-in", {
+              async start(_input, ctx) {
+                await ctx.http.fetchWithRetry("https://device.example/usercode", {
+                  method: "POST",
+                  proxy: "instance-auth",
+                  maxRetries: 0,
+                });
+                return { kind: "done", title: "ok" };
+              },
+              async step() {
+                return { kind: "done", title: "ok" };
+              },
+            });
+            covel.registerAppAction("probe", async (_input, ctx) => {
+              await ctx.http.fetchWithRetry("https://device.example/usercode", {
+                method: "POST",
+                proxy: "instance-auth",
+                maxRetries: 0,
+              });
+              return { ok: true };
+            });
+          }
+        `,
+      },
+    );
+
+    const booted = await bootServer();
+    await grantPlugin(booted, "net-fail-plugin", {
+      "plugin.communityCode": "allow",
+      "plugin.instanceScope": "allow",
+      "net.authProxy": "allow",
+    });
+
+    const flowRes = await postJson(
+      "/api/plugins/net-fail-plugin/flows/device-sign-in/start",
+    );
+    expect(flowRes.status).toBe(502);
+    const flowBody = await flowRes.json();
+    expect(flowBody).toMatchObject({
+      code: "outbound_network_error",
+      details: {
+        transportCode: "ECONNRESET",
+        proxyMode: "direct",
+        proxyEffective: "direct",
+        systemProxyAvailable: true,
+      },
+    });
+    expect(JSON.stringify(flowBody)).not.toContain("secret-pass");
+
+    const actionRes = await postJson(
+      "/api/plugins/net-fail-plugin/actions/probe",
+    );
+    expect(actionRes.status).toBe(502);
+    expect(await actionRes.json()).toMatchObject({
+      code: "outbound_network_error",
+      details: {
+        transportCode: "ECONNRESET",
+        proxyMode: "direct",
+        systemProxyAvailable: true,
+      },
+    });
+  });
 });

@@ -58,10 +58,12 @@ export const githubPluginSourceSchema = z
 export const githubPluginPreviewSchema = z
   .object({
     id: z.string(),
+    displayName: i18nTextSchema.optional(),
     version: z.string().nullable(),
     description: i18nTextSchema,
     /** Author name from the package manifest; null when it declares none. */
     author: z.string().nullable(),
+    tags: z.array(z.string().max(64)).max(20).optional(),
     executionMode: z.enum(["declarative", "code", "unknown"]),
     hasServerCode: z.boolean(),
     capabilities: pluginCapabilitiesSchema,

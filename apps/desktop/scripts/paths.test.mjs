@@ -60,6 +60,10 @@ test("packaged paths preserve config ownership and missing resource roots", asyn
     assert.equal(resolveTsx(), loader);
     const paths = ensureUserPaths();
     assert.equal(paths.userLlmTomlPath, path.join(home, "llm.toml"));
+    assert.match(
+      await fs.readFile(paths.configTomlPath, "utf8"),
+      /proxy_mode\s*=\s*"system"/,
+    );
     assert.deepEqual(paths.pluginsDirs, [
       path.join(resources, "server/plugins"),
       path.join(home, "plugins"),

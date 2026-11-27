@@ -44,9 +44,14 @@ import { ProviderDetails } from "./llm-provider-details.js";
 import { ModelDialog, ProviderDialog } from "./llm-provider-dialogs.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { SettingsPaneHeader } from "../pane-layout.js";
+import { PERMISSIONS_NODE_ID } from "../navigation.js";
 
 /** Provider catalogue with connection settings and one-to-many model editing. */
-export function LlmPresetsPane() {
+export function LlmPresetsPane({
+  onNavigate,
+}: {
+  readonly onNavigate?: (nodeId: string) => void;
+} = {}) {
   const { notice, show, clear } = usePaneNotice();
   const { t } = useTranslation();
   const { state } = useSession();
@@ -67,6 +72,11 @@ export function LlmPresetsPane() {
     ProviderSourceSummary[]
   >([]);
   const { instanceDataVersion } = usePlatformUiState();
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     void fetchProviderSources()
@@ -79,12 +89,7 @@ export function LlmPresetsPane() {
     return () => {
       cancelled = true;
     };
-  }, [instanceDataVersion]);
-  const [selectedProviderId, setSelectedProviderId] = useState("");
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  }, [instanceDataVersion, providerDialogOpen]);
   const [providerDraft, setProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
   const [modelProtocolDraft, setModelProtocolDraft] = useState("");
@@ -445,6 +450,11 @@ export function LlmPresetsPane() {
                     )
               }
               providerSources={providerSources}
+              onOpenPermissions={
+                onNavigate
+                  ? () => onNavigate(PERMISSIONS_NODE_ID)
+                  : undefined
+              }
               busy={saving || !writable}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
@@ -518,6 +528,14 @@ export function LlmPresetsPane() {
         error={saveError}
         draft={providerDraft}
         providerSources={providerSources}
+        onOpenPermissions={
+          onNavigate
+            ? () => {
+                setProviderDialogOpen(false);
+                onNavigate(PERMISSIONS_NODE_ID);
+              }
+            : undefined
+        }
         onOpenChange={(open) => {
           if (pending.current === 0) setProviderDialogOpen(open);
         }}

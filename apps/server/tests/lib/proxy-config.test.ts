@@ -86,4 +86,18 @@ describe("stored proxy TOML", () => {
     ).toThrow();
     expect(readFileSync(file, "utf-8")).toBe(corrupt);
   });
+
+  it("uses the provided defaultMode when config.toml omits proxy_mode", () => {
+    tempHome = mkdtempSync(join(tmpdir(), "covel-proxy-config-"));
+    writeFileSync(
+      join(tempHome, "config.toml"),
+      "[paths]\ndata_root = '/tmp/covel'\n",
+      "utf-8",
+    );
+
+    expect(readStoredProxyConfig(tempHome)).toEqual({ mode: "direct" });
+    expect(readStoredProxyConfig(tempHome, "system")).toEqual({
+      mode: "system",
+    });
+  });
 });

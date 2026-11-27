@@ -98,6 +98,7 @@ export interface PermissionPluginSummary {
   readonly integrity:
     "builtin" | "verified" | "modified" | "no-receipt" | "unreadable";
   readonly trustedSource: boolean;
+  readonly sourceAutoApproved: boolean;
   readonly capabilities: PluginCapabilities | null;
   readonly grantStatus: PluginGrantStatus | "builtin";
   readonly grant: PluginGrantRecord | null;
@@ -283,6 +284,7 @@ export function createPermissionService({
         contentDigest: null,
         integrity: "builtin",
         trustedSource: false,
+        sourceAutoApproved: false,
         capabilities,
         grantStatus: "builtin",
         grant: null,
@@ -314,6 +316,7 @@ export function createPermissionService({
       contentDigest: inspected?.contentDigest ?? null,
       integrity: trustSummary.integrity,
       trustedSource: trustSummary.trustedSource,
+      sourceAutoApproved: trustSummary.autoApproved,
       capabilities: inspected?.capabilities ?? null,
       grantStatus,
       grant,

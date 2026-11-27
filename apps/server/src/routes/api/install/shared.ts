@@ -15,6 +15,7 @@ import path from "node:path";
 import type { Context } from "hono";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import { errorBody } from "../../../api-error.js";
+import { toOutboundNetworkErrorResponse } from "../../../lib/outbound-error.js";
 import { ZodError } from "zod";
 import { INSTALL_STAGING_PREFIX } from "./package-staging.js";
 
@@ -58,7 +59,7 @@ function isFsErrorCode(err: unknown, ...codes: string[]): boolean {
 
 export function errorResponse(err: unknown): {
   status: number;
-  body: { error: string; details?: unknown };
+  body: { error: string; code?: string; details?: unknown };
 } {
   if (err instanceof ZodError)
     return { status: 400, body: errorBody(err.message) };
@@ -70,6 +71,8 @@ export function errorResponse(err: unknown): {
         body: errorBody(err.message, { details: (err as HttpError).details }),
       };
   }
+  const network = toOutboundNetworkErrorResponse(err);
+  if (network) return network;
   throw err;
 }
 

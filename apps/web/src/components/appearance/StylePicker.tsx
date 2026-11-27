@@ -1,3 +1,5 @@
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button.js";
 import { resolveThemeSelection } from "@/theme-system/selection.js";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
@@ -194,6 +196,8 @@ function LayoutThumbnail({
  * with the layout it asks for; a style with several packages offers them as
  * colourways. Management (import, export, delete) stays in the theme library.
  */
+const VISIBLE_STYLE_COUNT = 6;
+
 export function StylePicker() {
   const { t, i18n } = useTranslation();
   const [preferredAppearance, setAppearance] =
@@ -209,6 +213,19 @@ export function StylePicker() {
     preferredScheme,
   );
   const groups = groupThemes(themes);
+  const [expanded, setExpanded] = useState(false);
+  const gridId = useId();
+  const activeGroup = groups.find((group) =>
+    group.members.some((member) => member.id === appearance),
+  );
+  const showToggle = groups.length > VISIBLE_STYLE_COUNT;
+  const visibleGroups =
+    expanded || !showToggle
+      ? groups
+      : activeGroup &&
+          !groups.slice(0, VISIBLE_STYLE_COUNT).includes(activeGroup)
+        ? [...groups.slice(0, VISIBLE_STYLE_COUNT - 1), activeGroup]
+        : groups.slice(0, VISIBLE_STYLE_COUNT);
   // Show each package in the scheme it would actually open in.
   const previewScheme = (theme: ThemeDefinition): ThemeScheme =>
     theme.schemes.includes(activeScheme)
@@ -228,11 +245,12 @@ export function StylePicker() {
       {/* Style cards are toggle buttons, not radios: each card holds its own
           colourway radio group, and radio groups must not nest. */}
       <div
+        id={gridId}
         role="group"
         aria-label={t("appearance.styleTitle")}
         className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3"
       >
-        {groups.map((group) => {
+        {visibleGroups.map((group) => {
           const active = group.members.find(
             (member) => member.id === appearance,
           );
@@ -354,6 +372,20 @@ export function StylePicker() {
           );
         })}
       </div>
+      {showToggle && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          aria-expanded={expanded}
+          aria-controls={gridId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded
+            ? t("appearance.showFewerStyles")
+            : t("appearance.showAllStyles", { count: groups.length })}
+        </Button>
+      )}
     </div>
   );
 }

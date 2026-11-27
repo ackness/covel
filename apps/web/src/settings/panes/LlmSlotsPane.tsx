@@ -1,3 +1,4 @@
+import { SettingsListFilter, SettingsListSearch } from "../list-controls.js";
 import { useModelCapabilities } from "@/hooks/use-model-capabilities.js";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -59,6 +60,7 @@ export function LlmSlotsPane() {
   >(() => getCapabilityOverrides());
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [unboundOnly, setUnboundOnly] = useState(false);
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reloading, setReloading] = useState(false);
@@ -241,10 +243,19 @@ export function LlmSlotsPane() {
     }
   };
 
+  const isSlotBound = (slotId: string) =>
+    Boolean(slotBindingId(slotConfig[slotId])) ||
+    Boolean(isConfigured && llm?.slots[slotId]);
+  const unboundCount = slots.filter((slotId) => !isSlotBound(slotId)).length;
+  const showUnboundToggle =
+    unboundOnly ||
+    (slots.length > 3 && unboundCount > 0 && unboundCount < slots.length);
   const needle = filter.trim().toLowerCase();
-  const visibleSlots = needle
-    ? slots.filter((slotId) => slotId.toLowerCase().includes(needle))
-    : slots;
+  const visibleSlots = slots.filter((slotId) => {
+    if (unboundOnly && isSlotBound(slotId)) return false;
+    if (needle && !slotId.toLowerCase().includes(needle)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-3">
@@ -359,20 +370,45 @@ export function LlmSlotsPane() {
         </p>
       )}
       {/* A long llm.toml makes this page long; a short one needs no filter. */}
-      {slots.length > FILTER_FROM_SLOT_COUNT && (
-        <input
-          type="search"
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          placeholder={t("settings.slotFilterPlaceholder")}
-          aria-label={t("settings.slotFilterPlaceholder")}
-          className="w-full rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-3 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) sm:w-72"
-        />
+      {(slots.length > FILTER_FROM_SLOT_COUNT ||
+        filter ||
+        showUnboundToggle) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {(slots.length > FILTER_FROM_SLOT_COUNT || filter) && (
+            <SettingsListSearch
+              label={t("settings.slotFilterPlaceholder")}
+              value={filter}
+              onChange={setFilter}
+              className="sm:max-w-72"
+            />
+          )}
+          {showUnboundToggle && (
+            <SettingsListFilter
+              active={unboundOnly}
+              onClick={() => setUnboundOnly((current) => !current)}
+              label={t("settings.slotFilterUnboundOnly", {
+                count: unboundCount,
+              })}
+            />
+          )}
+        </div>
       )}
       {visibleSlots.length === 0 && slots.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {t("settings.slotFilterEmpty")}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-border px-3 py-4 text-xs text-muted-foreground">
+          <p>{t("settings.slotFilterEmpty")}</p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() => {
+              setFilter("");
+              setUnboundOnly(false);
+            }}
+          >
+            {t("settings.github.resetFilters")}
+          </Button>
+        </div>
       )}
       <div aria-busy={savingSlot} className="min-w-0 space-y-3">
         {visibleSlots.map((slotId) => (

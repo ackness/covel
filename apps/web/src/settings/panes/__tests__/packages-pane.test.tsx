@@ -72,6 +72,13 @@ vi.mock("@/lib/desktop-bridge.js", async (importOriginal) => ({
   reloadServerAndWait: vi.fn().mockResolvedValue(true),
 }));
 
+function openTab(key: "tabGithub" | "tabInstalled" | "tabLocal") {
+  fireEvent.keyDown(
+    screen.getByRole("tab", { name: i18n.t(`settings.packages.${key}`) }),
+    { key: "Enter" },
+  );
+}
+
 describe("PackagesPane installed plugin management", () => {
   beforeEach(async () => {
     boot.mockReset();
@@ -139,6 +146,7 @@ describe("PackagesPane installed plugin management", () => {
         }),
       );
       render(<PackagesPane />);
+      openTab("tabInstalled");
       await screen.findByText("Broken plugin");
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
       const restart = await screen.findByRole("button", {
@@ -208,6 +216,7 @@ describe("PackagesPane installed plugin management", () => {
         }),
       );
       render(<PackagesPane />);
+      openTab("tabInstalled");
       await screen.findByText("Broken plugin");
       fireEvent.click(screen.getByRole("button", { name: "Uninstall" }));
       const restart = await screen.findByRole<HTMLButtonElement>("button", {
@@ -320,6 +329,7 @@ describe("PackagesPane installed plugin management", () => {
       }),
     );
     render(<PackagesPane />);
+    openTab("tabInstalled");
     const name = await screen.findByText("Partial plugin");
     const row = name.closest("li")!;
     const warnings = within(row).getByRole("list", {
@@ -372,6 +382,7 @@ describe("PackagesPane installed plugin management", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<PackagesPane />);
+    openTab("tabInstalled");
     const name = await screen.findByText("Broken plugin");
     expect(screen.queryByText("Builtin plugin")).toBeNull();
     const row = name.closest("li");
@@ -429,6 +440,7 @@ describe("PackagesPane installed plugin management", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<PackagesPane />);
+    openTab("tabLocal");
     const zone = (await screen.findByText("World package")).closest("label")!;
     fireEvent.drop(zone, {
       dataTransfer: {
@@ -461,6 +473,7 @@ it("F-090 announces a collection ZIP that installs no packages", async () => {
     }),
   );
   render(<PackagesPane />);
+  openTab("tabLocal");
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.change(screen.getByTestId("install-collection-file-input"), {
     target: {
@@ -478,6 +491,7 @@ it("renders the SillyTavern content importer", async () => {
     vi.fn(async () => Response.json({ items: [] })),
   );
   render(<PackagesPane />);
+  openTab("tabLocal");
   expect(
     await screen.findByText(i18n.t("settings.stImport.title")),
   ).toBeTruthy();
@@ -513,6 +527,7 @@ it("refreshes the installed world list after a SillyTavern world import", async 
     });
   vi.stubGlobal("fetch", fetchMock);
   render(<PackagesPane />);
+  openTab("tabLocal");
   await screen.findByText(i18n.t("settings.stImport.title"));
   const worldLoads = () =>
     fetchMock.mock.calls.filter(([url]) => url === "/api/install/worlds")
@@ -573,6 +588,7 @@ it("offers validation for installed plugins and worlds and disables it during in
     }),
   );
   render(<PackagesPane />);
+  openTab("tabInstalled");
   await screen.findByText("Broken plugin");
   await screen.findByText("sample");
   const buttons = screen.getAllByRole<HTMLButtonElement>("button", {
@@ -580,11 +596,27 @@ it("offers validation for installed plugins and worlds and disables it during in
   });
   expect(buttons).toHaveLength(2);
   expect(buttons.every((button) => !button.disabled)).toBe(true);
+  const search = screen.getByRole("searchbox", {
+    name: /Search installed packages/,
+  });
+  fireEvent.change(search, { target: { value: "broken plugin" } });
+  expect(screen.queryByRole("heading", { name: "sample" })).toBeNull();
+  expect(screen.getByRole("heading", { name: "Broken plugin" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /^World \(1\)$/ }));
+  expect(screen.getByText(/No plugins or worlds match/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+  const visibleValidationButtons = () =>
+    screen.getAllByRole<HTMLButtonElement>("button", { name: "Validate" });
+  expect(visibleValidationButtons()).toHaveLength(2);
+  openTab("tabLocal");
   fireEvent.change(screen.getByTestId("install-world-file-input"), {
     target: { files: [new File(["zip"], "world.zip")] },
   });
+  openTab("tabInstalled");
   await waitFor(() =>
-    expect(buttons.every((button) => button.disabled)).toBe(true),
+    expect(visibleValidationButtons().every((button) => button.disabled)).toBe(
+      true,
+    ),
   );
   finish(
     Response.json({
@@ -595,7 +627,9 @@ it("offers validation for installed plugins and worlds and disables it during in
     }),
   );
   await waitFor(() =>
-    expect(buttons.every((button) => !button.disabled)).toBe(true),
+    expect(visibleValidationButtons().every((button) => !button.disabled)).toBe(
+      true,
+    ),
   );
 });
 
@@ -626,6 +660,7 @@ it.each(["modified", "verified", "no-receipt"] as const)(
     );
     try {
       render(<PackagesPane />);
+      openTab("tabInstalled");
       await screen.findByText("Broken plugin");
       expect(
         !!screen.queryByText(

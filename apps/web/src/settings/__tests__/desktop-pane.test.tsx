@@ -172,6 +172,21 @@ describe("DesktopPane proxy loading", () => {
     ).toBe("http");
   });
 
+  it("explains why the development backend may not expose proxy configuration", async () => {
+    vi.mocked(getDesktopInfo).mockResolvedValue({
+      ...desktopInfoFixture,
+      isDev: true,
+    });
+    bridgeMocks.getDesktopProxyConfig.mockRejectedValue(
+      new Error("Proxy configuration is available only in desktop mode."),
+    );
+    render(<DesktopPane />);
+    await screen.findByText(i18n.t("settings.desktopProxyDevUnavailable"));
+    expect(
+      screen.queryByText(i18n.t("settings.desktopProxySystemDirect")),
+    ).toBeNull();
+  });
+
   it("keeps save disabled after load failure and allows an explicit retry", async () => {
     bridgeMocks.getDesktopProxyConfig
       .mockRejectedValueOnce(new Error("sidecar unavailable"))
@@ -184,6 +199,9 @@ describe("DesktopPane proxy loading", () => {
     render(<DesktopPane />);
     const save = screen.getByRole("button", { name: "Save and apply" });
     await screen.findByText("Could not load proxy settings");
+    expect(
+      screen.queryByText(i18n.t("settings.desktopProxySystemDirect")),
+    ).toBeNull();
     expect((save as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -201,6 +219,11 @@ describe("DesktopPane proxy loading", () => {
 });
 
 it("F-090 reports refresh failures and re-enables the action", async () => {
+  bridgeMocks.getDesktopProxyConfig.mockResolvedValue({
+    mode: "direct",
+    effective: "direct",
+    systemAvailable: false,
+  });
   vi.mocked(getDesktopInfo)
     .mockResolvedValueOnce(null)
     .mockRejectedValueOnce(new Error("offline"));

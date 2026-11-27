@@ -57,8 +57,8 @@ schema_version = 1
 # data_root = "/Volumes/External/covel-data"
 
 [network]
-# direct | system | http | socks
-proxy_mode = "direct"
+# system | direct | http | socks（桌面端默认 system：遵循系统代理 / PAC，未配置系统代理时自动直连）
+proxy_mode = "system"
 # HTTP(S) 示例：http://127.0.0.1:7890
 # SOCKS5 示例：socks5://127.0.0.1:7891
 # proxy_url = "http://127.0.0.1:7890"
@@ -97,8 +97,9 @@ max_files   = 10
 - 从 GitHub 更新模型数据库。
 - 从 GitHub 解析和下载插件。
 - 桌面应用的版本检查。
+- 桌面端经用户显式授权 `net.authProxy` 能力的插件认证与连接请求（如 OAuth / 设备码登录）。
 
-第三方插件的 `fetchWithRetry` 不走代理。它保持直连，并严格固定 DNS 解析结果，避免通过代理端的远程 DNS 绕过插件的网络限制。
+普通第三方插件的 `fetchWithRetry` 不走代理。它保持直连，并严格固定 DNS 解析结果，避免通过代理端的远程 DNS 绕过插件的网络限制。
 
 ## 新版本提示
 

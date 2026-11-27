@@ -10,6 +10,17 @@ import type { GithubCollectionPreview } from "@covel/shared";
 import { GithubCollectionInstaller } from "../GithubCollectionInstaller.js";
 import i18n from "@/i18n";
 
+const desktopMocks = vi.hoisted(() => ({
+  isDesktopApp: vi.fn(() => false),
+  setDesktopProxyConfig: vi.fn(),
+}));
+
+vi.mock("@/lib/desktop-bridge.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/desktop-bridge.js")>()),
+  isDesktopApp: desktopMocks.isDesktopApp,
+  setDesktopProxyConfig: desktopMocks.setDesktopProxyConfig,
+}));
+
 const source = {
   repository: "https://github.com/example/pack",
   commit: "a".repeat(40),
@@ -113,6 +124,8 @@ async function previewWith(result: GithubCollectionPreview) {
 
 beforeEach(async () => {
   await i18n.changeLanguage("en-US");
+  desktopMocks.isDesktopApp.mockReset().mockReturnValue(false);
+  desktopMocks.setDesktopProxyConfig.mockReset();
 });
 afterEach(() => {
   cleanup();
@@ -219,4 +232,162 @@ it("resolves plugin and world descriptions when the UI language changes", async 
   expect(await screen.findByText("中文插件简介")).toBeTruthy();
   expect(await screen.findByText("中文世界简介")).toBeTruthy();
   expect(screen.queryByText("English plugin")).toBeNull();
+});
+
+it("organizes multi-plugin repositories with search, folder filters, installed badges, and quick official repo preview", async () => {
+  const catalog: GithubCollectionPreview = {
+    collection: null,
+    items: [
+      {
+        ...plugin,
+        id: "story-note",
+        displayName: "Story Note Demo",
+        description: "Demo example plugin",
+        tags: ["demo"],
+        source: {
+          ...source,
+          repository: "https://github.com/covel-ai/covel-plugins",
+          path: "examples/story-note",
+        },
+        token: "tok-demo",
+      },
+      {
+        ...plugin,
+        id: "openai-codex",
+        displayName: "OpenAI Codex",
+        description: "ChatGPT subscription provider",
+        tags: ["provider", "codex"],
+        source: {
+          ...source,
+          repository: "https://github.com/covel-ai/covel-plugins",
+          path: "plugins/openai-codex",
+        },
+        token: "tok-codex",
+      },
+      {
+        ...plugin,
+        id: "mimo-tts",
+        displayName: "MiMo TTS",
+        description: "Speech synthesis plugin",
+        tags: ["tts"],
+        source: {
+          ...source,
+          repository: "https://github.com/covel-ai/covel-plugins",
+          path: "plugins/mimo-tts",
+        },
+        token: "tok-tts",
+      },
+    ],
+    problems: [],
+  };
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      expect(url).toBe("/api/install/github/preview");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        url: "https://github.com/covel-ai/covel-plugins",
+      });
+      return Response.json(catalog);
+    }),
+  );
+
+  render(
+    <GithubCollectionInstaller
+      onInstalled={() => undefined}
+      onBusyChange={() => undefined}
+      installedPluginIds={new Set(["mimo-tts"])}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Official plugins/i }));
+  await screen.findByText("OpenAI Codex");
+
+  // Multi-package directory scans start unselected and sort plugins/ before examples/.
+  const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+  expect(checkboxes.every((box) => !box.checked)).toBe(true);
+  const labels = checkboxes.map((box) => box.closest("li")?.textContent ?? "");
+  expect(labels[0]).toContain("OpenAI Codex");
+  expect(labels[1]).toContain("MiMo TTS");
+  expect(labels[1]).toContain("Installed");
+  expect(labels[2]).toContain("Story Note Demo");
+
+  // Filter by folder
+  fireEvent.click(screen.getByRole("button", { name: "examples/ (1)" }));
+  expect(screen.queryByText("OpenAI Codex")).toBeNull();
+  expect(screen.getByText("Story Note Demo")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "All folders (3)" }));
+
+  // Search by tag/name
+  const search = screen.getByPlaceholderText(/Search by name/i);
+  fireEvent.change(search, { target: { value: "codex" } });
+  expect(screen.getByText("OpenAI Codex")).toBeTruthy();
+  expect(screen.queryByText("MiMo TTS")).toBeNull();
+
+  // Tick and verify selection chip appears
+  fireEvent.click(packageBox("openai-codex"));
+  expect(installButton(1).disabled).toBe(true);
+  expect(
+    screen.getByRole("button", { name: "Remove openai-codex from selection" }),
+  ).toBeTruthy();
+});
+
+it("offers one-click switch to system proxy and retry when GitHub preview hits outbound_network_error", async () => {
+  desktopMocks.isDesktopApp.mockReturnValue(true);
+  desktopMocks.setDesktopProxyConfig.mockResolvedValue({
+    mode: "system",
+    effective: "system",
+    systemAvailable: true,
+  });
+
+  let calls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/install/github/preview") {
+        calls += 1;
+        if (calls === 1) {
+          return Response.json(
+            {
+              error: "Upstream network request failed (ECONNRESET)",
+              code: "outbound_network_error",
+              details: {
+                transportCode: "ECONNRESET",
+                proxyMode: "direct",
+                proxyEffective: "direct",
+                systemProxyAvailable: true,
+              },
+            },
+            { status: 502 },
+          );
+        }
+        return Response.json(pack);
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    }),
+  );
+
+  render(
+    <GithubCollectionInstaller
+      onInstalled={() => undefined}
+      onBusyChange={() => undefined}
+    />,
+  );
+  fireEvent.change(screen.getByLabelText("GitHub URL"), {
+    target: { value: source.repository },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+  await screen.findByText("ECONNRESET");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Use system proxy & retry" }),
+  );
+
+  await waitFor(() =>
+    expect(desktopMocks.setDesktopProxyConfig).toHaveBeenCalledWith({
+      mode: "system",
+    }),
+  );
+  await screen.findByText("Collection: Barrow Pack · 1.2.0");
 });

@@ -193,7 +193,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
       });
     } catch (error) {
       const { status, body } = errorResponse(error);
-      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
     }
   });
 
@@ -260,7 +260,7 @@ export function createGithubUpdateRoutes(kind: "plugin" | "world") {
       );
     } catch (error) {
       const { status, body } = errorResponse(error);
-      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+      return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
     }
   });
 

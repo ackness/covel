@@ -3892,6 +3892,8 @@ Updates or clears L2 instance capability policy overrides (requires `server.sett
 
 Lists permission and integrity summaries across loaded plugins (requires `server.diagnostics`), returning `{ "items": [...] }`. Community plugins include their current content digest, integrity status (`verified` / `modified` / `no-receipt` / `unreadable`), `trust.sources` match flag, declared capability structure, stored `plugin_grants` record, and grant validity (`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`).
 
+`sourceAutoApproved` indicates that the repository matches the trust policy and that both package integrity and the receipt’s capability snapshot qualify for automatic approval. It does not override host ceilings, instance policy, or an explicit denial.
+
 #### `PUT /api/permissions/plugins/:pluginId/grants`
 
 Creates or updates persistent capability grants for a community plugin (requires `host.config`, plus `plugin.community` whenever `"plugin.communityCode"` is set to `"allow"`).
@@ -3930,6 +3932,8 @@ Instance-capable packages (`scope: instance` or `scope: both`) permitted by L1�
 - `POST /api/plugins/:pluginId/flows/:flowId/start`, `GET …/runs/:runId`, `POST …/runs/:runId/step`, `DELETE …/runs/:runId`: start, poll, submit steps for, and cancel declared `contributes.flows` wizards; completion refreshes mounted `providerSources` summaries and notifies browser settings listeners.
 - `GET /api/provider-sources`: returns `{ sources }` summarizing registered `provider.source@1` definitions, supported protocols/modes, auth flows, read-only endpoints, and account summaries (no plaintext secrets; disabled via L1 ceiling on `browser-private` / `hosted`).
 - `GET /api/provider-sources/:pluginId/:sourceId/usage?account=...`: queries usage/quota summaries for a source and optional account, returning `{ usage }` (or `403 capability_denied` when `plugin.providerSource` is disabled).
+
+Instance app actions, configuration flows, and GitHub installation can return `502` or `504` with `outbound_network_error` when the upstream connection fails. Details can include `transportCode`, `proxyMode`, `proxyEffective`, and `systemProxyAvailable`, but not proxy addresses or credentials.
 
 ### Plugin management
 

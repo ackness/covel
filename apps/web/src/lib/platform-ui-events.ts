@@ -32,6 +32,10 @@ export interface PlatformUiState {
   readonly instanceDataVersion: number;
   readonly activeSessionId: string | null;
   readonly activeSessionCommands: readonly SessionSlashCommand[];
+  readonly pendingSettingsNavigation: {
+    readonly nodeId: string;
+    readonly key: number;
+  } | null;
 }
 
 const INITIAL_STATE: PlatformUiState = {
@@ -42,10 +46,12 @@ const INITIAL_STATE: PlatformUiState = {
   instanceDataVersion: 0,
   activeSessionId: null,
   activeSessionCommands: [],
+  pendingSettingsNavigation: null,
 };
 
 let state: PlatformUiState = INITIAL_STATE;
 let nextFlowKey = 1;
+let nextSettingsNavKey = 1;
 let nextZIndex = 10;
 const listeners = new Set<() => void>();
 
@@ -235,8 +241,26 @@ export function clearActiveSessionPaletteCommands(sessionId: string): void {
   );
 }
 
+export function requestSettingsNavigation(nodeId: string): void {
+  setState((prev) => ({
+    ...prev,
+    pendingSettingsNavigation: { nodeId, key: nextSettingsNavKey++ },
+  }));
+}
+
+export function clearSettingsNavigation(key?: number): void {
+  setState((prev) => {
+    if (prev.pendingSettingsNavigation === null) return prev;
+    if (key !== undefined && prev.pendingSettingsNavigation.key !== key) {
+      return prev;
+    }
+    return { ...prev, pendingSettingsNavigation: null };
+  });
+}
+
 export function resetPlatformUiState(): void {
   nextFlowKey = 1;
+  nextSettingsNavKey = 1;
   nextZIndex = 10;
   state = INITIAL_STATE;
   emit();

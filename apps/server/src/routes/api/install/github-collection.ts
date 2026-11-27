@@ -509,7 +509,7 @@ githubCollectionRoutes.post("/github/preview", async (c) => {
     return c.json(body);
   } catch (error) {
     const { status, body } = errorResponse(error);
-    return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+    return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
   }
 });
 
@@ -601,7 +601,7 @@ githubCollectionRoutes.post("/github/batch", async (c) => {
     return c.json(await installPrepared(c, prepared), 201);
   } catch (error) {
     const { status, body } = errorResponse(error);
-    return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502);
+    return c.json(body, status as 400 | 404 | 409 | 413 | 429 | 502 | 504);
   }
 });
 

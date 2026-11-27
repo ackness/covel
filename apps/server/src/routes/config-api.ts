@@ -89,11 +89,12 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   captureBootKeySources(externalApiKeys);
   const systemProxyUrl = readRuntimeEnv().systemProxyUrl;
   const resolveSystemProxy = getDesktopSystemProxyResolver();
+  const defaultProxyMode = resolveSystemProxy ? "system" : "direct";
   try {
     configureOutboundProxy({
       ...(initialCovelHome
-        ? readStoredProxyConfig(initialCovelHome)
-        : { mode: "direct" as const }),
+        ? readStoredProxyConfig(initialCovelHome, defaultProxyMode)
+        : { mode: defaultProxyMode }),
       systemProxyUrl,
       resolveSystemProxy,
     });

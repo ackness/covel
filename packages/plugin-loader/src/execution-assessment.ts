@@ -76,13 +76,18 @@ export function assessPluginExecution({
   runtimes: readonly ParsedRuntimeMd[];
 }): PluginExecutionAssessment {
   const diagnostics: { file: string; field?: string; message: string }[] = [];
+  const seenCodeKeys = new Set<string>();
   let incomplete = false;
-  const code = (file: string, field: string) =>
+  const code = (file: string, field: string) => {
+    const key = `${file}\0${field}`;
+    if (seenCodeKeys.has(key)) return;
+    seenCodeKeys.add(key);
     diagnostics.push({
       file,
       field,
       message: `${field} requires server-code authorization.`,
     });
+  };
   const checkPermissions = (value: unknown, file: string, prefix = "") => {
     const permissions = record(value);
     if (nonempty(permissions.http)) code(file, `${prefix}permissions.http`);

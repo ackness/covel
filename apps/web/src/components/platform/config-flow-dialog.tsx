@@ -6,8 +6,9 @@ import type {
   ConfigFlowRunSnapshot,
   ConfigFlowStep,
 } from "@covel/shared/platform";
-import { Copy, ExternalLink, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
+import { OutboundNetworkErrorBanner } from "@/components/shared/outbound-network-error-banner.js";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +19,13 @@ import {
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { openExternalUrl } from "@/lib/desktop-bridge.js";
 import {
+  parseOutboundNetworkError,
+  type OutboundNetworkErrorInfo,
+} from "@/lib/outbound-network-error.js";
+import {
   bumpPlatformInstanceDataVersion,
   closePluginConfigFlow,
+  requestSettingsNavigation,
   usePlatformUiState,
 } from "@/lib/platform-ui-events.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -571,6 +577,9 @@ export function ConfigFlowDialog() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [outboundError, setOutboundError] =
+    useState<OutboundNetworkErrorInfo | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [formValues, setFormValues] = useState<Record<string, unknown>>({});
   const [callbackInput, setCallbackInput] = useState("");
   const [importContent, setImportContent] = useState("");
@@ -631,6 +640,7 @@ export function ConfigFlowDialog() {
     if (!activeConfigFlow) {
       setRun(null);
       setErrorMessage(null);
+      setOutboundError(null);
       setLoading(false);
       setSubmitting(false);
       resetStepInputs();
@@ -639,6 +649,7 @@ export function ConfigFlowDialog() {
     let cancelled = false;
     setRun(null);
     setErrorMessage(null);
+    setOutboundError(null);
     setLoading(true);
     setSubmitting(false);
     resetStepInputs();
@@ -663,7 +674,14 @@ export function ConfigFlowDialog() {
       })
       .catch((err) => {
         if (!cancelled) {
-          setErrorMessage(err instanceof Error ? err.message : String(err));
+          const parsed = parseOutboundNetworkError(err);
+          if (parsed) {
+            setOutboundError(parsed);
+            setErrorMessage(null);
+          } else {
+            setOutboundError(null);
+            setErrorMessage(err instanceof Error ? err.message : String(err));
+          }
         }
       })
       .finally(() => {
@@ -686,7 +704,7 @@ export function ConfigFlowDialog() {
         );
       }
     };
-  }, [flowKey]);
+  }, [flowKey, attempt]);
 
   const step = run?.step;
   const stepKind = step?.kind;
@@ -782,6 +800,7 @@ export function ConfigFlowDialog() {
       activeRunRef.current?.runId !== expectedRunId;
     setSubmitting(true);
     setErrorMessage(null);
+    setOutboundError(null);
     try {
       const res = await stepPluginConfigFlow(
         activeConfigFlow.pluginId,
@@ -793,7 +812,14 @@ export function ConfigFlowDialog() {
       applyRun(res.run);
     } catch (err) {
       if (isStaleRun()) return;
-      setErrorMessage(err instanceof Error ? err.message : String(err));
+      const parsed = parseOutboundNetworkError(err);
+      if (parsed) {
+        setOutboundError(parsed);
+        setErrorMessage(null);
+      } else {
+        setOutboundError(null);
+        setErrorMessage(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       if (activeFlowKeyRef.current === expectedFlowKey) {
         setSubmitting(false);
@@ -836,6 +862,18 @@ export function ConfigFlowDialog() {
               {t("platform.flowLoading", "Starting configuration flow...")}
             </span>
           </div>
+        )}
+
+        {outboundError && (
+          <OutboundNetworkErrorBanner
+            info={outboundError}
+            disabled={loading || submitting}
+            onRetry={!run ? () => setAttempt((count) => count + 1) : undefined}
+            onOpenProxySettings={() => {
+              void dismiss();
+              requestSettingsNavigation("desktop");
+            }}
+          />
         )}
 
         {errorMessage && (
@@ -925,6 +963,19 @@ export function ConfigFlowDialog() {
               </p>
             )}
             <div className="flex justify-end gap-2 pt-2">
+              {!outboundError &&
+                (!run ||
+                  (step?.kind === "error" && step.retryable !== false)) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={() => setAttempt((count) => count + 1)}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    {t("common.retry", "Retry")}
+                  </Button>
+                )}
               <Button type="button" onClick={() => closePluginConfigFlow()}>
                 {t("common.close", "Close")}
               </Button>

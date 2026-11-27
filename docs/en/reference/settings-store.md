@@ -53,7 +53,7 @@ Every setting has a scope:
 
 A `server` setting is declared in two places: the registry entry has `SettingEntry.scope: "server"`, and the same key has a definition in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`: schema, default, and the environment variable that overrides it). A test fails when the two differ.
 
-The keys are `diagnostics.traceRetention` (Settings → Advanced → "Keep debug traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Plugins → Install & manage → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
+The keys are `diagnostics.traceRetention` (Settings → Advanced → "Keep debug traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Plugins → Install & manage → Local tools → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
 
 - **Where it is stored.** In the server's database, in the `server_settings` table of the DataStore (`listServerSettings` / `setServerSetting` / `deleteServerSetting`, covered by the store contract suite).
   - The desktop app and a self-hosted web deployment use the same mechanism.
@@ -118,13 +118,15 @@ What a setting schema must do: accept its own persisted output, and give the sam
 
 The settings dialog has five groups. Each setting has one editor; everywhere else only links to it.
 
-| Group | Pages | Contents |
-|---|---|---|
-| **General** | Preferences, Appearance | Interface language, background music and volume, a "Reading" section (show text all at once, when the story appears, open turn updates by default); interface style, light or dark, theme library |
-| **Models** | AI roles, Providers & keys, Generation | The only editor for models. Capability overrides (`llm.capabilityOverrides`) and the per-step model choices on the start screen appear only in developer mode |
-| **Plugins** | Install & manage, and one page per plugin | Trusted sources (`trust.sources`) live here only. A plugin's model role (a `type: slot` setting) is changed only on its own page; other places show the current value and link here |
-| **Saves & data** | Import, backup & reset; Stored media | Reset sits apart at the bottom of its page and asks for confirmation |
-| **Advanced** | Options, Configuration file, Operator Access | Developer mode (`ui.developerView`), how long debug traces are kept, chat message window, the wait for the AI while authoring a world; the configuration JSON editor; operator access |
+| Group            | Pages                                        | Contents                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **General**      | Preferences, Appearance                      | Interface language, background music and volume, a "Reading" section (show text all at once, when the story appears, open turn updates by default); interface style, light or dark, theme library |
+| **Models**       | AI roles, Providers & keys, Generation       | The only editor for models. Capability overrides (`llm.capabilityOverrides`) and the per-step model choices on the start screen appear only in developer mode                                     |
+| **Plugins**      | Install & manage, and one page per plugin    | Trusted sources (`trust.sources`) live here only. A plugin's model role (a `type: slot` setting) is changed only on its own page; other places show the current value and link here               |
+| **Saves & data** | Import, backup & reset; Stored media         | Reset sits apart at the bottom of its page and asks for confirmation                                                                                                                              |
+| **Advanced**     | Options, Configuration file, Operator Access | Developer mode (`ui.developerView`), how long debug traces are kept, chat message window, the wait for the AI while authoring a world; the configuration JSON editor; operator access             |
+
+Filter the Theme Library by source, or search by name or ID when the list grows.
 
 The desktop app adds a "Desktop" page. It no longer has editors for `llm.toml` and `keys.env`, only "Open the config folder".
 

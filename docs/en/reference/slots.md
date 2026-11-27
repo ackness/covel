@@ -435,6 +435,8 @@ The settings screen stores connection info and model IDs separately:
 **Interface behavior**
 
 - On the "Providers & keys" page, you can copy a config and edit its name. The thinking setting saves automatically.
+- In a long model list, search by name, ID, or protocol. When both local and server models are present, you can also filter by source.
+- In **AI roles**, filter a long list by role ID, or show only roles with no model assigned.
 - AI roles, plugin bindings, and the session summary show the config name and the thinking setting.
 - The main narrative, agent plugins, function plugins, and memory tasks all inherit the chosen model's defaults through the same request config chain. You do not have to set them for each role. An explicit override on a role still takes priority over the model default.
 - At the moment, the `automatic` level is used for Qwen. The interface shows "Thinking on", and it sends `enable_thinking: true`. It does not mean "decide on or off for each task".

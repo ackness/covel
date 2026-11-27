@@ -61,7 +61,7 @@ export function DesktopPane() {
   const [busy, setBusy] = useState<string | null>(null);
   const { notice, show, clear } = usePaneNotice();
   const [proxy, setProxy] = useState<DesktopProxyConfig | null>(null);
-  const [proxyMode, setProxyMode] = useState<DesktopProxyMode>("direct");
+  const [proxyMode, setProxyMode] = useState<DesktopProxyMode>("system");
   const [proxyUrl, setProxyUrl] = useState("");
   const [proxyLoadState, setProxyLoadState] = useState<
     "loading" | "ready" | "error"
@@ -329,7 +329,7 @@ export function DesktopPane() {
         <div className="text-[11px] text-muted-foreground leading-relaxed">
           {t("settings.desktopProxyHint")}
         </div>
-        <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[13rem_minmax(0,1fr)] gap-2">
           <select
             aria-label={t("settings.desktopProxyMode")}
             value={proxyMode}
@@ -337,10 +337,10 @@ export function DesktopPane() {
             onChange={(event) =>
               setProxyMode(event.target.value as DesktopProxyMode)
             }
-            className="border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+            className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
           >
-            <option value="direct">{t("settings.desktopProxyDirect")}</option>
             <option value="system">{t("settings.desktopProxySystem")}</option>
+            <option value="direct">{t("settings.desktopProxyDirect")}</option>
             <option value="http">{t("settings.desktopProxyHttp")}</option>
             <option value="socks">{t("settings.desktopProxySocks")}</option>
           </select>
@@ -355,15 +355,17 @@ export function DesktopPane() {
                   ? "socks5://127.0.0.1:7891"
                   : "http://127.0.0.1:7890"
               }
-              className="border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
             />
           )}
         </div>
-        {proxyMode === "system" && !proxy?.systemAvailable && (
-          <div className="text-[10px] text-(--accent-warning)">
-            {t("settings.desktopProxySystemDirect")}
-          </div>
-        )}
+        {proxyLoadState === "ready" &&
+          proxyMode === "system" &&
+          proxy?.systemAvailable === false && (
+            <div className="text-[10px] text-(--accent-warning)">
+              {t("settings.desktopProxySystemDirect")}
+            </div>
+          )}
         {proxyLoadState === "loading" && (
           <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
             <Loader2 className="w-3 h-3 animate-spin" />
@@ -372,7 +374,13 @@ export function DesktopPane() {
         )}
         {proxyLoadState === "error" && (
           <div className="flex items-center gap-2 text-[10px] text-(--accent-warning)">
-            <span>{t("settings.desktopProxyLoadFailed")}</span>
+            <span role="alert">
+              {t(
+                info?.isDev
+                  ? "settings.desktopProxyDevUnavailable"
+                  : "settings.desktopProxyLoadFailed",
+              )}
+            </span>
             <Button
               size="sm"
               variant="outline"
@@ -396,7 +404,7 @@ export function DesktopPane() {
             )}
             {t("settings.desktopProxySave")}
           </Button>
-          {proxy && (
+          {proxyLoadState === "ready" && proxy && (
             <span className="text-[10px] text-muted-foreground">
               {proxy.effective === "system"
                 ? t("settings.desktopProxyDynamic")

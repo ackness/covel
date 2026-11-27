@@ -66,6 +66,10 @@ const SOURCE_COMPARISON_ALLOWLIST = new Map([
     "source badge and community plugin grant actions",
   ],
   [
+    "apps/web/src/settings/panes/PermissionsDiagnosticsSection.tsx",
+    "reports code approval, package integrity, and grant diagnostics for community packages",
+  ],
+  [
     "apps/web/src/settings/panes/PackagesPane.tsx",
     "bundled packages cannot be uninstalled",
   ],

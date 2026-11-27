@@ -10,10 +10,25 @@ import {
   type PermissionsPolicyOverrides,
   type PluginGrantDecisions,
 } from "@covel/shared/permissions";
-import { Laptop, RefreshCw, Shield, ShieldCheck, Trash2 } from "lucide-react";
+import {
+  Laptop,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs.js";
 import { isDesktopApp } from "@/lib/desktop-bridge.js";
+import { bumpPlatformInstanceDataVersion } from "@/lib/platform-ui-events.js";
 import {
   getSessionApprovals,
   revokeSessionApprovals,
@@ -36,7 +51,16 @@ import { getOperatorToken } from "@/services/session-credentials.js";
 import { SessionStructureContext } from "@/stores/session-store/context.js";
 import { PaneNotice, usePaneNotice } from "../pane-notice.js";
 import { OperatorAccessPane } from "./OperatorAccessPane.js";
-import { PermissionsPluginList, toI18nSlug } from "./PermissionsPluginList.js";
+import {
+  PermissionsDiagnosticsSection,
+  collectPluginDiagnostics,
+} from "./PermissionsDiagnosticsSection.js";
+import {
+  PermissionsPluginList,
+  getPluginPendingCapabilities,
+  isGrantWarningStatus,
+  toI18nSlug,
+} from "./PermissionsPluginList.js";
 import { TrustedSourcesCard } from "./TrustedSourcesCard.js";
 
 const RISK_ORDER: readonly CapabilityRisk[] = [
@@ -45,6 +69,13 @@ const RISK_ORDER: readonly CapabilityRisk[] = [
   "medium",
   "low",
 ];
+
+const RISK_DOT_CLASS: Readonly<Record<CapabilityRisk, string>> = {
+  critical: "bg-destructive",
+  high: "bg-amber-500",
+  medium: "bg-primary/70",
+  low: "bg-muted-foreground/60",
+};
 
 function summarizeCeilings(
   capabilities: Readonly<Record<CapabilityKey, CapabilityCeiling>>,
@@ -67,6 +98,14 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
   const activeSessionId = sessionId ?? sessionStructure?.session?.id;
   const desktop = isDesktopApp();
   const { notice, show } = usePaneNotice();
+
+  const [activeTab, setActiveTab] = useState<
+    "plugins" | "policy" | "diagnostics"
+  >("plugins");
+  const [policyQuery, setPolicyQuery] = useState("");
+  const [policyRiskFilter, setPolicyRiskFilter] = useState<
+    CapabilityRisk | "all"
+  >("all");
 
   const [snapshot, setSnapshot] = useState<PermissionsSnapshot | null>(null);
   const [plugins, setPlugins] = useState<PermissionPluginSummary[]>([]);
@@ -158,15 +197,60 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     [snapshot],
   );
 
+  const diagnostics = useMemo(
+    () =>
+      collectPluginDiagnostics(
+        plugins,
+        installedPlugins,
+        sessionDiagnostics,
+        t,
+      ),
+    [plugins, installedPlugins, sessionDiagnostics, t],
+  );
+
+  const errorDiagnosticCount = useMemo(
+    () => diagnostics.filter((item) => item.severity === "error").length,
+    [diagnostics],
+  );
+
+  const pluginsNeedingAttention = useMemo(() => {
+    if (!snapshot) return 0;
+    return plugins.filter(
+      (plugin) =>
+        isGrantWarningStatus(plugin.grantStatus) ||
+        getPluginPendingCapabilities(plugin, snapshot.capabilities).length > 0,
+    ).length;
+  }, [plugins, snapshot]);
+
   const groupedCapabilities = useMemo(() => {
     if (!snapshot) return [];
-    return RISK_ORDER.map((risk) => ({
-      risk,
-      keys: CAPABILITY_KEYS.filter(
-        (key) => snapshot.catalog[key].risk === risk,
-      ),
-    })).filter((group) => group.keys.length > 0);
-  }, [snapshot]);
+    const normalized = policyQuery.trim().toLowerCase();
+    return RISK_ORDER.filter(
+      (risk) => policyRiskFilter === "all" || policyRiskFilter === risk,
+    )
+      .map((risk) => ({
+        risk,
+        keys: CAPABILITY_KEYS.filter((key) => {
+          if (snapshot.catalog[key].risk !== risk) return false;
+          if (!normalized) return true;
+          const i18nKey = key.replaceAll(".", "_");
+          const label = t(
+            `settings.permissions.capabilityItems.${i18nKey}.label`,
+            key,
+          ).toLowerCase();
+          const desc = t(
+            `settings.permissions.capabilityItems.${i18nKey}.description`,
+            "",
+          ).toLowerCase();
+          return (
+            key.toLowerCase().includes(normalized) ||
+            label.includes(normalized) ||
+            desc.includes(normalized)
+          );
+        }),
+      }))
+      .filter((group) => group.keys.length > 0);
+  }, [snapshot, policyQuery, policyRiskFilter, t]);
 
   const groupedSessionGrants = useMemo(() => {
     const byPlugin = new Map<string, string[]>();
@@ -190,10 +274,14 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     setBusy: (busy: boolean) => void,
     action: () => Promise<void>,
     successMessage: string,
+    refreshPlatformUi = false,
   ): Promise<boolean> {
     setBusy(true);
     try {
       await action();
+      if (refreshPlatformUi) {
+        bumpPlatformInstanceDataVersion();
+      }
       setRefreshNonce((n) => n + 1);
       show({ tone: "success", message: successMessage });
       return true;
@@ -233,6 +321,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
         "settings.permissions.policySaved",
         "Instance capability policy updated.",
       ),
+      true,
     );
   }
 
@@ -247,6 +336,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
         "settings.permissions.policyResetDone",
         "Instance capability policy reset to defaults.",
       ),
+      true,
     );
   }
 
@@ -267,6 +357,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
         );
       },
       t("settings.permissions.grantSaved", "Persistent plugin grants updated."),
+      true,
     );
   }
 
@@ -280,6 +371,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
         "settings.permissions.grantRevoked",
         "Persistent plugin grants cleared.",
       ),
+      true,
     );
   }
 
@@ -324,12 +416,46 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
   if (!snapshot) return null;
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <PaneNotice notice={notice} />
+    <div className="max-w-4xl space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card/40 px-3.5 py-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+          <ShieldCheck className="size-4 shrink-0 text-primary" />
+          <span className="font-medium text-foreground">
+            {t(
+              `settings.permissions.deploymentForm.${toI18nSlug(snapshot.deploymentForm)}`,
+              snapshot.deploymentForm,
+            )}
+          </span>
+          {desktop && (
+            <Badge variant="secondary">
+              {t("settings.permissions.desktopShellBadge", "Electron desktop")}
+            </Badge>
+          )}
+          {ceilingCounts && (
+            <span className="text-muted-foreground">
+              ·{" "}
+              {t("settings.permissions.ceilingCountEnabled", {
+                count: ceilingCounts.enabled,
+                defaultValue: "Enabled: {{count}}",
+              })}
+              {ceilingCounts.operatorOnly > 0 &&
+                ` · ${t("settings.permissions.ceilingCountOperator", {
+                  count: ceilingCounts.operatorOnly,
+                  defaultValue: "Operator-only: {{count}}",
+                })}`}
+              {ceilingCounts.disabled > 0 &&
+                ` · ${t("settings.permissions.ceilingCountDisabled", {
+                  count: ceilingCounts.disabled,
+                  defaultValue: "Disabled: {{count}}",
+                })}`}
+            </span>
+          )}
+        </div>
+
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
+          className="h-7 px-2.5 text-xs"
           disabled={loading}
           onClick={() => setRefreshNonce((n) => n + 1)}
         >
@@ -338,351 +464,438 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
         </Button>
       </div>
 
-      <section className="space-y-2 rounded border border-border p-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <ShieldCheck className="size-4 shrink-0 text-primary" />
-          <h3 className="settings-section-title">
-            {t(
-              "settings.permissions.deploymentSummaryTitle",
-              "Host ceiling (L1)",
+      <PaneNotice notice={notice} />
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as "plugins" | "policy" | "diagnostics")
+        }
+      >
+        <div className="ui-workspace-rule">
+          <TabsList
+            aria-label={t(
+              "settings.permissions.tabsLabel",
+              "Permissions sections",
             )}
-          </h3>
-          <Badge variant="outline">
-            {t(
-              `settings.permissions.deploymentForm.${toI18nSlug(snapshot.deploymentForm)}`,
-              snapshot.deploymentForm,
-            )}
-          </Badge>
-          {desktop && (
-            <Badge variant="secondary">
-              {t("settings.permissions.desktopShellBadge", "Electron desktop")}
-            </Badge>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {t(
-            "settings.permissions.deploymentSummaryDesc",
-            "Host capability ceilings are resolved at server startup and cannot be widened by instance policies or per-plugin grants.",
-          )}
-        </p>
-        {ceilingCounts && (
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Badge variant="default">
-              {t("settings.permissions.ceilingCountEnabled", {
-                count: ceilingCounts.enabled,
-                defaultValue: "Enabled: {{count}}",
-              })}
-            </Badge>
-            <Badge variant="outline">
-              {t("settings.permissions.ceilingCountOperator", {
-                count: ceilingCounts.operatorOnly,
-                defaultValue: "Operator-only: {{count}}",
-              })}
-            </Badge>
-            <Badge variant="secondary">
-              {t("settings.permissions.ceilingCountDisabled", {
-                count: ceilingCounts.disabled,
-                defaultValue: "Disabled: {{count}}",
-              })}
-            </Badge>
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h3 className="settings-section-title">
-              {t(
-                "settings.permissions.policyTitle",
-                "Instance capability policy",
-              )}
-            </h3>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t(
-                "settings.permissions.policyDescription",
-                "Default capability rules applied across plugins below the host ceiling.",
-              )}
-            </p>
-          </div>
-          {Object.keys(snapshot.policy.overrides).length > 0 &&
-            snapshot.policy.settable && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={savingPolicy}
-                onClick={() => void handleResetPolicy()}
-              >
-                {t(
-                  "settings.permissions.resetPolicy",
-                  "Reset policy to defaults",
-                )}
-              </Button>
-            )}
-        </div>
-
-        {!snapshot.policy.settable && (
-          <p className="rounded border border-border px-3 py-2 text-xs text-muted-foreground">
-            {t(
-              snapshot.policy.source === "env"
-                ? "settings.serverSetting.fixedByDeployment"
-                : "settings.serverSetting.operatorOnly",
-            )}
-          </p>
-        )}
-
-        <div className="space-y-4">
-          {groupedCapabilities.map(({ risk, keys }) => (
-            <div key={risk} className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {t(`settings.permissions.risk.${risk}`, risk)}
-              </h4>
-              <div className="divide-y divide-border rounded border border-border">
-                {keys.map((key) => {
-                  const def = snapshot.catalog[key];
-                  const ceiling = snapshot.capabilities[key];
-                  const state = snapshot.policy.effective[key];
-                  const configuredMode =
-                    snapshot.policy.overrides[key] ?? def.defaultPolicy;
-                  const i18nKey = key.replaceAll(".", "_");
-                  const reserved = def.reserved === true;
-                  const disabled =
-                    !snapshot.policy.settable ||
-                    ceiling === "disabled" ||
-                    reserved ||
-                    savingPolicy;
-                  const options: CapabilityPolicyMode[] = def.allowAutoPolicy
-                    ? ["allow", "ask", "deny"]
-                    : ["ask", "deny"];
-
-                  return (
-                    <div
-                      key={key}
-                      className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-medium">
-                            {t(
-                              `settings.permissions.capabilityItems.${i18nKey}.label`,
-                              key,
-                            )}
-                          </span>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {key}
-                          </span>
-                          {reserved && (
-                            <Badge variant="secondary">
-                              {t(
-                                "settings.permissions.reservedBadge",
-                                "Reserved",
-                              )}
-                            </Badge>
-                          )}
-                          <Badge
-                            variant={
-                              ceiling === "disabled" ? "secondary" : "outline"
-                            }
-                          >
-                            {t(
-                              `settings.permissions.ceiling.${toI18nSlug(ceiling)}`,
-                              ceiling,
-                            )}
-                          </Badge>
-                          <Badge
-                            variant={
-                              state.effective === "deny"
-                                ? "destructive"
-                                : "outline"
-                            }
-                          >
-                            {t(
-                              `settings.permissions.mode.${state.effective}`,
-                              state.effective,
-                            )}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {t(
-                            `settings.permissions.capabilityItems.${i18nKey}.description`,
-                            key,
-                          )}
-                        </p>
-                      </div>
-
-                      <select
-                        aria-label={t(
-                          `settings.permissions.capabilityItems.${i18nKey}.label`,
-                          key,
-                        )}
-                        value={configuredMode}
-                        disabled={disabled}
-                        onChange={(event) =>
-                          void handlePolicyChange(
-                            key,
-                            event.target.value as CapabilityPolicyMode,
-                          )
-                        }
-                        className="min-h-(--ui-control-touch) shrink-0 rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50 sm:min-h-(--ui-control-standard)"
-                      >
-                        {options.map((mode) => (
-                          <option key={mode} value={mode}>
-                            {t(`settings.permissions.mode.${mode}`, mode)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <TrustedSourcesCard />
-        {showOperatorAccess && <OperatorAccessPane />}
-      </section>
-
-      {pluginsAuthRequired ? (
-        <section className="space-y-2 rounded border border-border p-3">
-          <div className="flex items-center gap-2">
-            <Shield className="size-4 shrink-0 text-muted-foreground" />
-            <h3 className="settings-section-title">
-              {t("settings.permissions.pluginsTitle", "Per-plugin grants (L3)")}
-            </h3>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "settings.permissions.pluginsOperatorRequired",
-              "Enter an operator token above to inspect per-plugin capability audits and persistent grants on this host.",
-            )}
-          </p>
-        </section>
-      ) : (
-        <PermissionsPluginList
-          plugins={plugins}
-          installedPlugins={installedPlugins}
-          sessionDiagnostics={sessionDiagnostics}
-          ceilings={snapshot.capabilities}
-          busyPluginId={busyPluginId}
-          onSaveGrants={handleSavePluginGrants}
-          onRevokeGrants={handleRevokePluginGrants}
-        />
-      )}
-
-      {activeSessionId && (
-        <section className="space-y-3 rounded border border-border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="settings-section-title">
-                {t(
-                  "settings.permissions.sessionGrantsTitle",
-                  "Active session grants (L4)",
-                )}
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                {t("settings.permissions.sessionPendingCount", {
-                  count: approvals?.items.length ?? 0,
-                  defaultValue: "Pending prompts: {{count}}",
-                })}
-              </p>
-            </div>
-            {(approvals?.grants.length ?? 0) > 0 && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={revokingSession}
-                onClick={() => void handleRevokeSession()}
-              >
-                <Trash2 className="mr-1.5 size-3.5" />
-                {t(
-                  "settings.permissions.revokeAllSessionGrants",
-                  "Revoke all session grants",
-                )}
-              </Button>
-            )}
-          </div>
-
-          {groupedSessionGrants.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              {t(
-                "settings.permissions.noSessionGrants",
-                "No cached grants are currently active in this session.",
-              )}
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {groupedSessionGrants.map(({ pluginId, actions }) => (
-                <li
-                  key={pluginId}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-border px-2.5 py-1.5 text-xs"
+            className="h-auto max-w-full justify-start gap-4 bg-transparent p-0"
+          >
+            <TabsTrigger
+              value="plugins"
+              className="ui-tab-item gap-1.5 px-3 whitespace-normal data-[state=active]:shadow-none"
+            >
+              <span>
+                {t("settings.permissions.tabPlugins", "Plugin grants")}
+              </span>
+              {pluginsNeedingAttention > 0 && (
+                <Badge
+                  variant="outline"
+                  className="h-4 border-amber-500/50 bg-amber-500/10 px-1.5 text-[10px] text-amber-600 tabular-nums dark:text-amber-400"
                 >
-                  <div className="min-w-0 flex flex-wrap items-center gap-2">
-                    <span className="font-mono font-medium">{pluginId}</span>
-                    <span className="font-mono text-muted-foreground">
-                      {actions.join(", ")}
-                    </span>
-                  </div>
+                  {pluginsNeedingAttention}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="policy"
+              className="ui-tab-item gap-1.5 px-3 whitespace-normal data-[state=active]:shadow-none"
+            >
+              <span>
+                {t("settings.permissions.tabPolicy", "Policy & sources")}
+              </span>
+              {Object.keys(snapshot.policy.overrides).length > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {Object.keys(snapshot.policy.overrides).length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger
+              value="diagnostics"
+              className="ui-tab-item gap-1.5 px-3 whitespace-normal data-[state=active]:shadow-none"
+            >
+              <span>
+                {t("settings.permissions.tabDiagnostics", "Diagnostics")}
+              </span>
+              <Badge
+                variant={
+                  errorDiagnosticCount > 0
+                    ? "destructive"
+                    : diagnostics.length > 0
+                      ? "secondary"
+                      : "outline"
+                }
+                className="h-4 px-1.5 text-[10px] tabular-nums"
+              >
+                {diagnostics.length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="plugins" className="mt-5 space-y-6">
+          {pluginsAuthRequired ? (
+            <section className="space-y-2 rounded-lg border border-border bg-card/40 p-4">
+              <div className="flex items-center gap-2">
+                <Shield className="size-4 shrink-0 text-muted-foreground" />
+                <h3 className="settings-section-title">
+                  {t(
+                    "settings.permissions.pluginsTitle",
+                    "Per-plugin grants (L3)",
+                  )}
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t(
+                  "settings.permissions.pluginsOperatorRequired",
+                  "Enter an operator token in Policy & sources to inspect per-plugin capability audits and persistent grants on this host.",
+                )}
+              </p>
+            </section>
+          ) : (
+            <PermissionsPluginList
+              plugins={plugins}
+              ceilings={snapshot.capabilities}
+              busyPluginId={busyPluginId}
+              onSaveGrants={handleSavePluginGrants}
+              onRevokeGrants={handleRevokePluginGrants}
+            />
+          )}
+
+          {activeSessionId && (
+            <section className="space-y-3 rounded-lg border border-border bg-card/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 className="settings-section-title">
+                    {t(
+                      "settings.permissions.sessionGrantsTitle",
+                      "Active session grants (L4)",
+                    )}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {t("settings.permissions.sessionPendingCount", {
+                      count: approvals?.items.length ?? 0,
+                      defaultValue: "Pending prompts: {{count}}",
+                    })}
+                  </p>
+                </div>
+                {(approvals?.grants.length ?? 0) > 0 && (
                   <Button
                     size="sm"
                     variant="outline"
                     disabled={revokingSession}
-                    onClick={() => void handleRevokeSession(pluginId)}
+                    onClick={() => void handleRevokeSession()}
                   >
-                    {t("settings.permissions.revokePlugin", "Revoke")}
+                    <Trash2 className="mr-1.5 size-3.5" />
+                    {t(
+                      "settings.permissions.revokeAllSessionGrants",
+                      "Revoke all session grants",
+                    )}
                   </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+                )}
+              </div>
 
-      {desktop && (
-        <section className="space-y-2 rounded border border-border p-3">
-          <div className="flex items-center gap-2">
-            <Laptop className="size-4 shrink-0 text-primary" />
-            <h3 className="settings-section-title">
-              {t(
-                "settings.permissions.desktopSecurityTitle",
-                "Desktop shell security boundaries (read-only)",
+              {groupedSessionGrants.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "settings.permissions.noSessionGrants",
+                    "No cached grants are currently active in this session.",
+                  )}
+                </p>
+              ) : (
+                <ul className="divide-y divide-border overflow-hidden rounded-md border border-border bg-background/60">
+                  {groupedSessionGrants.map(({ pluginId, actions }) => (
+                    <li
+                      key={pluginId}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs"
+                    >
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="font-mono font-medium">
+                          {pluginId}
+                        </span>
+                        <span className="font-mono text-muted-foreground">
+                          {actions.join(", ")}
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={revokingSession}
+                        onClick={() => void handleRevokeSession(pluginId)}
+                      >
+                        {t("settings.permissions.revokePlugin", "Revoke")}
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
               )}
-            </h3>
-          </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            {t(
-              "settings.permissions.desktopSecurityDesc",
-              "Enforced natively by the Electron main process:",
+            </section>
+          )}
+        </TabsContent>
+
+        <TabsContent value="policy" className="mt-5 space-y-6">
+          <TrustedSourcesCard />
+          {showOperatorAccess && <OperatorAccessPane />}
+
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="settings-section-title">
+                  {t(
+                    "settings.permissions.policyTitle",
+                    "Instance capability policy",
+                  )}
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t(
+                    "settings.permissions.policyDescription",
+                    "Default capability rules applied across plugins below the host ceiling.",
+                  )}
+                </p>
+              </div>
+              {Object.keys(snapshot.policy.overrides).length > 0 &&
+                snapshot.policy.settable && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={savingPolicy}
+                    onClick={() => void handleResetPolicy()}
+                  >
+                    {t(
+                      "settings.permissions.resetPolicy",
+                      "Reset policy to defaults",
+                    )}
+                  </Button>
+                )}
+            </div>
+
+            {!snapshot.policy.settable && (
+              <p className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {t(
+                  snapshot.policy.source === "env"
+                    ? "settings.serverSetting.fixedByDeployment"
+                    : "settings.serverSetting.operatorOnly",
+                )}
+              </p>
             )}
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-            <li>
-              {t(
-                "settings.permissions.desktopRuleExternalNav",
-                "External links open in the OS browser; the main window stays pinned to the local host.",
-              )}
-            </li>
-            <li>
-              {t(
-                "settings.permissions.desktopRuleSubframeIpc",
-                "Sandboxed plugin subframes cannot invoke privileged desktop IPC channels.",
-              )}
-            </li>
-            <li>
-              {t(
-                "settings.permissions.desktopRuleClipboard",
-                "Clipboard permissions stay restricted to explicit user actions.",
-              )}
-            </li>
-            <li>
-              {t(
-                "settings.permissions.desktopRuleFileMode",
-                "Local keys and managed secrets remain in 0600 files under the desktop config directory.",
-              )}
-            </li>
-          </ul>
-        </section>
-      )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-48 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
+                <Search
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+                <input
+                  type="search"
+                  value={policyQuery}
+                  onChange={(event) => setPolicyQuery(event.target.value)}
+                  placeholder={t(
+                    "settings.permissions.policySearchPlaceholder",
+                    "Filter capabilities...",
+                  )}
+                  className="h-8 w-full min-w-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                />
+                {policyQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setPolicyQuery("")}
+                    aria-label={t("common.clear", "Clear")}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(["all", ...RISK_ORDER] as const).map((risk) => (
+                  <button
+                    key={risk}
+                    type="button"
+                    onClick={() => setPolicyRiskFilter(risk)}
+                    aria-pressed={policyRiskFilter === risk}
+                    className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                      policyRiskFilter === risk
+                        ? "border-primary/50 bg-primary/10 font-medium text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {risk === "all"
+                      ? t("settings.permissions.riskAll", "All risks")
+                      : t(`settings.permissions.risk.${risk}`, risk)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {groupedCapabilities.map(({ risk, keys }) => (
+                <div key={risk} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={`size-2 rounded-full ${RISK_DOT_CLASS[risk]}`}
+                    />
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t(`settings.permissions.risk.${risk}`, risk)}
+                    </h4>
+                  </div>
+                  <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card/30">
+                    {keys.map((key) => {
+                      const def = snapshot.catalog[key];
+                      const ceiling = snapshot.capabilities[key];
+                      const state = snapshot.policy.effective[key];
+                      const configuredMode =
+                        snapshot.policy.overrides[key] ?? def.defaultPolicy;
+                      const isOverridden =
+                        snapshot.policy.overrides[key] !== undefined;
+                      const i18nKey = key.replaceAll(".", "_");
+                      const reserved = def.reserved === true;
+                      const disabled =
+                        !snapshot.policy.settable ||
+                        ceiling === "disabled" ||
+                        reserved ||
+                        savingPolicy;
+                      const options: CapabilityPolicyMode[] =
+                        def.allowAutoPolicy
+                          ? ["allow", "ask", "deny"]
+                          : ["ask", "deny"];
+
+                      return (
+                        <div
+                          key={key}
+                          className="flex flex-col gap-2 px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">
+                                {t(
+                                  `settings.permissions.capabilityItems.${i18nKey}.label`,
+                                  key,
+                                )}
+                              </span>
+                              <span className="font-mono text-[11px] text-muted-foreground">
+                                {key}
+                              </span>
+                              {reserved && (
+                                <Badge variant="secondary">
+                                  {t(
+                                    "settings.permissions.reservedBadge",
+                                    "Reserved",
+                                  )}
+                                </Badge>
+                              )}
+                              {ceiling !== "enabled" && (
+                                <Badge variant="secondary">
+                                  {t(
+                                    `settings.permissions.ceiling.${toI18nSlug(ceiling)}`,
+                                    ceiling,
+                                  )}
+                                </Badge>
+                              )}
+                              {isOverridden && (
+                                <Badge variant="outline">
+                                  {t(
+                                    "settings.permissions.customOverrideBadge",
+                                    "Custom",
+                                  )}
+                                </Badge>
+                              )}
+                              {state.effective === "deny" &&
+                                configuredMode !== "deny" && (
+                                  <Badge variant="destructive">
+                                    {t("settings.permissions.mode.deny", "Deny")}
+                                  </Badge>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              {t(
+                                `settings.permissions.capabilityItems.${i18nKey}.description`,
+                                key,
+                              )}
+                            </p>
+                          </div>
+
+                          <select
+                            aria-label={t(
+                              `settings.permissions.capabilityItems.${i18nKey}.label`,
+                              key,
+                            )}
+                            value={configuredMode}
+                            disabled={disabled}
+                            onChange={(event) =>
+                              void handlePolicyChange(
+                                key,
+                                event.target.value as CapabilityPolicyMode,
+                              )
+                            }
+                            className="h-8 shrink-0 rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                          >
+                            {options.map((mode) => (
+                              <option key={mode} value={mode}>
+                                {t(`settings.permissions.mode.${mode}`, mode)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {desktop && (
+            <section className="space-y-2 rounded-lg border border-border bg-card/40 p-4">
+              <div className="flex items-center gap-2">
+                <Laptop className="size-4 shrink-0 text-primary" />
+                <h3 className="settings-section-title">
+                  {t(
+                    "settings.permissions.desktopSecurityTitle",
+                    "Desktop shell security boundaries (read-only)",
+                  )}
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {t(
+                  "settings.permissions.desktopSecurityDesc",
+                  "Enforced natively by the Electron main process:",
+                )}
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                <li>
+                  {t(
+                    "settings.permissions.desktopRuleExternalNav",
+                    "External links open in the OS browser; the main window stays pinned to the local host.",
+                  )}
+                </li>
+                <li>
+                  {t(
+                    "settings.permissions.desktopRuleSubframeIpc",
+                    "Sandboxed plugin subframes cannot invoke privileged desktop IPC channels.",
+                  )}
+                </li>
+                <li>
+                  {t(
+                    "settings.permissions.desktopRuleClipboard",
+                    "Clipboard permissions stay restricted to explicit user actions.",
+                  )}
+                </li>
+                <li>
+                  {t(
+                    "settings.permissions.desktopRuleFileMode",
+                    "Local keys and managed secrets remain in 0600 files under the desktop config directory.",
+                  )}
+                </li>
+              </ul>
+            </section>
+          )}
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="mt-5">
+          <PermissionsDiagnosticsSection diagnostics={diagnostics} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

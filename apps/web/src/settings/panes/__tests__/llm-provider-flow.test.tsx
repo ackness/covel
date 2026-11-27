@@ -312,6 +312,32 @@ const importedProfile = {
   models: [{ ref: "model", modelId: "original" }],
 };
 
+it("searches a large provider model list by display name without changing saved models", async () => {
+  const profile = {
+    ...importedProfile,
+    models: Array.from({ length: 7 }, (_, index) => ({
+      ref: `model-${index}`,
+      modelId: `opaque-${index}`,
+      name: `Test model ${index}`,
+    })),
+  };
+  await mocks.store.set("llm.providers", [profile]);
+  render(<LlmPresetsPane />);
+  fireEvent.click(screen.getByRole("button", { name: /fixture.*7 models/ }));
+  openModels();
+  const search = screen.getByRole("searchbox", {
+    name: /Search models by name/,
+  });
+  fireEvent.change(search, { target: { value: "TEST MODEL 6" } });
+  expect(screen.getByText("Test model 6")).toBeTruthy();
+  expect(screen.queryByText("Test model 0")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /^Clear$/ }));
+  expect(screen.getByText("Test model 0")).toBeTruthy();
+  expect(mocks.store.get<ProviderModelProfile[]>("llm.providers")).toEqual([
+    profile,
+  ]);
+});
+
 function chooseImport(text: Promise<string>) {
   const file = new File([], "synthetic-providers.json", {
     type: "application/json",

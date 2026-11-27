@@ -1,5 +1,6 @@
+import { SettingsListFilter, SettingsListSearch } from "../list-controls.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSettingsWritable } from "../use-settings-save.js";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Copy, FileCode, Plus, Trash2 } from "lucide-react";
@@ -31,6 +32,7 @@ import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import {
   ProtocolSelect,
   ProviderSourceAccountSelect,
+  providerSourceStatusLabel,
 } from "./llm-provider-dialogs.js";
 import { useModelCapability } from "./use-model-capability.js";
 import { resolveDisplayCapability } from "./llm-effective-capability.js";
@@ -49,6 +51,7 @@ export function ProviderDetails({
   serverConfig,
   builtinDefault = serverConfig?.kind === "builtin",
   providerSources = [],
+  onOpenPermissions,
   busy = false,
   onAddModel,
   onPatchLocalProfile,
@@ -62,6 +65,7 @@ export function ProviderDetails({
   serverConfig?: ServerConfigSource;
   builtinDefault?: boolean;
   providerSources?: readonly ProviderSourceSummary[];
+  onOpenPermissions?: () => void;
   onAddModel: () => void;
   onPatchLocalProfile: (
     patch:
@@ -78,6 +82,14 @@ export function ProviderDetails({
   const sharedServer = getSharedServerInfo() !== null;
   const [tab, setTab] = useState("connection");
   const [modelsOpened, setModelsOpened] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
+  const [modelSourceFilter, setModelSourceFilter] = useState<
+    "all" | "local" | "server"
+  >("all");
+  useEffect(() => {
+    setModelQuery("");
+    setModelSourceFilter("all");
+  }, [provider.id]);
   const isServerProvider = provider.serverModels.length > 0;
   const serverLabel = builtinDefault
     ? t("settings.builtinDefault")
@@ -90,8 +102,32 @@ export function ProviderDetails({
     : undefined;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
   const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
-  const modelCount =
-    provider.serverModels.length + (localProfile?.models.length ?? 0);
+  const localModels = localProfile?.models ?? [];
+  const modelCount = provider.serverModels.length + localModels.length;
+  const hasBothModelSources =
+    provider.serverModels.length > 0 && localModels.length > 0;
+  const activeModelSource = hasBothModelSources ? modelSourceFilter : "all";
+  const normalizedModelQuery = modelQuery.trim().toLowerCase();
+  const matchesModel = (...fields: (string | undefined)[]) =>
+    fields.some((value) => value?.toLowerCase().includes(normalizedModelQuery));
+  const filteredServerModels =
+    activeModelSource === "local"
+      ? []
+      : normalizedModelQuery
+        ? provider.serverModels.filter((model) =>
+            matchesModel(model.model, model.name, model.id, model.protocol),
+          )
+        : provider.serverModels;
+  const filteredLocalModels =
+    activeModelSource === "server"
+      ? []
+      : normalizedModelQuery
+        ? localModels.filter((model) =>
+            matchesModel(model.modelId, model.name, model.ref, model.protocol),
+          )
+        : localModels;
+  const filteredModelCount =
+    filteredServerModels.length + filteredLocalModels.length;
 
   const commitBaseUrl = () => {
     if (localProfile && !activeSourceId && !baseUrl.conflict) {
@@ -122,9 +158,7 @@ export function ProviderDetails({
           )}
           {matchingSource && (
             <Badge variant={matchingSource.ready ? "secondary" : "destructive"}>
-              {matchingSource.ready
-                ? t("settings.providerSourceReady")
-                : t("settings.providerSourceNotReady")}
+              {providerSourceStatusLabel(matchingSource, t)}
             </Badge>
           )}
         </div>
@@ -238,25 +272,48 @@ export function ProviderDetails({
             <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3 text-xs">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-muted-foreground">
-                  {t("settings.providerSourceManagedCredentials", {
-                    source: activeSourceId,
-                  })}
+                  {matchingSource?.reason === "capability_denied"
+                    ? t("settings.providerSourcePermissionHint", {
+                        plugin: matchingSource.pluginId,
+                        defaultValue:
+                          "Plugin {{plugin}} does not yet have instance-scope and provider-source permissions. Approve its requested capabilities in Permissions & Security first.",
+                      })
+                    : t("settings.providerSourceManagedCredentials", {
+                        source: activeSourceId,
+                      })}
                 </p>
-                {matchingSource && matchingSource.authFlows.length > 0 && (
+                {matchingSource?.reason === "capability_denied" &&
+                onOpenPermissions ? (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={busy || !writable}
-                    onClick={() =>
-                      openPluginConfigFlow(
-                        matchingSource.pluginId,
-                        matchingSource.authFlows[0]!,
-                      )
-                    }
+                    disabled={busy}
+                    onClick={onOpenPermissions}
                   >
-                    {t("settings.providerSourceSignIn")}
+                    {t(
+                      "settings.providerSourceOpenPermissions",
+                      "Open Permissions & Security",
+                    )}
                   </Button>
+                ) : (
+                  matchingSource &&
+                  matchingSource.authFlows.length > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || !writable}
+                      onClick={() =>
+                        openPluginConfigFlow(
+                          matchingSource.pluginId,
+                          matchingSource.authFlows[0]!,
+                        )
+                      }
+                    >
+                      {t("settings.providerSourceSignIn")}
+                    </Button>
+                  )
                 )}
               </div>
               {localProfile &&
@@ -313,10 +370,52 @@ export function ProviderDetails({
           hidden={tab !== "models"}
           className="m-0 flex flex-col gap-3 pt-5 data-[state=inactive]:hidden"
         >
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {(modelCount > 5 || modelQuery || hasBothModelSources) && (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                {(modelCount > 5 || modelQuery) && (
+                  <SettingsListSearch
+                    label={t("settings.searchModelsPlaceholder")}
+                    value={modelQuery}
+                    onChange={setModelQuery}
+                  />
+                )}
+                {hasBothModelSources && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(
+                      [
+                        {
+                          id: "all",
+                          label: t("settings.modelSourceAll", {
+                            count: modelCount,
+                            defaultValue: "All ({{count}})",
+                          }),
+                        },
+                        {
+                          id: "local",
+                          label: `${t("settings.localProvider", "Local")} (${localModels.length})`,
+                        },
+                        {
+                          id: "server",
+                          label: `${serverLabel} (${provider.serverModels.length})`,
+                        },
+                      ] as const
+                    ).map((pill) => (
+                      <SettingsListFilter
+                        key={pill.id}
+                        active={activeModelSource === pill.id}
+                        onClick={() => setModelSourceFilter(pill.id)}
+                        label={pill.label}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <Button
               variant="outline"
               size="sm"
+              className="ml-auto shrink-0"
               disabled={busy || !writable}
               onClick={onAddModel}
             >
@@ -325,75 +424,103 @@ export function ProviderDetails({
             </Button>
           </div>
 
-          {modelsOpened && (
-            <div className="divide-y divide-border rounded-lg border border-border">
-              {provider.serverModels.map((model) => (
-                <ProviderModelRow
-                  key={`server:${model.id}`}
-                  provider={provider.provider}
-                  protocol={model.protocol ?? provider.protocol}
-                  modelId={model.model}
-                  name={model.name}
-                  presetId={model.id}
-                  baseUrl={model.baseUrl}
-                  capability={model.capability}
-                  source="server"
-                  sourceLabel={serverLabel}
-                />
-              ))}
-              {localProfile?.models.map((model) => (
-                <ProviderModelRow
-                  key={model.ref}
-                  provider={provider.provider}
-                  protocol={
-                    model.protocol ?? localProfile.protocol ?? provider.protocol
-                  }
-                  modelProtocol={model.protocol}
-                  providerProtocol={localProfile.protocol ?? provider.protocol}
-                  busy={busy}
-                  onProtocolChange={(protocol) =>
-                    onPatchLocalProfile((current) => ({
-                      models: current.models.map((entry) =>
-                        entry.ref === model.ref
-                          ? { ...entry, protocol }
-                          : entry,
-                      ),
-                    }))
-                  }
-                  modelId={model.modelId}
-                  name={model.name}
-                  presetId={model.ref}
-                  baseUrl={localProfile.baseUrl}
-                  source="local"
-                  sourceLabel={t("settings.localModel", "Local model")}
-                  reasoningEffort={model.reasoningEffort}
-                  onNameChange={(name) =>
-                    onPatchLocalProfile((current) => ({
-                      models: current.models.map((entry) =>
-                        entry.ref === model.ref ? { ...entry, name } : entry,
-                      ),
-                    }))
-                  }
-                  onDuplicate={() => onDuplicateLocalModel(model)}
-                  onReasoningChange={(reasoningEffort) =>
-                    onPatchLocalProfile((current) => ({
-                      models: current.models.map((entry) =>
-                        entry.ref === model.ref
-                          ? { ...entry, reasoningEffort }
-                          : entry,
-                      ),
-                    }))
-                  }
-                  onDelete={() => onDeleteLocalModel(model.ref)}
-                />
-              ))}
-              {modelCount === 0 && (
-                <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-xs text-muted-foreground">
-                  {t("settings.noModels", "No models yet")}
+          {modelsOpened &&
+            (modelCount === 0 ? (
+              <p className="rounded-md border border-dashed border-border px-3 py-8 text-center text-xs text-muted-foreground">
+                {t("settings.noModels", "No models yet")}
+              </p>
+            ) : filteredModelCount === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border px-3 py-8 text-center">
+                <p className="text-xs text-muted-foreground">
+                  {t(
+                    "settings.noMatchingModels",
+                    "No models match the current filter.",
+                  )}
                 </p>
-              )}
-            </div>
-          )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setModelQuery("");
+                    setModelSourceFilter("all");
+                  }}
+                >
+                  {t("settings.github.resetFilters")}
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {filteredServerModels.map((model) => (
+                  <ProviderModelRow
+                    key={`server:${model.id}`}
+                    provider={provider.provider}
+                    protocol={model.protocol ?? provider.protocol}
+                    modelId={model.model}
+                    name={model.name}
+                    presetId={model.id}
+                    baseUrl={model.baseUrl}
+                    capability={model.capability}
+                    source="server"
+                    sourceLabel={serverLabel}
+                  />
+                ))}
+                {localProfile &&
+                  filteredLocalModels.map((model) => (
+                    <ProviderModelRow
+                      key={model.ref}
+                      provider={provider.provider}
+                      protocol={
+                        model.protocol ??
+                        localProfile.protocol ??
+                        provider.protocol
+                      }
+                      modelProtocol={model.protocol}
+                      providerProtocol={
+                        localProfile.protocol ?? provider.protocol
+                      }
+                      busy={busy}
+                      onProtocolChange={(protocol) =>
+                        onPatchLocalProfile((current) => ({
+                          models: current.models.map((entry) =>
+                            entry.ref === model.ref
+                              ? { ...entry, protocol }
+                              : entry,
+                          ),
+                        }))
+                      }
+                      modelId={model.modelId}
+                      name={model.name}
+                      presetId={model.ref}
+                      baseUrl={localProfile.baseUrl}
+                      source="local"
+                      sourceLabel={t("settings.localModel", "Local model")}
+                      reasoningEffort={model.reasoningEffort}
+                      onNameChange={(name) =>
+                        onPatchLocalProfile((current) => ({
+                          models: current.models.map((entry) =>
+                            entry.ref === model.ref
+                              ? { ...entry, name }
+                              : entry,
+                          ),
+                        }))
+                      }
+                      onDuplicate={() => onDuplicateLocalModel(model)}
+                      onReasoningChange={(reasoningEffort) =>
+                        onPatchLocalProfile((current) => ({
+                          models: current.models.map((entry) =>
+                            entry.ref === model.ref
+                              ? { ...entry, reasoningEffort }
+                              : entry,
+                          ),
+                        }))
+                      }
+                      onDelete={() => onDeleteLocalModel(model.ref)}
+                    />
+                  ))}
+              </div>
+            ))}
         </TabsContent>
       </Tabs>
     </div>

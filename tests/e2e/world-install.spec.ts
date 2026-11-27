@@ -116,18 +116,20 @@ for (const width of [1280, 390]) {
       name: /^Install \d+ selected$/,
     });
     await expect(install).toBeDisabled();
-    await expect(
-      dialog.getByText(
-        /World installation does not install or authorize plugins/,
-      ),
-    ).toBeVisible();
     expect(installed).toHaveLength(0);
     const firstPackage = dialog.getByRole("checkbox", { name: /example-note/ });
     const secondPackage = dialog.getByRole("checkbox", {
       name: /example-demo/,
     });
-    await expect(firstPackage).toBeChecked();
-    await expect(secondPackage).toBeChecked();
+    await expect(firstPackage).not.toBeChecked();
+    await expect(secondPackage).not.toBeChecked();
+    await firstPackage.check();
+    await secondPackage.check();
+    await expect(
+      dialog.getByText(
+        /World installation does not install or authorize plugins/,
+      ),
+    ).toBeVisible();
     const consent = dialog.getByRole("checkbox", {
       name: "I understand the risks and trust this source.",
     });
@@ -149,6 +151,7 @@ for (const width of [1280, 390]) {
     await expect(consent).not.toBeChecked();
     await consent.check();
     await install.click();
+    await dialog.getByRole("tab", { name: "Installed", exact: true }).click();
     const installedWorlds = dialog
       .getByRole("heading", { name: "Installed world packages", exact: true })
       .locator("..");
@@ -164,7 +167,9 @@ for (const width of [1280, 390]) {
       "example-demo",
       "example-note",
     ]);
-    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(0);
+    await expect(dialog.getByText(/Plugin or world files changed/)).toHaveCount(
+      0,
+    );
     expect(
       await dialog.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,

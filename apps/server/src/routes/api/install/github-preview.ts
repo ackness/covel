@@ -117,20 +117,39 @@ export function inspectBundle(
       return file && overlay != null ? [{ ...file, overlay }] : [];
     });
   const { data } = compileManifestLabels(manifest.rawFrontmatter, labels);
+  const clipI18nText = (value: z.infer<typeof i18nTextSchema>, max: number) =>
+    typeof value === "string"
+      ? value.slice(0, max)
+      : Object.fromEntries(
+          Object.entries(value).map(([locale, text]) => [
+            locale,
+            text.slice(0, max),
+          ]),
+        );
   const description = i18nTextSchema.parse(data.description ?? "");
+  const parsedDisplayName = i18nTextSchema.safeParse(
+    data.displayName ?? data.name,
+  );
+  const displayName =
+    parsedDisplayName.success &&
+    (typeof parsedDisplayName.data === "string"
+      ? parsedDisplayName.data.trim().length > 0
+      : Object.values(parsedDisplayName.data).some((v) => v.trim().length > 0))
+      ? clipI18nText(parsedDisplayName.data, 200)
+      : undefined;
+  const tags = Array.isArray(manifest.plugin.tags)
+    ? manifest.plugin.tags
+        .map((tag) => tag.trim().slice(0, 64))
+        .filter(Boolean)
+        .slice(0, 12)
+    : [];
   return {
     id: pluginId,
+    ...(displayName !== undefined ? { displayName } : {}),
     version,
-    description:
-      typeof description === "string"
-        ? description.slice(0, 1000)
-        : Object.fromEntries(
-            Object.entries(description).map(([locale, text]) => [
-              locale,
-              text.slice(0, 1000),
-            ]),
-          ),
+    description: clipI18nText(description, 1000),
     author: manifest.plugin.author?.name ?? null,
+    ...(tags.length > 0 ? { tags } : {}),
     executionMode,
     hasServerCode,
     capabilities,

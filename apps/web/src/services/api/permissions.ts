@@ -41,6 +41,7 @@ export interface PermissionPluginSummary {
   readonly integrity:
     "builtin" | "verified" | "modified" | "no-receipt" | "unreadable";
   readonly trustedSource: boolean;
+  readonly sourceAutoApproved: boolean;
   readonly capabilities: PluginCapabilities | null;
   readonly grantStatus: PluginGrantStatus | "builtin";
   readonly grant: PluginGrantRecord | null;
