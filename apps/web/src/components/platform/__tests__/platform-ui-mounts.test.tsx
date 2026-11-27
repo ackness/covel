@@ -325,6 +325,70 @@ describe("Platform v2 Web UI mounts", () => {
     });
   });
 
+  it("copies the browser authorization link without opening a browser", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot({
+        kind: "browser",
+        stepId: "s-auth",
+        title: "Sign in",
+        authorizeUrl: "https://auth.example/start?state=abc",
+        completion: "paste",
+      }),
+    });
+    render(<ConfigFlowDialog />);
+    act(() => {
+      openPluginConfigFlow("demo-platform", "connect");
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        "https://auth.example/start?state=abc",
+      ),
+    );
+    expect(
+      screen.getByText("https://auth.example/start?state=abc"),
+    ).toBeTruthy();
+    expect(mocks.openExternalUrl).not.toHaveBeenCalled();
+  });
+
+  it("copies the device verification link without opening a browser", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    mocks.startPluginConfigFlow.mockResolvedValueOnce({
+      ok: true,
+      run: makeSnapshot({
+        kind: "device",
+        stepId: "s-dev",
+        title: "Device Verification",
+        userCode: "CODE-42",
+        verificationUri: "https://device.example/verify",
+        verificationUriComplete: "https://device.example/verify?code=CODE-42",
+        intervalSec: 60,
+      }),
+    });
+    render(<ConfigFlowDialog />);
+    act(() => {
+      openPluginConfigFlow("demo-platform", "connect");
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Copy link" }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith(
+        "https://device.example/verify?code=CODE-42",
+      ),
+    );
+    expect(mocks.openExternalUrl).not.toHaveBeenCalled();
+  });
+
   it("polls device ConfigFlowDialog step via openExternalUrl until done", async () => {
     mocks.startPluginConfigFlow.mockResolvedValueOnce({
       ok: true,

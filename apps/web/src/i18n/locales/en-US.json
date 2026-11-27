@@ -3141,6 +3141,8 @@
     "openInBrowser": "Open authorization page",
     "waitingCallback": "Waiting for authorization callback...",
     "pasteCallbackUrl": "Or paste the redirected callback URL",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
     "codeCopied": "Code copied",
     "copyFailed": "Could not copy to clipboard",
     "openVerificationPage": "Open verification page",

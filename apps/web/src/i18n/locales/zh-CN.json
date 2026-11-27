@@ -3036,6 +3036,8 @@
     "openInBrowser": "在浏览器中打开授权页",
     "waitingCallback": "正在等待授权回调...",
     "pasteCallbackUrl": "或粘贴跳转后的回调 URL",
+    "copyLink": "复制链接",
+    "linkCopied": "已复制链接",
     "codeCopied": "已复制验证码",
     "copyFailed": "无法复制到剪贴板",
     "openVerificationPage": "打开验证页面",

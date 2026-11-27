@@ -248,6 +248,83 @@ function FormStepView({
   );
 }
 
+function useCopyToClipboard() {
+  const { t } = useTranslation();
+  return (text: string, successMessage: string) => {
+    const fail = () =>
+      emitToast(
+        "error",
+        t("platform.copyFailed", "Could not copy to clipboard"),
+      );
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) {
+      fail();
+      return;
+    }
+    void clipboard
+      .writeText(text)
+      .then(() => emitToast("info", successMessage))
+      .catch(fail);
+  };
+}
+
+/**
+ * An authorization or verification link the user can open here or copy to
+ * another browser (another profile, device, or a signed-in session).
+ */
+function ExternalLinkActions({
+  url,
+  openLabel,
+}: {
+  readonly url: string;
+  readonly openLabel: string;
+}) {
+  const { t } = useTranslation();
+  const copy = useCopyToClipboard();
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="gap-2"
+          onClick={() => {
+            void openExternalUrl(url).then((ok) => {
+              if (!ok) {
+                emitToast(
+                  "error",
+                  t(
+                    "platform.openExternalFailed",
+                    "Could not open external URL",
+                  ),
+                );
+              }
+            });
+          }}
+        >
+          <ExternalLink className="h-4 w-4" />
+          {openLabel}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="gap-2"
+          onClick={() => copy(url, t("platform.linkCopied", "Link copied"))}
+        >
+          <Copy className="h-4 w-4" />
+          {t("platform.copyLink", "Copy link")}
+        </Button>
+      </div>
+      <p
+        title={url}
+        className="truncate rounded-(--radius-control) bg-muted/40 px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground select-all"
+      >
+        {url}
+      </p>
+    </div>
+  );
+}
+
 function BrowserStepView({
   step,
   submitting,
@@ -266,24 +343,10 @@ function BrowserStepView({
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <Button
-        type="button"
-        variant="outline"
-        className="gap-2"
-        onClick={() => {
-          void openExternalUrl(step.authorizeUrl).then((ok) => {
-            if (!ok) {
-              emitToast(
-                "error",
-                t("platform.openExternalFailed", "Could not open external URL"),
-              );
-            }
-          });
-        }}
-      >
-        <ExternalLink className="h-4 w-4" />
-        {t("platform.openInBrowser", "Open authorization page")}
-      </Button>
+      <ExternalLinkActions
+        url={step.authorizeUrl}
+        openLabel={t("platform.openInBrowser", "Open authorization page")}
+      />
       {step.completion !== "paste" && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -351,6 +414,7 @@ function DeviceStepView({
   readonly onDismiss: () => void;
 }) {
   const { t } = useTranslation();
+  const copy = useCopyToClipboard();
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 rounded-(--radius-control) border border-border bg-muted/40 px-4 py-3">
@@ -362,45 +426,18 @@ function DeviceStepView({
           variant="ghost"
           size="sm"
           className="gap-1.5"
-          onClick={() => {
-            const clipboard = navigator.clipboard;
-            if (!clipboard?.writeText) {
-              emitToast(
-                "error",
-                t("platform.copyFailed", "Could not copy to clipboard"),
-              );
-              return;
-            }
-            void clipboard
-              .writeText(step.userCode)
-              .then(() => {
-                emitToast("info", t("platform.codeCopied", "Code copied"));
-              })
-              .catch(() => {
-                emitToast(
-                  "error",
-                  t("platform.copyFailed", "Could not copy to clipboard"),
-                );
-              });
-          }}
+          onClick={() =>
+            copy(step.userCode, t("platform.codeCopied", "Code copied"))
+          }
         >
           <Copy className="h-3.5 w-3.5" />
           {t("common.copy", "Copy")}
         </Button>
       </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="gap-2"
-        onClick={() =>
-          void openExternalUrl(
-            step.verificationUriComplete ?? step.verificationUri,
-          )
-        }
-      >
-        <ExternalLink className="h-4 w-4" />
-        {t("platform.openVerificationPage", "Open verification page")}
-      </Button>
+      <ExternalLinkActions
+        url={step.verificationUriComplete ?? step.verificationUri}
+        openLabel={t("platform.openVerificationPage", "Open verification page")}
+      />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         <span>
@@ -843,7 +880,8 @@ export function ConfigFlowDialog() {
         if (!open) void dismiss();
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      {/* A fixed column stops long links or step content from widening the dialog. */}
+      <DialogContent className="grid-cols-[minmax(0,1fr)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? (
