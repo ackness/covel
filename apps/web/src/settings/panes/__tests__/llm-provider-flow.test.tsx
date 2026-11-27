@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import {
   act,
@@ -67,7 +68,12 @@ vi.mock("@/stores/session-store.js", () => ({
   }),
 }));
 vi.mock("@/components/shared/ping-button.js", () => ({
-  PingButton: () => <button>Test model</button>,
+  PingButton: ({ children }: { children?: ReactNode }) => (
+    <>
+      <button>Test model</button>
+      {children}
+    </>
+  ),
   invalidateAllPingResults: vi.fn(),
 }));
 vi.mock("@/services/api.js", async (importOriginal) => ({

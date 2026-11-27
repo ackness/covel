@@ -641,14 +641,14 @@ function ProviderModelRow({
             baseCapability={capability}
           />
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <PingButton
-            target={
-              source === "local"
-                ? { kind: "model", modelRef: presetId }
-                : { kind: "preset", presetId }
-            }
-          />
+        <PingButton
+          layout="row"
+          target={
+            source === "local"
+              ? { kind: "model", modelRef: presetId }
+              : { kind: "preset", presetId }
+          }
+        >
           {onDuplicate && (
             <Button
               variant="ghost"
@@ -684,7 +684,7 @@ function ProviderModelRow({
               <Trash2 />
             </Button>
           )}
-        </div>
+        </PingButton>
       </div>
       {onReasoningChange && (
         <details className="group">

@@ -1250,7 +1250,7 @@
     "fetchModelsFailed": "Could not read the model list.",
     "failureHint": {
       "unreachable": "Cannot connect: check that the service is running and the address and port are right.",
-      "timeout": "The service did not answer in time.",
+      "timeout": "Timed out connecting or waiting for a reply. Check the network or proxy.",
       "auth": "The API key is invalid or does not have permission to use this model.",
       "quota": "The account has no balance or quota left.",
       "rate_limited": "Too many requests; try again later.",

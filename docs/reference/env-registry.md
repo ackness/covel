@@ -487,6 +487,7 @@ v0.0.42 调整了插件扩展契约，旧的开发数据不会自动升级。桌
 - 桌面版选择 `system` 代理时，后端为每个目标 URL 通过 IPC 询问 Chromium 的系统代理，并按系统返回的代理顺序依次尝试连接。
 - Electron 注入内部标记 `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`，所以普通的 Node IPC 或 cluster 进程不会误用这套协议。
 - `COVEL_SYSTEM_PROXY_URL` 为不支持动态 IPC 的宿主提供静态系统代理地址；Electron 按请求 URL 通过 IPC 解析代理。
+- 没有 Electron 解析器但设置了 `COVEL_SYSTEM_PROXY_URL` 时，未保存代理选择的后端默认使用 `system` 模式并走这个静态代理，否则默认直连。`pnpm dev` 在未设置该变量时会把当前终端的 `HTTPS_PROXY`、`ALL_PROXY` 或 `HTTP_PROXY` 传给它。
 - 代理用于框架自己的服务商请求、模型数据库更新、GitHub 插件解析和下载。它不作用于第三方插件的 `fetchWithRetry`。
 
 ### 模型调用

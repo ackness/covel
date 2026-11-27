@@ -1206,7 +1206,7 @@
     "fetchModelsFailed": "无法读取模型列表。",
     "failureHint": {
       "unreachable": "连不上服务：请确认它已启动，地址和端口正确。",
-      "timeout": "服务没有在时限内应答。",
+      "timeout": "连接服务或等待回复超时。请检查网络或代理。",
       "auth": "密钥无效，或无权使用这个模型。",
       "quota": "账户余额或额度不足。",
       "rate_limited": "请求过于频繁，请稍后再试。",

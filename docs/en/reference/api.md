@@ -5585,7 +5585,7 @@ How each kind is tested:
 - Text model: sends one streaming request and measures the time to first token (`ttfbMs`).
 - Evaluation model: sends one evaluation request. There is no `ttfbMs`.
 - Embedding model: sends one vector request. There is no `ttfbMs`.
-- Each test sends only one HTTP request, with no transport-level retry.
+- Each test sends only one HTTP request, with no transport-level retry. The test waits up to 60 seconds and can return sooner on a connection error or provider rejection.
 
 **Response**
 

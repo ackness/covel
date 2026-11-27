@@ -772,6 +772,35 @@ describe("config API env and file contracts", () => {
     );
   });
 
+  it("defaults to the static system proxy when no desktop resolver is present", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+    process.env.COVEL_SYSTEM_PROXY_URL = "http://127.0.0.1:7890";
+
+    const res = await buildApp(apiKeys).request("/api/config/proxy");
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      mode: "system",
+      effective: "proxy",
+      systemAvailable: true,
+    });
+  });
+
+  it("defaults to direct without a resolver or static system proxy", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    process.env.COVEL_DESKTOP_REST = "1";
+
+    const res = await buildApp(apiKeys).request("/api/config/proxy");
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      mode: "direct",
+      effective: "direct",
+      systemAvailable: false,
+    });
+  });
+
   // ── Desktop REST bearer token guard ────────────────────────────
   //
   // When the desktop shell injects COVEL_DESKTOP_REST_TOKEN into the sidecar

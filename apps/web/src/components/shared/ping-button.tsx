@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Loader2, XCircle, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -40,6 +46,9 @@ interface PingButtonProps {
    */
   onBeforePing?: () => Promise<boolean | void> | boolean | void;
   className?: string;
+  /** In a grid row, keep the controls together and let failures span the grid. */
+  layout?: "inline" | "row";
+  children?: ReactNode;
 }
 
 // Cache identity includes the explicit model, server preset, or slot namespace.
@@ -89,6 +98,8 @@ export function PingButton({
   onResult,
   onBeforePing,
   className,
+  layout = "inline",
+  children,
 }: PingButtonProps) {
   const { t } = useTranslation();
   const cacheKey = cacheKeyFor(target);
@@ -248,40 +259,68 @@ export function PingButton({
 
   if (hideResult) return button;
 
+  const row = layout === "row";
+  const failure = result && !testing && !result.ok && (
+    <span
+      className={
+        row
+          ? "col-span-full flex min-w-0 items-start gap-2 rounded-md border border-destructive/25 p-2.5"
+          : "inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 text-xs"
+      }
+    >
+      <XCircle
+        aria-hidden="true"
+        className={
+          row
+            ? "mt-0.5 size-3.5 shrink-0 text-destructive"
+            : "size-3 shrink-0 text-destructive"
+        }
+      />
+      <ActionableErrorNotice
+        layout={row ? "panel" : "inline"}
+        providerFailureKind={result.errorKind}
+        error={result.error}
+      />
+    </span>
+  );
+
   return (
-    <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
-      {button}
-      {result && !testing && (
-        <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1 text-xs">
-          {result.ok ? (
-            <>
-              <CheckCircle2 className="w-3 h-3 text-green-500" />
-              <span className="text-green-600 font-mono">
-                {latencyDisplay}ms
+    <span
+      className={
+        row
+          ? "contents"
+          : "inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
+      }
+    >
+      <span
+        className={
+          row
+            ? "flex min-w-0 flex-wrap items-center gap-1.5 @lg:justify-end"
+            : "contents"
+        }
+      >
+        {button}
+        {result?.ok && !testing && (
+          <span className="inline-flex min-w-0 items-center gap-1 text-xs">
+            <CheckCircle2 className="size-3 text-green-500" />
+            <span className="font-mono text-green-600">{latencyDisplay}ms</span>
+            {fellThrough && (
+              <span
+                className="text-[10px] text-amber-500"
+                title={t("settings.pingSlotFallbackTitle", {
+                  resolvedVia,
+                  defaultValue:
+                    "This AI role fell back to {{resolvedVia}}; the role you requested is not configured.",
+                })}
+              >
+                ⚠
               </span>
-              {fellThrough && (
-                <span
-                  className="text-[10px] text-amber-500"
-                  title={t("settings.pingSlotFallbackTitle", {
-                    resolvedVia,
-                    defaultValue:
-                      "This AI role fell back to {{resolvedVia}}; the role you requested is not configured.",
-                  })}
-                >
-                  ⚠
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              <XCircle className="h-3 w-3 shrink-0 text-destructive" />
-              <ActionableErrorNotice
-                error={failureText ?? t("settings.pingFailed", "Failed")}
-              />
-            </>
-          )}
-        </span>
-      )}
+            )}
+          </span>
+        )}
+        {children}
+      </span>
+      {failure}
     </span>
   );
 }
