@@ -74,6 +74,19 @@ export async function prepareLockedTurn(
   // compaction appended to a non-active session. The throw surfaces
   // as an `error.occurred` SSE event via the request's failure path.
   const liveSession = await host.readLiveSession();
+  if (type === "submit_actions" && payload.branchFromNodeId !== undefined) {
+    const node = await store.getTurnNode(payload.branchFromNodeId);
+    if (!node || node.sessionId !== sessionId) {
+      throw new ActionRejectedError(
+        "The requested branch node was not found",
+        "branch_node_not_found",
+      );
+    }
+    throw new ActionRejectedError(
+      "Historical branch execution is not available yet",
+      "branch_checkout_required",
+    );
+  }
   if (turnArgs.generated) {
     if (!control.canAdvance) return { stopped: true as const };
     if (liveSession.phase !== "playing") {

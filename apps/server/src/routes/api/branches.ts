@@ -131,35 +131,37 @@ branchRoutes.delete("/:id/branches/nodes/:nodeId", async (c) => {
   const deletedNodeIds = await withSettledSessionLock(c, id, async () => {
     const root = await store.getTurnNode(c.req.param("nodeId"));
     if (!root || root.sessionId !== id) return null;
-    const nodes = await store.listTurnNodes(id);
-    const ids = new Set<string>();
-    const visit = (nodeId: string): void => {
-      if (ids.has(nodeId)) return;
-      ids.add(nodeId);
-      for (const child of nodes)
-        if (child.parentNodeId === nodeId) visit(child.id);
-    };
-    visit(root.id);
-    if (ids.has((await store.getSession(id))?.activeNodeId ?? "")) {
-      return "active-subtree" as const;
-    }
-    if (root.parentNodeId) {
-      const parent = nodes.find((node) => node.id === root.parentNodeId);
-      if (parent?.activeChildId === root.id) {
-        const replacement = nodes
-          .filter(
-            (node) =>
-              node.parentNodeId === parent.id && !ids.has(node.id),
-          )
-          .sort((left, right) => left.seq - right.seq)[0];
-        await store.saveTurnNode({
-          ...parent,
-          activeChildId: replacement?.id ?? null,
-        });
+    return store.withTransaction(async (tx) => {
+      const nodes = await tx.listTurnNodes(id);
+      const ids = new Set<string>();
+      const visit = (nodeId: string): void => {
+        if (ids.has(nodeId)) return;
+        ids.add(nodeId);
+        for (const child of nodes)
+          if (child.parentNodeId === nodeId) visit(child.id);
+      };
+      visit(root.id);
+      if (ids.has((await tx.getSession(id))?.activeNodeId ?? "")) {
+        return "active-subtree" as const;
       }
-    }
-    for (const nodeId of ids) await store.deleteTurnNode(nodeId);
-    return [...ids];
+      if (root.parentNodeId) {
+        const parent = nodes.find((node) => node.id === root.parentNodeId);
+        if (parent?.activeChildId === root.id) {
+          const replacement = nodes
+            .filter(
+              (node) =>
+                node.parentNodeId === parent.id && !ids.has(node.id),
+            )
+            .sort((left, right) => left.seq - right.seq)[0];
+          await tx.saveTurnNode({
+            ...parent,
+            activeChildId: replacement?.id ?? null,
+          });
+        }
+      }
+      for (const nodeId of ids) await tx.deleteTurnNode(nodeId);
+      return [...ids];
+    });
   });
   if (deletedNodeIds === "active-subtree")
     return c.json(

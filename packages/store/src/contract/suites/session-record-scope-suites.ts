@@ -5,10 +5,13 @@ import {
   makeSession,
   makeSnapshot,
   makeSuspension,
+  makeTurnNode,
   makeWorldDataImportLedger,
 } from "../test-fixtures.js";
 
-function registerRecordScopeSuite<T extends { id: string; sessionId: string }>(
+export function registerRecordScopeSuite<
+  T extends { id: string; sessionId: string },
+>(
   recordType: string,
   getStore: () => DataStore,
   makeRecord: (id: string, sessionId: string) => T,
@@ -98,6 +101,18 @@ function registerRecordScopeSuite<T extends { id: string; sessionId: string }>(
 export function registerSessionRecordScopeSuites(
   getStore: () => DataStore,
 ): void {
+  registerRecordScopeSuite(
+    "turn_node",
+    getStore,
+    (id, sessionId) => makeTurnNode({ id, sessionId }),
+    (record) => ({ ...record, label: "updated" }),
+    (store, record) => store.saveTurnNode(record),
+    async (store, record) => {
+      const found = await store.getTurnNode(record.id);
+      return found?.sessionId === record.sessionId ? found : null;
+    },
+  );
+
   it("round-trips the session advancement cap and snapshot while preserving unrelated metadata", async () => {
     const store = getStore();
     await store.createSession(

@@ -4,6 +4,7 @@ import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type { TurnNodeRecord, DataStore } from "../types.js";
+import { SessionRecordScopeConflictError } from "../errors.js";
 
 type TurnNodesTable = Table & {
   id: Column;
@@ -53,13 +54,21 @@ function toRecord(row: TurnNodeRow, json: JsonReader): TurnNodeRecord {
     turnIds: json.readRequired(row.turnIds) as readonly string[],
     logicalTurn: row.logicalTurn,
     seq: row.seq,
-    label: row.label,
-    inputSummary: json.read(row.inputSummary) as TurnNodeRecord["inputSummary"],
+    ...(row.label !== null ? { label: row.label } : {}),
+    ...(json.read(row.inputSummary) !== undefined
+      ? {
+          inputSummary: json.read(
+            row.inputSummary,
+          ) as TurnNodeRecord["inputSummary"],
+        }
+      : {}),
     checkpointKind: row.checkpointKind as TurnNodeRecord["checkpointKind"],
     baseNodeId: row.baseNodeId,
     depthFromBase: row.depthFromBase,
     statePayload: json.readRequired(row.statePayload),
-    tailDelta: json.read(row.tailDelta),
+    ...(json.read(row.tailDelta) !== undefined
+      ? { tailDelta: json.read(row.tailDelta) }
+      : {}),
     messagesAdded: json.readRequired(row.messagesAdded) as readonly unknown[],
     turnMessagesAdded: json.readRequired(row.turnMessagesAdded) as readonly unknown[],
     playerInputsAdded: json.readRequired(row.playerInputsAdded) as readonly unknown[],
@@ -85,6 +94,10 @@ export function createSqlTurnNodeRecords(
         target: table.id,
         set: values.turnNodeUpdate(record),
         setWhere: eq(table.sessionId, record.sessionId),
+        errorOnSkipped: new SessionRecordScopeConflictError(
+          "turn_node",
+          record.id,
+        ),
       });
     },
     async getTurnNode(id) {
