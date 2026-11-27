@@ -1,5 +1,5 @@
 import { PaneNotice, usePaneNotice } from "../pane-notice.js";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, FileInput, FileOutput, Plus, Server } from "lucide-react";
 import {
@@ -77,7 +77,7 @@ export function LlmPresetsPane({
   const [query, setQuery] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
-  useEffect(() => {
+  const refreshProviderSources = useCallback(() => {
     let cancelled = false;
     void fetchProviderSources()
       .then((res) => {
@@ -89,7 +89,15 @@ export function LlmPresetsPane({
     return () => {
       cancelled = true;
     };
-  }, [instanceDataVersion, providerDialogOpen]);
+  }, []);
+  useEffect(
+    () => refreshProviderSources(),
+    [instanceDataVersion, refreshProviderSources],
+  );
+  useEffect(() => {
+    if (!providerDialogOpen) return;
+    return refreshProviderSources();
+  }, [providerDialogOpen, refreshProviderSources]);
   const [providerDraft, setProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
   const [modelProtocolDraft, setModelProtocolDraft] = useState("");

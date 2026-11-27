@@ -1,7 +1,10 @@
+import { SettingsListSearch } from "../list-controls.js";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import {
+  CAPABILITY_KEYS,
+  CAPABILITY_CATALOG,
   derivePluginRequestedCapabilities,
   pluginGrantDecisionFor,
   type CapabilityCeiling,
@@ -12,11 +15,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  Search,
   ShieldAlert,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -24,7 +25,7 @@ import type { PermissionPluginSummary } from "@/services/api/permissions.js";
 import { PluginCapabilitiesPreview } from "./PluginCapabilitiesPreview.js";
 
 export interface PermissionsPluginListProps {
-  readonly plugins: readonly PermissionPluginSummary[];
+  readonly plugins: readonly PluginGrantView[];
   readonly ceilings: Readonly<Record<CapabilityKey, CapabilityCeiling>>;
   readonly busyPluginId: string | null;
   readonly onSaveGrants: (
@@ -49,59 +50,75 @@ export function isGrantWarningStatus(
   );
 }
 
-/**
- * Determine which declared capabilities of a community plugin are still
- * awaiting an explicit L3 grant (`effective === "ask"`).
- */
-export function getPluginPendingCapabilities(
+interface PluginGrantView {
+  plugin: PermissionPluginSummary;
+  requestedCapabilities: readonly CapabilityKey[];
+  pendingCapabilities: readonly CapabilityKey[];
+  needsAttention: boolean;
+}
+
+export function describePluginGrant(
   plugin: PermissionPluginSummary,
   ceilings: Readonly<Record<CapabilityKey, CapabilityCeiling>>,
-): readonly CapabilityKey[] {
-  if (plugin.source !== "community") return [];
-  const requested = derivePluginRequestedCapabilities({
-    tier: plugin.tier,
-    capabilities: plugin.capabilities,
-    existingDecisions: plugin.grant?.decisions,
-  });
-  return requested.filter((key) => {
-    const state = plugin.effectiveCapabilities[key];
-    if (!state || state.effective !== "ask") return false;
-    if (ceilings[key] === "disabled" || state.lockedBy === "policy") {
-      return false;
-    }
-    const explicitDeny = plugin.grant?.decisions[key] === "deny";
-    if (
-      key === "plugin.communityCode" &&
-      plugin.sourceAutoApproved &&
-      !explicitDeny
-    ) {
-      return false;
-    }
-    return true;
-  });
+): PluginGrantView {
+  const declared = new Set(
+    derivePluginRequestedCapabilities({
+      tier: plugin.tier,
+      capabilities: plugin.capabilities,
+    }),
+  );
+  // Keep historical decisions editable even when the package drops a declaration.
+  const requested = CAPABILITY_KEYS.filter(
+    (key) =>
+      declared.has(key) ||
+      (plugin.grant?.decisions[key] !== undefined &&
+        !CAPABILITY_CATALOG[key].reserved),
+  );
+  const pending =
+    plugin.source === "community"
+      ? requested.filter((key) => {
+          const state = plugin.effectiveCapabilities[key];
+          if (!state || state.effective !== "ask") return false;
+          if (ceilings[key] === "disabled" || state.lockedBy === "policy") {
+            return false;
+          }
+          const explicitDeny = plugin.grant?.decisions[key] === "deny";
+          if (
+            key === "plugin.communityCode" &&
+            plugin.sourceAutoApproved &&
+            !explicitDeny
+          ) {
+            return false;
+          }
+          return true;
+        })
+      : [];
+  return {
+    plugin,
+    requestedCapabilities: requested,
+    pendingCapabilities: pending,
+    needsAttention:
+      isGrantWarningStatus(plugin.grantStatus) || pending.length > 0,
+  };
 }
 
 function baseDecisionsForMutation(
   plugin: PermissionPluginSummary,
 ): PluginGrantDecisions {
-  if (!plugin.grant) return {};
-  if (plugin.grantStatus === "valid") {
-    return { ...plugin.grant.decisions };
+  const decisions: PluginGrantDecisions = {};
+  for (const key of CAPABILITY_KEYS) {
+    const decision = pluginGrantDecisionFor(
+      plugin.grantStatus,
+      plugin.grant,
+      key,
+    );
+    if (decision !== "unset") decisions[key] = decision;
   }
-  // When an existing grant is stale or capability-escalated, preserve sticky
-  // denials only so outdated allow decisions are never silently re-committed.
-  const preserved: PluginGrantDecisions = {};
-  for (const [key, value] of Object.entries(plugin.grant.decisions) as [
-    CapabilityKey,
-    "allow" | "deny",
-  ][]) {
-    if (value === "deny") preserved[key] = "deny";
-  }
-  return preserved;
+  return decisions;
 }
 
 function PluginGrantCard({
-  plugin,
+  view,
   ceilings,
   isBusy,
   confirmedDanger,
@@ -109,7 +126,7 @@ function PluginGrantCard({
   onSaveGrants,
   onRevokeGrants,
 }: {
-  readonly plugin: PermissionPluginSummary;
+  readonly view: PluginGrantView;
   readonly ceilings: Readonly<Record<CapabilityKey, CapabilityCeiling>>;
   readonly isBusy: boolean;
   readonly confirmedDanger: boolean;
@@ -118,23 +135,10 @@ function PluginGrantCard({
   readonly onRevokeGrants: PermissionsPluginListProps["onRevokeGrants"];
 }) {
   const { t, i18n } = useTranslation();
+  const { plugin, requestedCapabilities, pendingCapabilities } = view;
   const displayName =
     resolveI18nText(plugin.name, i18n.language) || plugin.pluginId;
   const isCommunity = plugin.source === "community";
-  const requestedCapabilities = useMemo(
-    () =>
-      derivePluginRequestedCapabilities({
-        tier: plugin.tier,
-        capabilities: plugin.capabilities,
-        existingDecisions: plugin.grant?.decisions,
-      }),
-    [plugin.tier, plugin.capabilities, plugin.grant?.decisions],
-  );
-  const pendingCapabilities = useMemo(
-    () => getPluginPendingCapabilities(plugin, ceilings),
-    [plugin, ceilings],
-  );
-
   const codeDecision = plugin.grant?.decisions["plugin.communityCode"];
   const declarativeDecision = plugin.grant?.decisions["plugin.declarative"];
   const hasValidCodeAllow =
@@ -660,58 +664,34 @@ export function PermissionsPluginList({
     Readonly<Record<string, boolean>>
   >({});
 
-  const communityPlugins = useMemo(
-    () => plugins.filter((plugin) => plugin.source === "community"),
-    [plugins],
-  );
-  const builtinPlugins = useMemo(
-    () => plugins.filter((plugin) => plugin.source === "builtin"),
-    [plugins],
-  );
-
-  const visiblePlugins = useMemo(() => {
-    const base = showBuiltin
-      ? [...communityPlugins, ...builtinPlugins]
-      : communityPlugins;
-    const normalized = query.trim().toLowerCase();
-    const filtered = normalized
-      ? base.filter((plugin) => {
-          const displayName = (
-            resolveI18nText(plugin.name, i18n.language) || plugin.pluginId
-          ).toLowerCase();
-          return (
-            plugin.pluginId.toLowerCase().includes(normalized) ||
-            displayName.includes(normalized)
-          );
-        })
-      : base;
-
-    return [...filtered].sort((a, b) => {
-      // Community plugins first; among them, plugins needing attention first.
-      if (a.source !== b.source) return a.source === "community" ? -1 : 1;
-      if (a.source === "community") {
-        const aAttention =
-          isGrantWarningStatus(a.grantStatus) ||
-          getPluginPendingCapabilities(a, ceilings).length > 0
-            ? 0
-            : 1;
-        const bAttention =
-          isGrantWarningStatus(b.grantStatus) ||
-          getPluginPendingCapabilities(b, ceilings).length > 0
-            ? 0
-            : 1;
-        if (aAttention !== bAttention) return aAttention - bAttention;
-      }
-      return a.pluginId.localeCompare(b.pluginId);
-    });
-  }, [
-    communityPlugins,
-    builtinPlugins,
-    showBuiltin,
-    query,
-    i18n.language,
-    ceilings,
-  ]);
+  const { communityPlugins, builtinPlugins } = useMemo(() => {
+    const byId = (a: PluginGrantView, b: PluginGrantView) =>
+      a.plugin.pluginId.localeCompare(b.plugin.pluginId);
+    return {
+      communityPlugins: plugins
+        .filter(({ plugin }) => plugin.source === "community")
+        .sort(
+          (a, b) =>
+            Number(b.needsAttention) - Number(a.needsAttention) || byId(a, b),
+        ),
+      builtinPlugins: plugins
+        .filter(({ plugin }) => plugin.source === "builtin")
+        .sort(byId),
+    };
+  }, [plugins]);
+  const candidates = showBuiltin
+    ? [...communityPlugins, ...builtinPlugins]
+    : communityPlugins;
+  const normalized = query.trim().toLowerCase();
+  const visiblePlugins = normalized
+    ? candidates.filter(
+        ({ plugin }) =>
+          plugin.pluginId.toLowerCase().includes(normalized) ||
+          resolveI18nText(plugin.name, i18n.language)
+            ?.toLowerCase()
+            .includes(normalized),
+      )
+    : candidates;
 
   const showSearch = showBuiltin || communityPlugins.length > 2;
 
@@ -732,32 +712,13 @@ export function PermissionsPluginList({
 
         <div className="flex flex-wrap items-center gap-3">
           {showSearch && (
-            <div className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
-              <Search
-                aria-hidden="true"
-                className="size-3.5 shrink-0 text-muted-foreground"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t(
-                  "settings.permissions.searchPluginsPlaceholder",
-                  "Filter plugins...",
-                )}
-                className="h-7 w-40 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  aria-label={t("common.clear", "Clear")}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="size-3" />
-                </button>
-              )}
-            </div>
+            <SettingsListSearch
+              compact
+              label={t("settings.permissions.searchPluginsPlaceholder")}
+              value={query}
+              onChange={setQuery}
+              className="w-44 flex-none"
+            />
           )}
           {builtinPlugins.length > 0 && (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
@@ -789,13 +750,13 @@ export function PermissionsPluginList({
         </p>
       ) : (
         <div className="space-y-3">
-          {visiblePlugins.map((plugin) => (
+          {visiblePlugins.map((view) => (
             <PluginGrantCard
-              key={plugin.pluginId}
-              plugin={plugin}
+              key={view.plugin.pluginId}
+              view={view}
               ceilings={ceilings}
-              isBusy={busyPluginId === plugin.pluginId}
-              confirmedDanger={dangerConfirmed[plugin.pluginId] === true}
+              isBusy={busyPluginId === view.plugin.pluginId}
+              confirmedDanger={dangerConfirmed[view.plugin.pluginId] === true}
               onDangerChange={(id, checked) =>
                 setDangerConfirmed((prev) => ({ ...prev, [id]: checked }))
               }

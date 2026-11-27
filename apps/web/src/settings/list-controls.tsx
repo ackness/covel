@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils.js";
@@ -7,11 +8,13 @@ export function SettingsListSearch({
   value,
   onChange,
   className,
+  compact = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   className?: string;
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -31,7 +34,10 @@ export function SettingsListSearch({
         onChange={(event) => onChange(event.target.value)}
         aria-label={label}
         placeholder={label}
-        className="h-9 w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+        className={cn(
+          "w-full min-w-0 bg-transparent outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden",
+          compact ? "h-8 text-xs" : "h-9 text-sm",
+        )}
       />
       {value && (
         <button
@@ -53,7 +59,7 @@ export function SettingsListFilter({
   onClick,
 }: {
   active: boolean;
-  label: string;
+  label: ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -61,7 +67,7 @@ export function SettingsListFilter({
       type="button"
       aria-pressed={active}
       onClick={onClick}
-      className="min-h-7 rounded-full border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary/40 aria-pressed:bg-primary/10 aria-pressed:font-medium aria-pressed:text-foreground"
+      className="inline-flex min-h-7 items-center gap-1.5 rounded-full border border-border px-2.5 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring aria-pressed:border-primary/40 aria-pressed:bg-primary/10 aria-pressed:font-medium aria-pressed:text-foreground"
     >
       {label}
     </button>

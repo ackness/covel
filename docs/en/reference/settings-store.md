@@ -53,7 +53,7 @@ Every setting has a scope:
 
 A `server` setting is declared in two places: the registry entry has `SettingEntry.scope: "server"`, and the same key has a definition in `SERVER_SETTINGS` (`packages/shared/src/env/server-settings.ts`: schema, default, and the environment variable that overrides it). A test fails when the two differ.
 
-The keys are `diagnostics.traceRetention` (Settings → Advanced → "Keep debug traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (Settings → Plugins → Install & manage → Local tools → "Trusted sources": an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for syntax and approval conditions.
+The keys are `diagnostics.traceRetention` (Settings → Advanced → "Keep debug traces": `7` / `30` / `90` / `keep`, default `30`) and `trust.sources` (an array of GitHub owners or repositories, default `[]`, overridden by `COVEL_TRUSTED_SOURCES`). See [plugin installation](./plugin-installation.md#trusted-sources) for setup, syntax, and approval conditions.
 
 - **Where it is stored.** In the server's database, in the `server_settings` table of the DataStore (`listServerSettings` / `setServerSetting` / `deleteServerSetting`, covered by the store contract suite).
   - The desktop app and a self-hosted web deployment use the same mechanism.

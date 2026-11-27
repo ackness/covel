@@ -13,13 +13,11 @@ You can also use the link of an author's repository directly.
 
 Open **Settings → Plugins → Install & manage**.
 
-1. Browse the community catalog, or paste a public GitHub repository link. The link can point to a subfolder of the repository.
-2. Parse the link. The plugins and world packages in that folder are listed together.
-3. Check the items you want to install, confirm the ID, version, and source, read the code risk notice, and confirm once to install.
+1. In **GitHub**, choose **Official plugins** or **Official worlds**. You can also paste a public repository or subdirectory URL and click **Preview**.
+2. Search the preview by name, ID, or tag, then select the packages you want.
+3. Check the version, source, commit, and code risk, then confirm installation. See the [batch installation and rollback rules](../reference/plugin-installation.md#multi-package-preview-and-batch-install).
 
-Selected packages install together, plugins first. If one fails, Covel tries to roll back the packages installed in this run. Worlds with sessions and packages that cannot be removed are kept and listed in the error; resolve these before retrying. See [collections](../ship/collections.md#what-happens-when-a-player-installs-it).
-
-Local ZIP packages are imported on the same page.
+Use **Local tools** to install a ZIP, import SillyTavern content, or validate a ZIP without installing it. The desktop import menu also opens this page.
 
 > [!WARNING]
 > A plugin's server code **does not run in a sandbox**. It can reach the files and the network on your computer. Being listed in a catalog does not mean the code has been security audited. Install only plugins from authors you trust.
@@ -39,13 +37,13 @@ After restarting the backend, complete two more steps before the plugin can run:
 Explicit authorization lasts only while the server is running. Trusted-source code and runtime grants can pass automatically; other community plugins ask again after a restart.
 
 > [!NOTE]
-> Official plugins installed separately remain community plugins and are not enabled automatically. No source is trusted by default; you may add trusted repositories under "Trusted sources" on this page.
+> Official plugins installed separately remain community plugins and are not enabled automatically. No source is trusted by default; see [trusted sources](../reference/plugin-installation.md#trusted-sources) for setup.
 
 The preview lists the capabilities a package requests. Packages from a trusted source whose files are unchanged and request no new capabilities receive automatic code and runtime approval when enabled (showing "auto-approved: trusted source"). New capabilities, per-action requests, and locally modified files still prompt for approval; see [trusted sources](../reference/plugin-installation.md#trusted-sources).
 
 ## Update and uninstall
 
-Next to an installed package, click "Check for updates" to see what has changed. A confirmed update takes effect after the backend restarts.
+In **Installed**, search by name, ID, or repository. Next to a package, click **Check for updates** to see what has changed. A confirmed update takes effect after the backend restarts.
 
 - A package you have changed locally is not overwritten by an update.
 - Updating a world package does not automatically rewrite the starting data of existing saves. They keep their own data and progress. To use the new starting data, start a new game.
@@ -54,13 +52,13 @@ You also uninstall from "Install & manage". After you uninstall a plugin, you ne
 
 ## Troubleshooting
 
-| Symptom                                                      | What to do                                                                                                                              |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| You cannot select a package in the preview                   | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version          |
-| The getting-ready screen says the world is missing a plugin  | You can start without installing it, but the gameplay that plugin provides will not work                                                |
+| Symptom                                                       | What to do                                                                                                                              |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| You cannot select a package in the preview                    | Read the error next to it. Usually a capability it depends on is not provided by any plugin, or it needs a newer Covel version          |
+| The getting-ready screen says the world is missing a plugin   | You can start without installing it, but the gameplay that plugin provides will not work                                                |
 | The getting-ready screen says no plugin provides a capability | You can start with that feature (for example, dice checks) missing. To add it, install and enable a plugin that provides the capability |
-| A plugin is installed but does not run                       | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it                   |
-| The download fails                                           | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                                        |
+| A plugin is installed but does not run                        | Check in order: whether you restarted the backend, whether you enabled it in this game, and whether you authorized it                   |
+| The download fails                                            | Set up a proxy under **Settings → Desktop → Network Proxy**. Downloads follow the settings there                                        |
 
 ## Learn more
 

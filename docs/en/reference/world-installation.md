@@ -124,16 +124,10 @@ When files on disk change while the world record keeps its older content, the wo
 
 ## In-app validation
 
-Players without a source checkout or pnpm can open **Settings → Plugins → Install & manage** and click **Validate** on an installed package, or select plugin or world and drop a ZIP. ZIP validation does not install the package. The API also accepts directory paths within allowed roots; the UI has no directory picker yet.
+The validation entry point, ZIP checks, and report format are shared with [plugin package validation](./plugin-installation.md#in-app-validation).
 
 A world ZIP without `id` takes its single package folder’s name, or the ZIP filename without `.zip` when files are at the archive root. An installed world with an unreadable or missing manifest can still be validated by its directory ID from Settings, returning `manifest-invalid`. Multiple candidate directories remain ambiguous, and containment and symlink checks still apply.
 
 When no valid upload ID can be resolved, the report omits `id` and returns an `identity-invalid` error with `ok: false`, without using the temporary directory name. The static validator reports manifest parsing errors separately.
-
-Validation reads manifests and referenced files, checking fields, files, languages and static declarations. It never imports or executes package code, and changes no world or save. It shares the CLI validation core; the plugin CLI displays errors from the first failing stage and any warnings already collected, while the app can also list other independently checkable errors. If a manifest cannot be parsed or loaded, warnings that need its definition are unavailable.
-
-Reports contain `kind`, `id` when available, `ok`, `counts.errors`, `counts.warnings` and `issues`. Each issue has `severity`, `code`, `message`, and, when known, a package-relative `file`, manifest field path or JSON pointer `field`, and repair `hint`. The summary may include version and languages. Messages are limited to 2000 characters; the first 200 issues are retained, with an additional `issues-truncated` warning and omitted count when necessary. Headings and known codes use the UI language; other messages stay in English. Reports can be copied as plain text.
-
-Access uses the same `host.files` rules as installation: hosted instances require the operator Bearer token; personal instances retain the install API’s desktop token or explicit enablement rules. Paths must resolve to directories within the corresponding plugin or world roots, and symlinked package roots are rejected. Reports make package paths relative and replace other host paths with `<path>`; CLI-only raw text is never returned. See [API](./api.md#in-app-validation) for requests.
 
 World validation uses the running server’s installed plugins as its contract catalogue, so missing-plugin or contract warnings may differ from the CLI’s default bundled plugin scan. World validation does not require `world.write`.

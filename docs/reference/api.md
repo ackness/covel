@@ -3890,7 +3890,7 @@ runtime 报告失败时，它的原始错误保留在 `result.runtimeResults` �
 
 列出服务端已加载插件的安全与权限摘要（需要 `server.diagnostics` 权限），返回 `{ "items": [...] }`。社区插件会附带当前计算出的内容摘要、包完整性状态（`verified` / `modified` / `no-receipt` / `unreadable`）、是否命中 `trust.sources`、声明能力结构，以及 `plugin_grants` 记录和授权状态（`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`）。
 
-`sourceAutoApproved` 表示仓库命中信任规则，且包完整性与回执中的能力快照均符合自动批准条件。它不覆盖宿主上限、实例策略或显式拒绝。
+`sourceAutoApproved` 表示包符合[可信来源的自动批准条件](./plugin-installation.md#可信来源)，不代表最终授权。
 
 #### `PUT /api/permissions/plugins/:pluginId/grants`
 

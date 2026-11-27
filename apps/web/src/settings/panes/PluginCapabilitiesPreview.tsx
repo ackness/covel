@@ -1,9 +1,43 @@
 import { useTranslation } from "react-i18next";
 import type { GithubPluginPreview } from "@covel/shared";
 
-interface CapabilityRow {
-  readonly key: string;
-  readonly value: string;
+type Capabilities = GithubPluginPreview["capabilities"];
+
+function declaredCapabilityKeys(capabilities: Capabilities) {
+  // Preserve the order of the disclosure, independent of manifest key order.
+  return (
+    [
+      "instanceScope",
+      "providerSources",
+      "flows",
+      "appActions",
+      "secrets",
+      "authProxy",
+      "loopbackCallback",
+      "scheduler",
+      "sandboxWorker",
+      "appEvents",
+      "http",
+      "hooks",
+      "tools",
+      "services",
+      "actions",
+      "wires",
+      "forms",
+      "extensions",
+      "datasets",
+    ] as const
+  ).filter((key) => {
+    const value = capabilities[key];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+  });
+}
+
+export function countDeclaredCapabilities(capabilities: Capabilities): number {
+  return (
+    Number(capabilities.serverCode) +
+    declaredCapabilityKeys(capabilities).length
+  );
 }
 
 export function PluginCapabilitiesPreview({
@@ -18,84 +52,39 @@ export function PluginCapabilitiesPreview({
   const yes = t("settings.capabilities.yes");
   const no = t("settings.capabilities.no");
 
-  const rows: CapabilityRow[] = [
+  const keys = declaredCapabilityKeys(capabilities);
+  function textFor(key: (typeof keys)[number]) {
+    switch (key) {
+      case "loopbackCallback": {
+        const callback = capabilities.loopbackCallback;
+        if (!callback) return "";
+        const ports = Array.isArray(callback.ports)
+          ? callback.ports.join(", ")
+          : callback.ports;
+        return ports ? `${callback.path} (${ports})` : callback.path;
+      }
+      case "http":
+        return capabilities.http
+          .map((item) => `${item.origin} (${item.methods.join(", ")})`)
+          .join("; ");
+      case "hooks":
+        return capabilities.hooks
+          .map((hook) => `${hook.event} (${hook.enforce})`)
+          .join(", ");
+      case "datasets":
+        return capabilities.datasets
+          .map((item) => `${item.namespace} (${item.ops.join(", ")})`)
+          .join("; ");
+      default: {
+        const value = capabilities[key];
+        return Array.isArray(value) ? value.join(", ") : yes;
+      }
+    }
+  }
+  const rows = [
     { key: "serverCode", value: capabilities.serverCode ? yes : no },
+    ...keys.map((key) => ({ key, value: textFor(key) })),
   ];
-
-  const pushIf = (key: string, value: string | undefined) => {
-    if (value) rows.push({ key, value });
-  };
-
-  if (capabilities.instanceScope) pushIf("instanceScope", yes);
-  if (capabilities.providerSources?.length) {
-    pushIf("providerSources", capabilities.providerSources.join(", "));
-  }
-  if (capabilities.flows?.length) {
-    pushIf("flows", capabilities.flows.join(", "));
-  }
-  if (capabilities.appActions?.length) {
-    pushIf("appActions", capabilities.appActions.join(", "));
-  }
-  if (capabilities.secrets) pushIf("secrets", yes);
-  if (capabilities.authProxy) pushIf("authProxy", yes);
-  if (capabilities.loopbackCallback) {
-    const rawPorts = capabilities.loopbackCallback.ports;
-    const ports = Array.isArray(rawPorts)
-      ? rawPorts.length > 0
-        ? ` (${rawPorts.join(", ")})`
-        : ""
-      : rawPorts
-        ? ` (${rawPorts})`
-        : "";
-    pushIf("loopbackCallback", `${capabilities.loopbackCallback.path}${ports}`);
-  }
-  if (capabilities.scheduler) pushIf("scheduler", yes);
-  if (capabilities.sandboxWorker) pushIf("sandboxWorker", yes);
-  if (capabilities.appEvents?.length) {
-    pushIf("appEvents", capabilities.appEvents.join(", "));
-  }
-  if (capabilities.http.length > 0) {
-    pushIf(
-      "http",
-      capabilities.http
-        .map((item) => `${item.origin} (${item.methods.join(", ")})`)
-        .join("; "),
-    );
-  }
-  if (capabilities.hooks.length > 0) {
-    pushIf(
-      "hooks",
-      capabilities.hooks
-        .map((hook) => `${hook.event} (${hook.enforce})`)
-        .join(", "),
-    );
-  }
-  if (capabilities.tools.length > 0) {
-    pushIf("tools", capabilities.tools.join(", "));
-  }
-  if (capabilities.services.length > 0) {
-    pushIf("services", capabilities.services.join(", "));
-  }
-  if (capabilities.actions.length > 0) {
-    pushIf("actions", capabilities.actions.join(", "));
-  }
-  if (capabilities.wires.length > 0) {
-    pushIf("wires", capabilities.wires.join(", "));
-  }
-  if (capabilities.forms.length > 0) {
-    pushIf("forms", capabilities.forms.join(", "));
-  }
-  if (capabilities.extensions.length > 0) {
-    pushIf("extensions", capabilities.extensions.join(", "));
-  }
-  if (capabilities.datasets.length > 0) {
-    pushIf(
-      "datasets",
-      capabilities.datasets
-        .map((dataset) => `${dataset.namespace} (${dataset.ops.join(", ")})`)
-        .join("; "),
-    );
-  }
 
   return (
     <span className="block space-y-1.5 text-xs">

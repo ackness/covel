@@ -53,7 +53,7 @@ SettingsStore 是 `@covel/settings` 包提供的设置存储。它负责四件�
 
 一个 `server` 设置要在两处声明：注册表里的条目写 `SettingEntry.scope: "server"`，同一个键在 `SERVER_SETTINGS`（`packages/shared/src/env/server-settings.ts`：schema、默认值和能覆盖它的环境变量）里有定义。两边不一致时测试失败。
 
-目前有 `diagnostics.traceRetention`（设置 → 高级 →“调试记录保留时间”：`7` / `30` / `90` / `keep`，默认 `30`），以及 `trust.sources`（设置 → 插件 → 安装与管理 → 本地工具 →“可信来源”：GitHub 所有者或仓库名称数组，默认 `[]`，由 `COVEL_TRUSTED_SOURCES` 覆盖）。来源语法和审批条件见[插件安装](./plugin-installation.md#可信来源)。
+目前有 `diagnostics.traceRetention`（设置 → 高级 →“调试记录保留时间”：`7` / `30` / `90` / `keep`，默认 `30`），以及 `trust.sources`（GitHub 所有者或仓库名称数组，默认 `[]`，由 `COVEL_TRUSTED_SOURCES` 覆盖）。设置入口、来源语法和审批条件见[插件安装](./plugin-installation.md#可信来源)。
 
 - **存在哪里。** 服务端的数据库里，DataStore 的 `server_settings` 表（`listServerSettings` / `setServerSetting` / `deleteServerSetting`，由存储契约测试覆盖）。
   - 桌面应用和自托管的 Web 部署是同一套机制。

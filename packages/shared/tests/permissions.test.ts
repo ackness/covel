@@ -392,7 +392,7 @@ describe("plugin persistent grants", () => {
     ).toBe("deny");
   });
 
-  it("derives requested capability keys from plugin capabilities and existing grants", () => {
+  it("derives requested capability keys from the tier and current declarations", () => {
     const providerCaps = pluginCapabilitiesSchema.parse({
       serverCode: true,
       instanceScope: true,
@@ -468,13 +468,11 @@ describe("plugin persistent grants", () => {
       derivePluginRequestedCapabilities({
         tier: 3,
         capabilities: bridgeAndWorkerCaps,
-        existingDecisions: { "runtime.highRiskTools": "deny" },
       }),
     ).toEqual([
       "compute.sandboxWorker",
       "plugin.communityCode",
       "channel.bridge",
-      "runtime.highRiskTools",
       "app.scheduler",
     ]);
   });

@@ -174,6 +174,28 @@ const COMMUNITY_CODE_PLUGIN: PermissionPluginSummary = {
   effectiveCapabilities: emptyEffective(),
 };
 
+const providerCapabilities: NonNullable<
+  PermissionPluginSummary["capabilities"]
+> = {
+  serverCode: true,
+  instanceScope: true,
+  providerSources: ["bridge"],
+  flows: ["oauth-sign-in"],
+  appActions: ["list-accounts"],
+  secrets: true,
+  authProxy: true,
+  loopbackCallback: { path: "/auth/callback", ports: [1455] },
+  http: [{ origin: "https://auth.example.com", methods: ["POST"] }],
+  hooks: [],
+  tools: [],
+  services: [],
+  actions: [],
+  wires: [],
+  extensions: [],
+  forms: [],
+  datasets: [],
+};
+
 const INSTANCE_PROVIDER_PLUGIN: PermissionPluginSummary = {
   pluginId: "provider-bridge",
   name: { en: "Provider Bridge" },
@@ -185,49 +207,13 @@ const INSTANCE_PROVIDER_PLUGIN: PermissionPluginSummary = {
   integrity: "verified",
   trustedSource: true,
   sourceAutoApproved: false,
-  capabilities: {
-    serverCode: true,
-    instanceScope: true,
-    providerSources: ["bridge"],
-    flows: ["oauth-sign-in"],
-    appActions: ["list-accounts"],
-    secrets: true,
-    authProxy: true,
-    loopbackCallback: { path: "/auth/callback", ports: [1455] },
-    http: [{ origin: "https://auth.example.com", methods: ["POST"] }],
-    hooks: [],
-    tools: [],
-    services: [],
-    actions: [],
-    wires: [],
-    extensions: [],
-    forms: [],
-    datasets: [],
-  },
+  capabilities: providerCapabilities,
   grantStatus: "valid",
   grant: {
     pluginId: "provider-bridge",
     version: "0.1.1",
     contentDigest: "sha256-provider789",
-    grantedCapabilities: {
-      serverCode: true,
-      instanceScope: true,
-      providerSources: ["bridge"],
-      flows: ["oauth-sign-in"],
-      appActions: ["list-accounts"],
-      secrets: true,
-      authProxy: true,
-      loopbackCallback: { path: "/auth/callback", ports: [1455] },
-      http: [{ origin: "https://auth.example.com", methods: ["POST"] }],
-      hooks: [],
-      tools: [],
-      services: [],
-      actions: [],
-      wires: [],
-      extensions: [],
-      forms: [],
-      datasets: [],
-    },
+    grantedCapabilities: providerCapabilities,
     decisions: { "plugin.communityCode": "allow" },
     grantedAt: "2026-11-22T00:00:00.000Z",
     updatedAt: "2026-11-22T00:00:00.000Z",
@@ -529,12 +515,6 @@ describe("PermissionsPane", () => {
         ],
       } as unknown as PluginSummary,
     ]);
-    apiMocks.getSessionApprovals.mockResolvedValue({
-      items: [],
-      grants: [
-        { pluginId: "community-script", action: "covel:plugin-server-code" },
-      ],
-    });
     apiMocks.getPluginDiagnostics.mockResolvedValue({
       sessionId: "sess-1",
       capturedAt: "2026-11-22T00:00:00.000Z",
@@ -558,14 +538,7 @@ describe("PermissionsPane", () => {
 
     render(<PermissionsPane sessionId="sess-1" />);
 
-    // Session grant revocation lives on the default Plugin grants tab.
-    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
-    await waitFor(() =>
-      expect(apiMocks.revokeSessionApprovals).toHaveBeenCalledWith(
-        "sess-1",
-        "community-script",
-      ),
-    );
+    await screen.findByText("Community Script");
 
     // Desktop boundaries live on the Policy & sources tab.
     openTab(/Policy & sources/);

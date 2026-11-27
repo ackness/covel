@@ -120,15 +120,13 @@ export function pluginGrantDecisionFor(
 
 /**
  * Derive the ordered, deduplicated set of host capabilities relevant to a
- * plugin from its execution tier, declared capability snapshot, and any
- * existing persisted L3 grant decisions.
+ * plugin from its execution tier and current capability declarations.
  */
 export function derivePluginRequestedCapabilities(input: {
   readonly tier: 0 | 3;
   readonly capabilities: PluginCapabilities | null | undefined;
-  readonly existingDecisions?: PluginGrantDecisions | null | undefined;
 }): readonly CapabilityKey[] {
-  const { tier, capabilities, existingDecisions } = input;
+  const { tier, capabilities } = input;
   const keys = new Set<CapabilityKey>();
 
   if (tier === 0) {
@@ -171,17 +169,6 @@ export function derivePluginRequestedCapabilities(input: {
       keys.add("net.httpDeclared");
       if (capabilities.http.some((item) => isLoopbackBaseUrl(item.origin))) {
         keys.add("network.localModels");
-      }
-    }
-  }
-
-  if (existingDecisions) {
-    for (const key of CAPABILITY_KEYS) {
-      if (
-        existingDecisions[key] !== undefined &&
-        !CAPABILITY_CATALOG[key].reserved
-      ) {
-        keys.add(key);
       }
     }
   }

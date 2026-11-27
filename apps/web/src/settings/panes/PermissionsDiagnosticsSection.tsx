@@ -1,3 +1,4 @@
+import { SettingsListFilter, SettingsListSearch } from "../list-controls.js";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { PluginDiagnosticsSnapshot, PluginSummary } from "@covel/shared";
@@ -8,8 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   Info,
-  Search,
-  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
@@ -198,13 +197,7 @@ export function collectPluginDiagnostics(
     }
   }
 
-  return [...deduped.values()].sort(
-    (a, b) =>
-      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-      a.pluginId.localeCompare(b.pluginId) ||
-      a.category.localeCompare(b.category) ||
-      a.message.localeCompare(b.message),
-  );
+  return [...deduped.values()];
 }
 
 function SeverityIcon({
@@ -223,12 +216,59 @@ function SeverityIcon({
   return <Info className={`${className} text-muted-foreground`} />;
 }
 
+function DiagnosticRow({
+  item,
+  mode,
+}: {
+  item: DiagnosticNoticeItem;
+  mode: DiagnosticGroupMode;
+}) {
+  return (
+    <li
+      className={`flex items-start gap-2.5 px-3.5 text-xs ${mode === "flat" ? "py-2.5" : "py-2"}`}
+    >
+      <SeverityIcon
+        severity={item.severity}
+        className="mt-0.5 size-3.5 shrink-0"
+      />
+      <div
+        className={`min-w-0 flex-1 ${mode === "flat" ? "space-y-1" : "space-y-0.5"}`}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {mode !== "plugin" && (
+            <span className="font-mono font-medium text-foreground">
+              {item.pluginId}
+            </span>
+          )}
+          {mode !== "category" && (
+            <Badge
+              variant={item.severity === "error" ? "destructive" : "outline"}
+            >
+              {item.category}
+            </Badge>
+          )}
+          {item.count > 1 && (
+            <Badge variant="secondary" className="tabular-nums">
+              ×{item.count}
+            </Badge>
+          )}
+        </div>
+        <p className="wrap-break-word text-muted-foreground leading-relaxed">
+          {item.message}
+        </p>
+      </div>
+    </li>
+  );
+}
+
 interface DiagnosticGroup {
   readonly key: string;
   readonly label: string;
-  readonly isMonospace: boolean;
   readonly highestSeverity: DiagnosticSeverity;
-  readonly counts: { readonly error: number; readonly warning: number; readonly info: number };
+  readonly counts: {
+    readonly error: number;
+    readonly warning: number;
+  };
   readonly items: readonly DiagnosticNoticeItem[];
 }
 
@@ -270,9 +310,21 @@ export function PermissionsDiagnosticsSection({
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [diagnostics]);
 
+  const sorted = useMemo(
+    () =>
+      diagnostics.toSorted(
+        (a, b) =>
+          SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
+          a.pluginId.localeCompare(b.pluginId) ||
+          a.category.localeCompare(b.category) ||
+          a.message.localeCompare(b.message),
+      ),
+    [diagnostics],
+  );
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return diagnostics.filter((item) => {
+    return sorted.filter((item) => {
       if (severityFilter !== "all" && item.severity !== severityFilter) {
         return false;
       }
@@ -286,24 +338,25 @@ export function PermissionsDiagnosticsSection({
         item.message.toLowerCase().includes(normalized)
       );
     });
-  }, [diagnostics, query, severityFilter, categoryFilter]);
+  }, [sorted, query, severityFilter, categoryFilter]);
 
   const groups = useMemo((): readonly DiagnosticGroup[] => {
     if (groupMode === "flat") return [];
     const byKey = new Map<
       string,
-      { label: string; isMonospace: boolean; items: DiagnosticNoticeItem[] }
+      { label: string; items: DiagnosticNoticeItem[] }
     >();
     for (const item of filtered) {
       const key =
-        groupMode === "plugin" ? `plugin:${item.pluginId}` : `cat:${item.categoryKey}`;
+        groupMode === "plugin"
+          ? `plugin:${item.pluginId}`
+          : `cat:${item.categoryKey}`;
       const existing = byKey.get(key);
       if (existing) {
         existing.items.push(item);
       } else {
         byKey.set(key, {
           label: groupMode === "plugin" ? item.pluginId : item.category,
-          isMonospace: groupMode === "plugin",
           items: [item],
         });
       }
@@ -312,22 +365,20 @@ export function PermissionsDiagnosticsSection({
       .map(([key, bucket]) => {
         let error = 0;
         let warning = 0;
-        let info = 0;
-        let highestSeverity: DiagnosticSeverity = "info";
         for (const item of bucket.items) {
           if (item.severity === "error") error += 1;
           else if (item.severity === "warning") warning += 1;
-          else info += 1;
-          if (SEVERITY_RANK[item.severity] < SEVERITY_RANK[highestSeverity]) {
-            highestSeverity = item.severity;
-          }
         }
+        const highestSeverity: DiagnosticSeverity = error
+          ? "error"
+          : warning
+            ? "warning"
+            : "info";
         return {
           key,
           label: bucket.label,
-          isMonospace: bucket.isMonospace,
           highestSeverity,
-          counts: { error, warning, info },
+          counts: { error, warning },
           items: bucket.items,
         };
       })
@@ -338,6 +389,12 @@ export function PermissionsDiagnosticsSection({
           a.label.localeCompare(b.label),
       );
   }, [filtered, groupMode]);
+
+  function resetFilters() {
+    setQuery("");
+    setSeverityFilter("all");
+    setCategoryFilter("all");
+  }
 
   const hasActiveFilter =
     query.trim().length > 0 ||
@@ -387,36 +444,12 @@ export function PermissionsDiagnosticsSection({
         <>
           <div className="space-y-2.5 rounded-lg border border-border bg-card/40 p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex min-w-48 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
-                <Search
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                />
-                <input
-                  type="search"
-                  aria-label={t(
-                    "settings.permissions.diagnosticsSearchPlaceholder",
-                    "Search by plugin, category, or message...",
-                  )}
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t(
-                    "settings.permissions.diagnosticsSearchPlaceholder",
-                    "Search by plugin, category, or message...",
-                  )}
-                  className="h-8 w-full min-w-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-                />
-                {query && (
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    aria-label={t("common.clear", "Clear")}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                )}
-              </div>
+              <SettingsListSearch
+                compact
+                label={t("settings.permissions.diagnosticsSearchPlaceholder")}
+                value={query}
+                onChange={setQuery}
+              />
 
               {categories.length > 1 && (
                 <select
@@ -524,20 +557,17 @@ export function PermissionsDiagnosticsSection({
                     ],
                   ] as const
                 ).map(([level, label, count]) => (
-                  <button
+                  <SettingsListFilter
                     key={level}
-                    type="button"
+                    active={severityFilter === level}
                     onClick={() => setSeverityFilter(level)}
-                    aria-pressed={severityFilter === level}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                      severityFilter === level
-                        ? "border-primary/50 bg-primary/10 font-medium text-foreground"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span>{label}</span>
-                    <span className="tabular-nums opacity-75">{count}</span>
-                  </button>
+                    label={
+                      <>
+                        <span>{label}</span>
+                        <span className="tabular-nums opacity-75">{count}</span>
+                      </>
+                    }
+                  />
                 ))}
               </div>
 
@@ -574,11 +604,7 @@ export function PermissionsDiagnosticsSection({
                     size="sm"
                     variant="ghost"
                     className="h-7 px-2 text-xs"
-                    onClick={() => {
-                      setQuery("");
-                      setSeverityFilter("all");
-                      setCategoryFilter("all");
-                    }}
+                    onClick={resetFilters}
                   >
                     {t(
                       "settings.permissions.diagnosticsResetFilters",
@@ -602,11 +628,7 @@ export function PermissionsDiagnosticsSection({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  setQuery("");
-                  setSeverityFilter("all");
-                  setCategoryFilter("all");
-                }}
+                onClick={resetFilters}
               >
                 {t(
                   "settings.permissions.diagnosticsResetFilters",
@@ -617,37 +639,7 @@ export function PermissionsDiagnosticsSection({
           ) : groupMode === "flat" ? (
             <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card/30">
               {filtered.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-start gap-2.5 px-3.5 py-2.5 text-xs"
-                >
-                  <SeverityIcon
-                    severity={item.severity}
-                    className="mt-0.5 size-3.5 shrink-0"
-                  />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono font-medium text-foreground">
-                        {item.pluginId}
-                      </span>
-                      <Badge
-                        variant={
-                          item.severity === "error" ? "destructive" : "outline"
-                        }
-                      >
-                        {item.category}
-                      </Badge>
-                      {item.count > 1 && (
-                        <Badge variant="secondary" className="tabular-nums">
-                          ×{item.count}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="wrap-break-word text-muted-foreground leading-relaxed">
-                      {item.message}
-                    </p>
-                  </div>
-                </li>
+                <DiagnosticRow key={item.id} item={item} mode="flat" />
               ))}
             </ul>
           ) : (
@@ -679,7 +671,7 @@ export function PermissionsDiagnosticsSection({
                         <SeverityIcon severity={group.highestSeverity} />
                         <span
                           className={`shrink-0 font-medium text-foreground ${
-                            group.isMonospace ? "font-mono" : ""
+                            groupMode === "plugin" ? "font-mono" : ""
                           }`}
                         >
                           {group.label}
@@ -692,10 +684,7 @@ export function PermissionsDiagnosticsSection({
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         {group.counts.error > 0 && (
-                          <Badge
-                            variant="destructive"
-                            className="tabular-nums"
-                          >
+                          <Badge variant="destructive" className="tabular-nums">
                             {group.counts.error}
                           </Badge>
                         )}
@@ -722,45 +711,11 @@ export function PermissionsDiagnosticsSection({
                     {expanded && (
                       <ul className="divide-y divide-border/70 border-t border-border bg-background/50">
                         {group.items.map((item) => (
-                          <li
+                          <DiagnosticRow
                             key={item.id}
-                            className="flex items-start gap-2.5 px-3.5 py-2 text-xs"
-                          >
-                            <SeverityIcon
-                              severity={item.severity}
-                              className="mt-0.5 size-3.5 shrink-0"
-                            />
-                            <div className="min-w-0 flex-1 space-y-0.5">
-                              <div className="flex flex-wrap items-center gap-2">
-                                {groupMode === "plugin" ? (
-                                  <Badge
-                                    variant={
-                                      item.severity === "error"
-                                        ? "destructive"
-                                        : "outline"
-                                    }
-                                  >
-                                    {item.category}
-                                  </Badge>
-                                ) : (
-                                  <span className="font-mono font-medium text-foreground">
-                                    {item.pluginId}
-                                  </span>
-                                )}
-                                {item.count > 1 && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="tabular-nums"
-                                  >
-                                    ×{item.count}
-                                  </Badge>
-                                )}
-                              </div>
-                              <p className="wrap-break-word text-muted-foreground leading-relaxed">
-                                {item.message}
-                              </p>
-                            </div>
-                          </li>
+                            item={item}
+                            mode={groupMode}
+                          />
                         ))}
                       </ul>
                     )}

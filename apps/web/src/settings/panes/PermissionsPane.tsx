@@ -1,3 +1,4 @@
+import { SettingsListFilter, SettingsListSearch } from "../list-controls.js";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { PluginDiagnosticsSnapshot, PluginSummary } from "@covel/shared";
@@ -10,15 +11,7 @@ import {
   type PermissionsPolicyOverrides,
   type PluginGrantDecisions,
 } from "@covel/shared/permissions";
-import {
-  Laptop,
-  RefreshCw,
-  Search,
-  Shield,
-  ShieldCheck,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Laptop, RefreshCw, Shield, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -57,8 +50,7 @@ import {
 } from "./PermissionsDiagnosticsSection.js";
 import {
   PermissionsPluginList,
-  getPluginPendingCapabilities,
-  isGrantWarningStatus,
+  describePluginGrant,
   toI18nSlug,
 } from "./PermissionsPluginList.js";
 import { TrustedSourcesCard } from "./TrustedSourcesCard.js";
@@ -213,14 +205,18 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
     [diagnostics],
   );
 
-  const pluginsNeedingAttention = useMemo(() => {
-    if (!snapshot) return 0;
-    return plugins.filter(
-      (plugin) =>
-        isGrantWarningStatus(plugin.grantStatus) ||
-        getPluginPendingCapabilities(plugin, snapshot.capabilities).length > 0,
-    ).length;
-  }, [plugins, snapshot]);
+  const grantViews = useMemo(
+    () =>
+      snapshot
+        ? plugins.map((plugin) =>
+            describePluginGrant(plugin, snapshot.capabilities),
+          )
+        : [],
+    [plugins, snapshot?.capabilities],
+  );
+  const pluginsNeedingAttention = grantViews.filter(
+    (view) => view.needsAttention,
+  ).length;
 
   const groupedCapabilities = useMemo(() => {
     if (!snapshot) return [];
@@ -553,7 +549,7 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
             </section>
           ) : (
             <PermissionsPluginList
-              plugins={plugins}
+              plugins={grantViews}
               ceilings={snapshot.capabilities}
               busyPluginId={busyPluginId}
               onSaveGrants={handleSavePluginGrants}
@@ -679,50 +675,25 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-48 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
-                <Search
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                />
-                <input
-                  type="search"
-                  value={policyQuery}
-                  onChange={(event) => setPolicyQuery(event.target.value)}
-                  placeholder={t(
-                    "settings.permissions.policySearchPlaceholder",
-                    "Filter capabilities...",
-                  )}
-                  className="h-8 w-full min-w-0 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-                />
-                {policyQuery && (
-                  <button
-                    type="button"
-                    onClick={() => setPolicyQuery("")}
-                    aria-label={t("common.clear", "Clear")}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                )}
-              </div>
+              <SettingsListSearch
+                compact
+                label={t("settings.permissions.policySearchPlaceholder")}
+                value={policyQuery}
+                onChange={setPolicyQuery}
+              />
 
               <div className="flex flex-wrap items-center gap-1.5">
                 {(["all", ...RISK_ORDER] as const).map((risk) => (
-                  <button
+                  <SettingsListFilter
                     key={risk}
-                    type="button"
+                    active={policyRiskFilter === risk}
                     onClick={() => setPolicyRiskFilter(risk)}
-                    aria-pressed={policyRiskFilter === risk}
-                    className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
-                      policyRiskFilter === risk
-                        ? "border-primary/50 bg-primary/10 font-medium text-foreground"
-                        : "border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {risk === "all"
-                      ? t("settings.permissions.riskAll", "All risks")
-                      : t(`settings.permissions.risk.${risk}`, risk)}
-                  </button>
+                    label={
+                      risk === "all"
+                        ? t("settings.permissions.riskAll", "All risks")
+                        : t(`settings.permissions.risk.${risk}`, risk)
+                    }
+                  />
                 ))}
               </div>
             </div>
@@ -803,7 +774,10 @@ export function PermissionsPane({ sessionId }: { sessionId?: string }) {
                               {state.effective === "deny" &&
                                 configuredMode !== "deny" && (
                                   <Badge variant="destructive">
-                                    {t("settings.permissions.mode.deny", "Deny")}
+                                    {t(
+                                      "settings.permissions.mode.deny",
+                                      "Deny",
+                                    )}
                                   </Badge>
                                 )}
                             </div>

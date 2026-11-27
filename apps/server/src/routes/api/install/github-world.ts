@@ -1,3 +1,4 @@
+import { packagePreviewLabels } from "./preview-labels.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -85,40 +86,15 @@ export async function inspectWorldBundle(
         description: i18nTextSchema.optional(),
       })
       .safeParse(record.metadata?.[WORLD_LOCALIZED_TEXT_KEY]);
-    const rawDisplayName =
-      localized.data?.name ??
-      manifest.name ??
-      (record.name ? record.name : undefined);
-    const parsedDisplayName = i18nTextSchema.safeParse(rawDisplayName);
-    const displayName =
-      parsedDisplayName.success &&
-      (typeof parsedDisplayName.data === "string"
-        ? parsedDisplayName.data.trim().length > 0
-        : Object.values(parsedDisplayName.data).some(
-            (v) => v.trim().length > 0,
-          ))
-        ? typeof parsedDisplayName.data === "string"
-          ? parsedDisplayName.data.slice(0, 200)
-          : Object.fromEntries(
-              Object.entries(parsedDisplayName.data).map(([locale, text]) => [
-                locale,
-                text.slice(0, 200),
-              ]),
-            )
-        : undefined;
-    const tags = Array.isArray(manifest.tags)
-      ? manifest.tags
-          .map((tag) => tag.trim().slice(0, 64))
-          .filter(Boolean)
-          .slice(0, 12)
-      : [];
     return {
       id: worldId,
-      ...(displayName !== undefined ? { displayName } : {}),
+      ...packagePreviewLabels(
+        localized.data?.name ?? manifest.name ?? record.name,
+        manifest.tags,
+      ),
       version: manifest.version ?? null,
       description: localized.data?.description ?? record.description ?? "",
       author: manifest.author?.name ?? null,
-      ...(tags.length > 0 ? { tags } : {}),
       executionMode: "declarative" as const,
       hasServerCode: false,
       capabilities: pluginCapabilitiesSchema.parse({

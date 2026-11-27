@@ -1,3 +1,4 @@
+import { SettingsListSearch } from "../list-controls.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -10,7 +11,6 @@ import {
   Loader2,
   PackageCheck,
   Puzzle,
-  Search,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -31,7 +31,10 @@ import {
   installGithubPackages,
   previewGithubCollection,
 } from "@/services/api.js";
-import { PluginCapabilitiesPreview } from "./PluginCapabilitiesPreview.js";
+import {
+  countDeclaredCapabilities,
+  PluginCapabilitiesPreview,
+} from "./PluginCapabilitiesPreview.js";
 import {
   SUGGESTED_PLUGIN_REPOSITORY,
   SUGGESTED_WORLD_REPOSITORY,
@@ -51,32 +54,6 @@ function folderPriority(folder: string): number {
   if (normalized === "worlds") return 1;
   if (normalized === "examples" || normalized === "example") return 3;
   return 2;
-}
-
-function capabilityCount(item: GithubPackagePreview): number {
-  if (item.kind !== "plugin") return 0;
-  const c = item.capabilities;
-  let count = c.serverCode ? 1 : 0;
-  if (c.instanceScope) count += 1;
-  if (c.secrets) count += 1;
-  if (c.authProxy) count += 1;
-  if (c.loopbackCallback) count += 1;
-  if (c.scheduler) count += 1;
-  if (c.sandboxWorker) count += 1;
-  count += (c.providerSources?.length ?? 0) > 0 ? 1 : 0;
-  count += (c.flows?.length ?? 0) > 0 ? 1 : 0;
-  count += (c.appActions?.length ?? 0) > 0 ? 1 : 0;
-  count += (c.appEvents?.length ?? 0) > 0 ? 1 : 0;
-  count += c.http.length > 0 ? 1 : 0;
-  count += c.hooks.length > 0 ? 1 : 0;
-  count += c.tools.length > 0 ? 1 : 0;
-  count += c.services.length > 0 ? 1 : 0;
-  count += c.actions.length > 0 ? 1 : 0;
-  count += c.wires.length > 0 ? 1 : 0;
-  count += c.forms.length > 0 ? 1 : 0;
-  count += c.extensions.length > 0 ? 1 : 0;
-  count += c.datasets.length > 0 ? 1 : 0;
-  return count;
 }
 
 function shortRepoLabel(repository: string): string {
@@ -109,9 +86,9 @@ export function GithubCollectionInstaller({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState<"preview" | "install" | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [outboundError, setOutboundError] =
-    useState<OutboundNetworkErrorInfo | null>(null);
+  const [error, setError] = useState<string | OutboundNetworkErrorInfo | null>(
+    null,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [folderFilter, setFolderFilter] = useState<string>("all");
@@ -124,37 +101,50 @@ export function GithubCollectionInstaller({
       ? (installedWorldIds?.has(item.id) ?? false)
       : (installedPluginIds?.has(item.id) ?? false);
 
-  const rawItems = preview?.items ?? [];
-
-  // For repository directory scans (non-collection), place production plugins
-  // and worlds ahead of example demos, and place not-yet-installed items first.
+  const locale = i18n.language;
+  // Decorate each row once. Sorting, search and display share the same labels.
   const orderedItems = useMemo(() => {
-    if (preview?.collection || rawItems.length <= 1) return rawItems;
-    return [...rawItems].sort((a, b) => {
-      const folderDiff =
-        folderPriority(topFolderOf(a.source.path)) -
-        folderPriority(topFolderOf(b.source.path));
-      if (folderDiff !== 0) return folderDiff;
-      const installedDiff =
-        Number(isItemInstalled(a)) - Number(isItemInstalled(b));
-      if (installedDiff !== 0) return installedDiff;
-      const nameA = (
-        (a.displayName ? resolveDisplayText(a.displayName, i18n.language) : "") ||
-        a.id
-      ).toLowerCase();
-      const nameB = (
-        (b.displayName ? resolveDisplayText(b.displayName, i18n.language) : "") ||
-        b.id
-      ).toLowerCase();
-      return nameA.localeCompare(nameB);
+    const rows = (preview?.items ?? []).map((item) => {
+      const folder = topFolderOf(item.source.path);
+      const displayName = resolveDisplayText(item.displayName, locale);
+      const name = displayName || item.id;
+      const description = resolveI18nText(item.description, locale) ?? "";
+      const installed = !!(
+        item.kind === "world" ? installedWorldIds : installedPluginIds
+      )?.has(item.id);
+      return {
+        ...item,
+        folder,
+        name,
+        description,
+        installed,
+        folderRank: folderPriority(folder),
+        sortName: name.toLowerCase(),
+        searchText: [
+          item.id,
+          displayName,
+          description,
+          item.author,
+          item.source.path,
+          ...(item.tags ?? []),
+          ...(item.capabilities.providerSources ?? []),
+          ...item.capabilities.wires,
+          ...item.capabilities.tools,
+        ]
+          .join(" ")
+          .toLowerCase(),
+      };
     });
-  }, [
-    preview?.collection,
-    rawItems,
-    i18n.language,
-    installedPluginIds,
-    installedWorldIds,
-  ]);
+    if (!preview?.collection) {
+      rows.sort(
+        (a, b) =>
+          a.folderRank - b.folderRank ||
+          Number(a.installed) - Number(b.installed) ||
+          a.sortName.localeCompare(b.sortName),
+      );
+    }
+    return rows;
+  }, [preview, locale, installedPluginIds, installedWorldIds]);
 
   const kindCounts = useMemo(() => {
     let plugins = 0;
@@ -169,7 +159,7 @@ export function GithubCollectionInstaller({
   const folderGroups = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of orderedItems) {
-      const folder = topFolderOf(item.source.path);
+      const { folder } = item;
       if (!folder) continue;
       counts.set(folder, (counts.get(folder) ?? 0) + 1);
     }
@@ -202,44 +192,17 @@ export function GithubCollectionInstaller({
     return ids;
   }, [preview?.problems]);
 
+  const selectedFilter = onlySelected ? selected : null;
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return orderedItems.filter((item) => {
-      if (kindFilter !== "all" && item.kind !== kindFilter) return false;
-      if (folderFilter !== "all" && topFolderOf(item.source.path) !== folderFilter)
-        return false;
-      if (onlySelected && !selected.has(item.token)) return false;
-      if (!q) return true;
-      const displayName = item.displayName
-        ? resolveDisplayText(item.displayName, i18n.language)
-        : "";
-      const description = item.description
-        ? resolveI18nText(item.description, i18n.language)
-        : "";
-      const haystack = [
-        item.id,
-        displayName,
-        description,
-        item.author ?? "",
-        item.source.path,
-        ...(item.tags ?? []),
-        ...(item.capabilities.providerSources ?? []),
-        ...item.capabilities.wires,
-        ...item.capabilities.tools,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [
-    orderedItems,
-    kindFilter,
-    folderFilter,
-    onlySelected,
-    selected,
-    searchQuery,
-    i18n.language,
-  ]);
+    return orderedItems.filter(
+      (item) =>
+        (kindFilter === "all" || item.kind === kindFilter) &&
+        (folderFilter === "all" || item.folder === folderFilter) &&
+        (!selectedFilter || selectedFilter.has(item.token)) &&
+        (!q || item.searchText.includes(q)),
+    );
+  }, [orderedItems, kindFilter, folderFilter, selectedFilter, searchQuery]);
 
   const chosen = useMemo(
     () => orderedItems.filter((item) => selected.has(item.token)),
@@ -255,6 +218,13 @@ export function GithubCollectionInstaller({
         chosen.some((item) => item.id === problem.packageId)),
   );
 
+  function reportError(error: unknown) {
+    setError(
+      parseOutboundNetworkError(error) ??
+        (error instanceof Error ? error.message : t("settings.github.failed")),
+    );
+  }
+
   function resetFilters() {
     setSearchQuery("");
     setKindFilter("all");
@@ -267,7 +237,6 @@ export function GithubCollectionInstaller({
     setSelected(new Set());
     setAccepted(false);
     setError(null);
-    setOutboundError(null);
     resetFilters();
   }
 
@@ -283,7 +252,10 @@ export function GithubCollectionInstaller({
     onBusyChange(true);
     reset();
     try {
-      const result = await previewGithubCollection(rawTarget, controller.signal);
+      const result = await previewGithubCollection(
+        rawTarget,
+        controller.signal,
+      );
       if (!controller.signal.aborted) {
         setPreview(result);
         // Collections and single-package links pre-select their non-installed
@@ -303,16 +275,7 @@ export function GithubCollectionInstaller({
       }
     } catch (err) {
       if (!controller.signal.aborted) {
-        const parsed = parseOutboundNetworkError(err);
-        if (parsed) {
-          setOutboundError(parsed);
-          setError(null);
-        } else {
-          setOutboundError(null);
-          setError(
-            err instanceof Error ? err.message : t("settings.github.failed"),
-          );
-        }
+        reportError(err);
       }
     } finally {
       if (requestRef.current === controller) {
@@ -328,7 +291,6 @@ export function GithubCollectionInstaller({
     setBusy("install");
     onBusyChange(true);
     setError(null);
-    setOutboundError(null);
     try {
       const tokens = chosen.map((item) => item.token);
       const result = await installGithubPackages(tokens);
@@ -341,16 +303,7 @@ export function GithubCollectionInstaller({
       setAccepted(false);
       setOnlySelected(false);
     } catch (err) {
-      const parsed = parseOutboundNetworkError(err);
-      if (parsed) {
-        setOutboundError(parsed);
-        setError(null);
-      } else {
-        setOutboundError(null);
-        setError(
-          err instanceof Error ? err.message : t("settings.github.failed"),
-        );
-      }
+      reportError(err);
     } finally {
       setBusy(null);
       onBusyChange(false);
@@ -362,7 +315,6 @@ export function GithubCollectionInstaller({
     // Consent covers one exact selection.
     setAccepted(false);
     setError(null);
-    setOutboundError(null);
     if (next.size === 0) setOnlySelected(false);
   }
 
@@ -376,7 +328,7 @@ export function GithubCollectionInstaller({
   const selectAllVisible = () => {
     const next = new Set(selected);
     for (const item of filteredItems) {
-      if (!isItemInstalled(item)) next.add(item.token);
+      if (!item.installed) next.add(item.token);
     }
     updateSelection(next);
   };
@@ -513,16 +465,16 @@ export function GithubCollectionInstaller({
         </div>
       </div>
 
-      {outboundError && (
+      {error && typeof error !== "string" && (
         <OutboundNetworkErrorBanner
-          info={outboundError}
+          info={error}
           disabled={disabled || !!busy}
           onRetry={() => void inspect()}
           onOpenProxySettings={onOpenProxySettings}
         />
       )}
 
-      {error && (
+      {typeof error === "string" && error && (
         <p
           role="alert"
           className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive wrap-break-word"
@@ -637,27 +589,12 @@ export function GithubCollectionInstaller({
           {/* Search & filter controls for multi-package repositories */}
           {isMultiItem && (
             <div className="space-y-2 rounded-md border border-border/80 bg-background/50 p-2.5">
-              <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 focus-within:ring-1 focus-within:ring-primary">
-                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  aria-label={t("settings.github.searchPlaceholder")}
-                  placeholder={t("settings.github.searchPlaceholder")}
-                  className="h-8 w-full min-w-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-                />
-                {searchQuery && (
-                  <button
-                    type="button"
-                    aria-label={t("common.clear", "Clear")}
-                    onClick={() => setSearchQuery("")}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
+              <SettingsListSearch
+                compact
+                label={t("settings.github.searchPlaceholder")}
+                value={searchQuery}
+                onChange={setSearchQuery}
+              />
 
               {(folderGroups.length > 1 ||
                 (kindCounts.plugins > 0 && kindCounts.worlds > 0) ||
@@ -759,10 +696,7 @@ export function GithubCollectionInstaller({
                 {t("settings.github.selectedChipsLabel")}
               </span>
               {chosen.map((item) => {
-                const label =
-                  (item.displayName
-                    ? resolveDisplayText(item.displayName, i18n.language)
-                    : "") || item.id;
+                const label = item.name;
                 return (
                   <span
                     key={item.token}
@@ -812,24 +746,17 @@ export function GithubCollectionInstaller({
           ) : (
             <ul
               className={`space-y-2 ${
-                orderedItems.length > 4
-                  ? "max-h-104 overflow-y-auto pr-1"
-                  : ""
+                orderedItems.length > 4 ? "max-h-104 overflow-y-auto pr-1" : ""
               }`}
             >
               {filteredItems.map((item) => {
                 const isChecked = selected.has(item.token);
-                const installed = isItemInstalled(item);
+                const { installed, folder, name: title, description } = item;
                 const hasError = problemIds.has(item.id);
-                const folder = topFolderOf(item.source.path);
-                const displayName = item.displayName
-                  ? resolveDisplayText(item.displayName, i18n.language)
-                  : "";
-                const title = displayName || item.id;
-                const description = item.description
-                  ? resolveI18nText(item.description, i18n.language)
-                  : "";
-                const capCount = capabilityCount(item);
+                const capCount =
+                  item.kind === "plugin"
+                    ? countDeclaredCapabilities(item.capabilities)
+                    : 0;
                 const sourceTreeUrl = `${item.source.repository}/tree/${item.source.commit}${item.source.path ? `/${item.source.path}` : ""}`;
 
                 return (
@@ -1015,7 +942,11 @@ export function GithubCollectionInstaller({
             <Button
               size="sm"
               disabled={
-                chosen.length === 0 || !accepted || blocked || !!busy || disabled
+                chosen.length === 0 ||
+                !accepted ||
+                blocked ||
+                !!busy ||
+                disabled
               }
               onClick={() => void install()}
             >

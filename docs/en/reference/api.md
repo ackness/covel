@@ -3892,7 +3892,7 @@ Updates or clears L2 instance capability policy overrides (requires `server.sett
 
 Lists permission and integrity summaries across loaded plugins (requires `server.diagnostics`), returning `{ "items": [...] }`. Community plugins include their current content digest, integrity status (`verified` / `modified` / `no-receipt` / `unreadable`), `trust.sources` match flag, declared capability structure, stored `plugin_grants` record, and grant validity (`none` / `valid` / `stale-digest` / `capability-escalated` / `unreadable`).
 
-`sourceAutoApproved` indicates that the repository matches the trust policy and that both package integrity and the receipt’s capability snapshot qualify for automatic approval. It does not override host ceilings, instance policy, or an explicit denial.
+`sourceAutoApproved` indicates that the package meets the [trusted-source conditions](./plugin-installation.md#trusted-sources), not that execution is authorized.
 
 #### `PUT /api/permissions/plugins/:pluginId/grants`
 

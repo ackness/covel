@@ -79,14 +79,7 @@ Trusted sources preserve `builtin | community`, add no API or privilege, and do 
 
 ## User flow
 
-Open **Settings → Plugins → Install & manage**:
-
-1. In **GitHub**, choose **Official plugins** or paste a public GitHub repository or directory URL.
-2. The link is resolved. The plugins and world packs in that directory are listed together. When the directory has a `covel-collection.yaml`, only the members named in the [collection](../ship/collections.md) manifest are listed, including packages pinned in other repositories.
-3. Search by name, ID, or tag. Tick what you want to install, check the ID, version, source, commit, and code risk, and confirm once. Plugins are installed before worlds. A failure rolls back this batch’s writes, except that a world already used to create a session, or a package that cannot be deleted, is retained and reported. See [batch rollback results](#multi-package-preview-and-batch-install).
-4. After installing a plugin, restart the backend once. Then enable the plugin in a session, and follow approval prompts for code packages; declarative packages need no code/runtime approval. A world is usable right away.
-
-In **Installed**, search by name, ID, or repository, then validate packages, check for updates, or uninstall a plugin. Use **Local tools** to install a ZIP, import SillyTavern content, or validate a ZIP without installing it. The desktop import menu opens the same page.
+See the [player guide](../start/packages.md) for installing, updating, and uninstalling packages, and [multi-package preview and batch install](#multi-package-preview-and-batch-install) for rollback rules.
 
 ### Integrity checks in the preview
 
