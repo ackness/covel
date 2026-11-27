@@ -68,9 +68,9 @@ runSchemaVersionTests("SqliteStore", () => {
  * DDL adds to an existing table) recorded for {@link DATA_SCHEMA_VERSION}.
  */
 const PINNED_SHAPES = {
-  version: 8,
-  sqlite: "7fadfe5c48aa9ca627a5568871cae06d96d0fa6d9caadd686d54fea67eb558bd",
-  pg: "ebadb84d681b854f4b9188ba5637f1e01f6d0afb89357842120801ef1c57950a",
+  version: 9,
+  sqlite: "452632f3abc893c9c92e537eca27e136f65fd5cfbd2c035cfd2580c6d7d53b20",
+  pg: "56d109ed82f5a7e8332942952a38c33e0820d44277ce22f30b1db81360f93d47",
 };
 
 function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {
@@ -88,8 +88,8 @@ const refusedVersions = [
 ];
 
 describe("data schema version", () => {
-  it("refuses data schema 7", () => {
-    expect(refusedVersions).toContain(7);
+  it("refuses the previous data schema", () => {
+    expect(refusedVersions).toContain(DATA_SCHEMA_VERSION - 1);
   });
 
   it.each(refusedVersions)(

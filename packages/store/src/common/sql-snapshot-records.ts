@@ -42,6 +42,7 @@ type StateSnapshotsTable = Table & {
   turnId: Column;
   kind: Column;
   parentId: Column;
+  branchNodeId: Column;
   payload: Column;
   createdAt: Column;
 };
@@ -53,6 +54,7 @@ interface SnapshotMetaRow {
   turnId: string;
   kind: string;
   parentId: string | null;
+  branchNodeId: string | null;
   createdAt: string;
   size: number;
 }
@@ -159,6 +161,7 @@ export function createSqlSnapshotRecords(
           turnId: stateSnapshots.turnId,
           kind: stateSnapshots.kind,
           parentId: stateSnapshots.parentId,
+          branchNodeId: stateSnapshots.branchNodeId,
           createdAt: stateSnapshots.createdAt,
           size: sql<number>`length(cast(${stateSnapshots.payload} as text))`,
         },
@@ -177,6 +180,7 @@ export function createSqlSnapshotRecords(
         turnId: row.turnId,
         kind: row.kind as SnapshotKind,
         ...(row.parentId != null ? { parentId: row.parentId } : {}),
+        ...(row.branchNodeId != null ? { branchNodeId: row.branchNodeId } : {}),
         createdAt: row.createdAt,
         size: Number(row.size),
       }));

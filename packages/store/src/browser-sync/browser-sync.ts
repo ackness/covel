@@ -50,7 +50,7 @@ export type PersistenceProfile = (typeof PERSISTENCE_PROFILES)[number];
 export const BROWSER_CHECKPOINT_MAX_BYTES = 64 * 1024 * 1024;
 
 /** Schema version of the browser checkpoint envelope. */
-export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 2 as const;
+export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 3 as const;
 
 export type BrowserCheckpointSchemaVersion =
   typeof BROWSER_CHECKPOINT_SCHEMA_VERSION;

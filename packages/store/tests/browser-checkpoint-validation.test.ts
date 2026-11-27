@@ -80,7 +80,7 @@ const domainRecords = {
 };
 const checkpoint: BrowserCheckpoint = JSON.parse(
   JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     sessionId,
     profile: "browser-private",
     session: makeSession({ id: sessionId }),

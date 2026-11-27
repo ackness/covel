@@ -13,6 +13,7 @@ export function createMemoryState(): MemoryState {
     pluginData: new Map(),
     suspensions: new Map(),
     snapshots: new Map(),
+    turnNodes: new Map(),
     vectorIndexProgress: new Map(),
     vectorRows: new Map(),
     vectorModelRegistry: new Map(),

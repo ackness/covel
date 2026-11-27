@@ -62,6 +62,7 @@ export type SessionScopedMemoryKey = Extract<
   | "sessionSummaries"
   | "suspensions"
   | "snapshots"
+  | "turnNodes"
   | "logicalTurnLedger"
   | "setupAttempts"
   | "jobStatus"
@@ -177,6 +178,11 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
   {
     table: "state_snapshots",
     memoryKey: "snapshots",
+    memoryKind: "map",
+  },
+  {
+    table: "turn_nodes",
+    memoryKey: "turnNodes",
     memoryKind: "map",
   },
   {

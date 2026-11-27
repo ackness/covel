@@ -108,6 +108,10 @@ const ROUTES: Record<string, RouteAccess> = {
   },
   "DELETE /api/sessions/:id/suspensions/:suspensionId": SESSION,
   "GET /api/sessions/:id/snapshots": SESSION,
+  "GET /api/sessions/:id/branches": SESSION,
+  "POST /api/sessions/:id/branches/switch": SESSION,
+  "PATCH /api/sessions/:id/branches/nodes/:nodeId": SESSION,
+  "DELETE /api/sessions/:id/branches/nodes/:nodeId": SESSION,
   "POST /api/sessions/:id/snapshots": SESSION,
   "GET /api/sessions/:id/snapshots/:snapshotId": SESSION,
   // F-204: a fork creates a session and asks what POST /api/sessions asks.

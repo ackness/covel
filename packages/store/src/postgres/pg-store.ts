@@ -32,6 +32,7 @@ import { createPgSnapshotRecords } from "./pg-snapshot-records.js";
 import { DROP_ALL_SQL } from "./pg-schema-ddl.js";
 import { bootPgSchema, SCHEMA_META_TABLE } from "./pg-schema-boot.js";
 import { createPgVectorCapability } from "./pg-vector.js";
+import { createPgTurnNodeRecords } from "./pg-turn-node-records.js";
 import { createPgWorldRecords } from "./pg-world-records.js";
 import { createPgServerSettingRecords } from "./pg-server-setting-records.js";
 import { createPgPluginGrants } from "./pg-plugin-grants.js";
@@ -64,6 +65,7 @@ function buildPgData(
     ...createPgInstanceData(getDb),
     ...createPgSessionJournalRecords(getDb),
     ...createPgSnapshotRecords(getDb),
+    ...createPgTurnNodeRecords(getDb),
     ...createPgLifecycleRecords(getDb),
     ...createPgExportRecords(getDb),
   };

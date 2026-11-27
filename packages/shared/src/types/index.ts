@@ -439,3 +439,12 @@ export type { PluginManifest, PluginManifestInput } from "./plugin-manifest.js";
 export type { RuntimeAuthoringManifest } from "./runtime-manifest.js";
 
 export type { PluginToolErrorCode as ToolErrorCode } from "@covel/plugin-handlers-utils";
+
+export type {
+  TurnNodeCheckpointKind,
+  TurnNodeInputSummary,
+  TurnNodeSummary,
+  SessionBranchSummary,
+  BranchSwitchResponse,
+  BranchDeleteResponse,
+} from "./branch.js";

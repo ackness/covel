@@ -21,6 +21,7 @@ import {
   createBrowserWorkspaceCache,
   createBrowserWorkspaceRoutes,
 } from "../browser-workspace.js";
+import { branchRoutes } from "../branches.js";
 import { characterRoutes } from "../characters.js";
 import { eventRoutes } from "../events.js";
 import { frameworkRoutes } from "../framework.js";
@@ -201,6 +202,7 @@ export function mountApiRoutes(args: {
   app.route("/api/sessions", mediaImageFlowRoutes);
   app.route("/api/sessions", resumeRoutes); // suspend/resume (resume + suspensions list/delete)
   app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
+  app.route("/api/sessions", branchRoutes); // implicit turn-tree branching
   app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
   app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
   app.route("/api/sessions", runtimeJobRoutes); // scheduler-detached runtime jobs

@@ -411,3 +411,22 @@ export {
   unavailablePresentationJob,
   capturePresentationRecovery,
 } from "./presentation/jobs.js";
+
+// ── Turn branching ───────────────────────────────────────────────
+export {
+  BranchNodeCycleError,
+  BranchNodeNotFoundError,
+  activeBranchPath,
+  activeLeafFromNode,
+  branchPathToNode,
+  lowestCommonAncestor,
+  materializeBranchState,
+} from "./branch/index.js";
+export type {
+  BranchBasePayload,
+  BranchCollectionDelta,
+  BranchTurnNode,
+  MaterializedBranchState,
+  TurnNodeCheckpointKind,
+  TurnStateDelta,
+} from "./branch/index.js";

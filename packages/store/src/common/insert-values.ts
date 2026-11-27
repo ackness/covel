@@ -65,6 +65,9 @@ export type SessionUpdatePatch = Partial<
     | "completedPlayerTurns"
     | "setupRuntimes"
     | "seats"
+    | "activeNodeId"
+    | "branchEpoch"
+    | "branchWriteWatermark"
   >
 >;
 
@@ -122,6 +125,8 @@ export interface InsertValueBuilders {
   ): Record<string, unknown>;
   snapshotInsert(record: SnapshotRecord): Record<string, unknown>;
   snapshotUpdate(record: SnapshotRecord): Record<string, unknown>;
+  turnNodeInsert(record: import("../records/branch-records.js").TurnNodeRecord): Record<string, unknown>;
+  turnNodeUpdate(record: import("../records/branch-records.js").TurnNodeRecord): Record<string, unknown>;
   suspensionInsert(record: SuspensionRecord): Record<string, unknown>;
   suspensionUpdate(record: SuspensionRecord): Record<string, unknown>;
   logicalTurnLedgerInsert(
@@ -497,6 +502,9 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         completedPlayerTurns: record.completedPlayerTurns,
         setupRuntimes: json.writeJson(record.setupRuntimes),
         seats: json.writeJson(requireSeats(record.seats)),
+        activeNodeId: record.activeNodeId ?? null,
+        branchEpoch: record.branchEpoch ?? 0,
+        branchWriteWatermark: record.branchWriteWatermark ?? 0,
       };
     },
 
@@ -532,6 +540,10 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
       if ("seats" in patch) {
         values.seats = json.writeJson(requireSeats(patch.seats));
       }
+      if ("activeNodeId" in patch) values.activeNodeId = patch.activeNodeId ?? null;
+      if ("branchEpoch" in patch) values.branchEpoch = patch.branchEpoch;
+      if ("branchWriteWatermark" in patch)
+        values.branchWriteWatermark = patch.branchWriteWatermark;
       return values;
     },
 
@@ -550,6 +562,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         turnId: record.turnId,
         kind: record.kind,
         parentId: record.parentId ?? null,
+        branchNodeId: record.branchNodeId ?? null,
         payload: json.writeJson(record.payload),
         createdAt: record.createdAt,
       };
@@ -559,9 +572,61 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         turnId: record.turnId,
         kind: record.kind,
         parentId: record.parentId ?? null,
+        branchNodeId: record.branchNodeId ?? null,
         payload: json.writeJson(record.payload),
         createdAt: record.createdAt,
       };
+    },
+    turnNodeInsert(record) {
+      return {
+        id: record.id,
+        sessionId: record.sessionId,
+        parentNodeId: record.parentNodeId ?? null,
+        activeChildId: record.activeChildId ?? null,
+        turnId: record.turnId,
+        turnIds: json.writeJson(record.turnIds),
+        logicalTurn: record.logicalTurn,
+        seq: record.seq,
+        label: record.label ?? null,
+        inputSummary: json.writeNullableJson(record.inputSummary),
+        checkpointKind: record.checkpointKind,
+        baseNodeId: record.baseNodeId,
+        depthFromBase: record.depthFromBase,
+        statePayload: json.writeJson(record.statePayload),
+        tailDelta: json.writeNullableJson(record.tailDelta),
+        messagesAdded: json.writeJson(record.messagesAdded),
+        turnMessagesAdded: json.writeJson(record.turnMessagesAdded),
+        playerInputsAdded: json.writeJson(record.playerInputsAdded),
+        interactionRecordsAdded: json.writeJson(record.interactionRecordsAdded),
+        mediaRefIds: json.writeJson(record.mediaRefIds),
+        capturedThroughWriteSeq: record.capturedThroughWriteSeq,
+        createdAt: record.createdAt,
+      };
+    },
+    turnNodeUpdate(record) {
+      const values = {
+        parentNodeId: record.parentNodeId ?? null,
+        activeChildId: record.activeChildId ?? null,
+        turnId: record.turnId,
+        turnIds: json.writeJson(record.turnIds),
+        logicalTurn: record.logicalTurn,
+        seq: record.seq,
+        label: record.label ?? null,
+        inputSummary: json.writeNullableJson(record.inputSummary),
+        checkpointKind: record.checkpointKind,
+        baseNodeId: record.baseNodeId,
+        depthFromBase: record.depthFromBase,
+        statePayload: json.writeJson(record.statePayload),
+        tailDelta: json.writeNullableJson(record.tailDelta),
+        messagesAdded: json.writeJson(record.messagesAdded),
+        turnMessagesAdded: json.writeJson(record.turnMessagesAdded),
+        playerInputsAdded: json.writeJson(record.playerInputsAdded),
+        interactionRecordsAdded: json.writeJson(record.interactionRecordsAdded),
+        mediaRefIds: json.writeJson(record.mediaRefIds),
+        capturedThroughWriteSeq: record.capturedThroughWriteSeq,
+        createdAt: record.createdAt,
+      } as Record<string, unknown>;
+      return values;
     },
 
     suspensionInsert(record) {

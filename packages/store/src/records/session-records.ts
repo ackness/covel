@@ -40,6 +40,12 @@ export interface SessionRecord {
    * on every write and read. Replaced wholesale on write (no deep merge).
    */
   readonly seats: readonly Seat[];
+  /** Active leaf in the session's implicit turn tree. */
+  readonly activeNodeId?: string | null;
+  /** Monotonic checkout generation used to isolate branch writes. */
+  readonly branchEpoch?: number;
+  /** Latest session write counter captured by the active branch. */
+  readonly branchWriteWatermark?: number;
 }
 
 export function mergeSessionPatch(
@@ -59,6 +65,9 @@ export function mergeSessionPatch(
       | "completedPlayerTurns"
       | "setupRuntimes"
       | "seats"
+      | "activeNodeId"
+      | "branchEpoch"
+      | "branchWriteWatermark"
     >
   >,
 ): SessionRecord {

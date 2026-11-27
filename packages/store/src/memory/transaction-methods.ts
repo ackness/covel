@@ -127,6 +127,8 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteSuspension: ["suspensions"],
   releaseStaleSuspensionClaims: ["suspensions"],
   saveSnapshot: ["snapshots"],
+  saveTurnNode: ["turnNodes"],
+  deleteTurnNode: ["turnNodes"],
   pruneAutoSnapshots: ["snapshots"],
   // scheduling-redesign lifecycle records
   insertLogicalTurnCompletion: ["logicalTurnLedger"],

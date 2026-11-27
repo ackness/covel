@@ -27,6 +27,9 @@ export interface SessionRow {
   completedPlayerTurns: number;
   setupRuntimes: unknown;
   seats: unknown;
+  activeNodeId: string | null;
+  branchEpoch: number | null;
+  branchWriteWatermark: number | null;
 }
 
 const SESSION_STATUSES = new Set<SessionStatus>(["active", "paused", "ended"]);
@@ -105,7 +108,7 @@ export function toSessionRecord(
     status: requireSessionStatus(row.status),
     locale: row.locale,
     activePlugins,
-    metadata,
+    ...(metadata !== undefined ? { metadata } : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     ...(row.embeddingModelId != null
@@ -121,5 +124,8 @@ export function toSessionRecord(
     completedPlayerTurns: row.completedPlayerTurns,
     setupRuntimes,
     seats: requireSeats(json.readRequired(row.seats)),
+    activeNodeId: row.activeNodeId ?? null,
+    branchEpoch: row.branchEpoch ?? 0,
+    branchWriteWatermark: row.branchWriteWatermark ?? 0,
   };
 }

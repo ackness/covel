@@ -81,8 +81,18 @@ const SQLITE_NEXT_WRITE = (row: "NEW" | "OLD") => `
 const SQLITE_CURRENT_WRITE = (row: "NEW" | "OLD") =>
   `(SELECT value FROM session_write_counters WHERE session_id = ${row}.session_id)`;
 
-/** SQLite: the AFTER triggers that number turn messages and record changes. */
+/** SQLite: the AFTER triggers that number branch-captured writes. */
 export function sqliteWriteOrderTriggersSql(): string {
+  const appendOnly = ["messages", "interaction_records", "player_inputs"].map(
+    (table) => `
+  CREATE TRIGGER IF NOT EXISTS ${table}_write_seq
+    AFTER INSERT ON ${table}
+    FOR EACH ROW
+  BEGIN${SQLITE_NEXT_WRITE("NEW")}
+    UPDATE ${table} SET write_seq = ${SQLITE_CURRENT_WRITE("NEW")}
+      WHERE id = NEW.id;
+  END;`,
+  );
   const turnMessages = `
   CREATE TRIGGER IF NOT EXISTS turn_messages_write_seq
     AFTER INSERT ON turn_messages
@@ -111,7 +121,7 @@ export function sqliteWriteOrderTriggersSql(): string {
   END;`,
     ),
   );
-  return [turnMessages, ...changes].join("\n");
+  return [...appendOnly, turnMessages, ...changes].join("\n");
 }
 
 /** PostgreSQL: the functions and triggers that number turn messages and record changes. */
@@ -154,6 +164,14 @@ export function pgWriteOrderTriggersSql(): string {
   END;
   $fn$;
 
+  CREATE OR REPLACE FUNCTION covel_append_write_seq() RETURNS trigger
+    LANGUAGE plpgsql AS $fn$
+  BEGIN
+    NEW.write_seq := covel_next_session_write(NEW.session_id);
+    RETURN NEW;
+  END;
+  $fn$;
+
   DO $trg$
   BEGIN
     IF NOT EXISTS (
@@ -169,6 +187,24 @@ export function pgWriteOrderTriggersSql(): string {
     END IF;
   END;
   $trg$;`;
+  const appendOnly = ["messages", "interaction_records", "player_inputs"].map(
+    (table) => `
+  DO $trg$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = '${table}_write_seq'
+        AND tgrelid = '${table}'::regclass
+        AND NOT tgisinternal
+    ) THEN
+      CREATE TRIGGER ${table}_write_seq
+        BEFORE INSERT ON ${table}
+        FOR EACH ROW
+        EXECUTE FUNCTION covel_append_write_seq();
+    END IF;
+  END;
+  $trg$;`,
+  );
   const changes = RECORD_CHANGE_SOURCES.map(
     (source) => `
   CREATE OR REPLACE FUNCTION ${source.table}_record_change() RETURNS trigger
@@ -199,5 +235,5 @@ export function pgWriteOrderTriggersSql(): string {
   END;
   $trg$;`,
   );
-  return [functions, ...changes].join("\n");
+  return [functions, ...appendOnly, ...changes].join("\n");
 }

@@ -131,6 +131,9 @@ export const sessions = pgTable("sessions", {
     .default([
       { id: "main", controller: "human", role: "player", characters: "auto" },
     ]),
+  activeNodeId: text("active_node_id"),
+  branchEpoch: integer("branch_epoch").notNull().default(0),
+  branchWriteWatermark: integer("branch_write_watermark").notNull().default(0),
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -222,6 +225,7 @@ export const messages = pgTable(
     // Database-allocated write order; concurrent connections never share a
     // number. Gaps after transaction rollback do not change log ordering.
     seq: bigserial("seq", { mode: "number" }).notNull(),
+    writeSeq: bigint("write_seq", { mode: "number" }).notNull().default(0),
   },
   (table) => [
     index("pg_messages_session_id_idx").on(table.sessionId),
@@ -233,6 +237,7 @@ export const messages = pgTable(
       table.createdAt,
       table.seq,
     ),
+    index("pg_messages_write_seq_idx").on(table.sessionId, table.writeSeq),
   ],
 );
 
@@ -403,6 +408,7 @@ export const interactionRecords = pgTable(
     payload: jsonb("payload").notNull(),
     metaData: jsonb("meta_data"),
     createdAt: text("created_at").notNull(),
+    writeSeq: bigint("write_seq", { mode: "number" }).notNull().default(0),
   },
   (table) => [
     index("pg_interaction_records_session_time_idx").on(
@@ -410,6 +416,10 @@ export const interactionRecords = pgTable(
       table.timestamp,
     ),
     index("pg_interaction_records_type_idx").on(table.sessionId, table.type),
+    index("pg_interaction_records_write_seq_idx").on(
+      table.sessionId,
+      table.writeSeq,
+    ),
   ],
 );
 
@@ -490,8 +500,12 @@ export const playerInputs = pgTable(
     formId: text("form_id").notNull(),
     values: jsonb("values").notNull(), // JSON
     createdAt: text("created_at").notNull(),
+    writeSeq: bigint("write_seq", { mode: "number" }).notNull().default(0),
   },
-  (table) => [index("pg_player_inputs_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("pg_player_inputs_session_id_idx").on(table.sessionId),
+    index("pg_player_inputs_write_seq_idx").on(table.sessionId, table.writeSeq),
+  ],
 );
 
 // ── Working Memory ────────────────────────────────────
@@ -529,6 +543,7 @@ export const stateSnapshots = pgTable(
     turnId: text("turn_id").notNull(),
     kind: text("kind").notNull(), // 'auto' | 'manual' | 'fork'
     parentId: text("parent_id"), // null except for kind='fork'
+    branchNodeId: text("branch_node_id"),
     payload: jsonb("payload").notNull(), // SnapshotPayload
     createdAt: text("created_at").notNull(),
   },
@@ -544,6 +559,43 @@ export const stateSnapshots = pgTable(
     index("pg_state_snapshots_parent_id_idx")
       .on(table.parentId)
       .where(isNotNull(table.parentId)),
+  ],
+);
+
+export const turnNodes = pgTable(
+  "turn_nodes",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    parentNodeId: text("parent_node_id"),
+    activeChildId: text("active_child_id"),
+    turnId: text("turn_id").notNull(),
+    turnIds: jsonb("turn_ids").notNull(),
+    logicalTurn: integer("logical_turn").notNull(),
+    seq: integer("seq").notNull(),
+    label: text("label"),
+    inputSummary: jsonb("input_summary"),
+    checkpointKind: text("checkpoint_kind").notNull(),
+    baseNodeId: text("base_node_id").notNull(),
+    depthFromBase: integer("depth_from_base").notNull(),
+    statePayload: jsonb("state_payload").notNull(),
+    tailDelta: jsonb("tail_delta"),
+    messagesAdded: jsonb("messages_added").notNull(),
+    turnMessagesAdded: jsonb("turn_messages_added").notNull(),
+    playerInputsAdded: jsonb("player_inputs_added").notNull(),
+    interactionRecordsAdded: jsonb("interaction_records_added").notNull(),
+    mediaRefIds: jsonb("media_ref_ids").notNull(),
+    capturedThroughWriteSeq: bigint("captured_through_write_seq", { mode: "number" }).notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("pg_turn_nodes_session_id_idx").on(table.sessionId),
+    index("pg_turn_nodes_parent_seq_idx").on(
+      table.sessionId,
+      table.parentNodeId,
+      table.seq,
+    ),
+    index("pg_turn_nodes_turn_id_idx").on(table.sessionId, table.turnId),
   ],
 );
 

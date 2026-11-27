@@ -179,6 +179,32 @@ const CASCADE_PROBES: Readonly<Record<SessionScopedMemoryKey, CascadeProbe>> = {
     count: async (store, sessionId) =>
       (await store.listSnapshots(sessionId)).length,
   },
+  turnNodes: {
+    seed: async (store, sessionId) => {
+      const node = {
+        id: id(),
+        sessionId,
+        turnId: "turn-1",
+        turnIds: ["turn-1"],
+        logicalTurn: 1,
+        seq: 0,
+        checkpointKind: "base" as const,
+        baseNodeId: "root",
+        depthFromBase: 0,
+        statePayload: {},
+        messagesAdded: [],
+        turnMessagesAdded: [],
+        playerInputsAdded: [],
+        interactionRecordsAdded: [],
+        mediaRefIds: [],
+        capturedThroughWriteSeq: 0,
+        createdAt: ts(),
+      };
+      await store.saveTurnNode(node);
+    },
+    count: async (store, sessionId) =>
+      (await store.listTurnNodes(sessionId)).length,
+  },
   logicalTurnLedger: {
     seed: async (store, sessionId) => {
       await store.insertLogicalTurnCompletion(

@@ -70,6 +70,12 @@ export type {
   SuspensionWriteTarget,
   SuspendedLoopState,
 } from "./records/snapshot-records.js";
+export type {
+  TurnNodeCheckpointKind,
+  TurnNodeInputSummary,
+  TurnNodeRecord,
+  TurnNodeSummary,
+} from "./records/branch-records.js";
 
 // Session-lifecycle records live in @covel/shared (the cross-layer contract);
 // re-exported here so store consumers import them alongside the store records.
@@ -126,6 +132,7 @@ import type {
   SnapshotMetadata,
   SuspensionRecord,
 } from "./records/snapshot-records.js";
+import type { TurnNodeRecord } from "./records/branch-records.js";
 import type {
   PaginationOpts,
   CursorPageOpts,
@@ -973,6 +980,13 @@ export interface SnapshotStore {
   pruneAutoSnapshots(sessionId: string, keep: number): Promise<number>;
 }
 
+export interface TurnNodeStore {
+  saveTurnNode(record: TurnNodeRecord): Promise<void>;
+  getTurnNode(id: string): Promise<TurnNodeRecord | null>;
+  listTurnNodes(sessionId: string): Promise<readonly TurnNodeRecord[]>;
+  deleteTurnNode(id: string): Promise<void>;
+}
+
 /**
  * Transaction control. Held separate from the data domains because
  * {@link StoreTransaction} omits `withTransaction` — a transaction body must
@@ -1048,6 +1062,7 @@ export interface DataStore
     SessionSummaryStore,
     SuspensionStore,
     SnapshotStore,
+    TurnNodeStore,
     LifecycleStore,
     ExportStore,
     TransactionalStore,
