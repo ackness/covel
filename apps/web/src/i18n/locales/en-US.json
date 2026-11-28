@@ -377,6 +377,8 @@
     "recoveryRefresh": "Check status",
     "recoveryStop": "Stop task",
     "recoveryStopFailed": "Could not stop the task. Check its status and try again.",
+    "restoreFailedTitle": "Unable to open this saved game",
+    "backToWorlds": "Back to worlds",
     "setupFailedTitle": "Setup did not finish",
     "setupFailedDetail": "A setup step failed; retry to finish the remaining steps.",
     "setupRetry": "Retry setup",

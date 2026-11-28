@@ -221,7 +221,9 @@ export async function exportSessionCheckpoint(
     characters,
     characterSchema,
     pluginData: pluginData.filter(
-      (row) => row.namespace !== PRESENTATION_BUDGET_NAMESPACE,
+      (row) =>
+        row.namespace !== PRESENTATION_BUDGET_NAMESPACE &&
+        row.namespace !== RUNTIME_JOB_CONTROL_NAMESPACE,
     ),
     lorebookEntries,
     sessionSummaries,
@@ -245,6 +247,8 @@ export async function exportSessionCheckpoint(
   );
 }
 
+const RUNTIME_JOB_CONTROL_NAMESPACE = "_runtime_job_control";
+
 async function writeCheckpoint(
   store: StoreTransaction,
   checkpoint: BrowserCheckpoint,
@@ -260,15 +264,17 @@ async function writeCheckpoint(
     ...session
   } = rawSession;
 
-  // Browser uploads do not own the dispatch ledger. Keep the live ledger
-  // when hydrating the same incarnation, without putting it on the wire.
+  // Browser uploads do not own the dispatch ledger or job sequence counters.
+  // Keep them when hydrating the same incarnation, without putting them on the wire.
   const previous = await store.getSession(checkpoint.sessionId);
   const nonce = previous?.metadata?.sessionIncarnationNonce;
-  const spend =
+  const preservedControl =
     typeof nonce === "string" &&
     nonce === session.metadata?.sessionIncarnationNonce
       ? (await store.listPluginDataSessionScope(checkpoint.sessionId)).filter(
-          (row) => row.namespace === PRESENTATION_BUDGET_NAMESPACE,
+          (row) =>
+            row.namespace === PRESENTATION_BUDGET_NAMESPACE ||
+            row.namespace === RUNTIME_JOB_CONTROL_NAMESPACE,
         )
       : [];
 
@@ -276,7 +282,7 @@ async function writeCheckpoint(
   if (options.writeWorld && checkpoint.world)
     await store.upsertWorld(checkpoint.world);
   await store.createSession(session);
-  if (spend.length) await store.setPluginDataBatch(spend);
+  if (preservedControl.length) await store.setPluginDataBatch(preservedControl);
 
   for (const record of checkpoint.turnResults)
     await store.saveTurnResult(record);

@@ -106,6 +106,55 @@ describe("session checkpoint transfer", () => {
       }
     },
   );
+  it("keeps _runtime_job_control sequence counters off exported checkpoints while preserving live incarnation counters", async () => {
+    const store = createMemoryStore();
+    const session = makeSession({
+      metadata: { sessionIncarnationNonce: "live-incarnation" },
+    });
+    await store.createSession(session);
+    const counterRow: PluginDataRecord = {
+      id: `${session.id}:mod:_runtime_job_control:sequence`,
+      sessionId: session.id,
+      pluginId: "mod",
+      namespace: "_runtime_job_control",
+      key: "sequence",
+      value: { sequence: 3 },
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    };
+    await store.setPluginData(counterRow);
+
+    const checkpoint = await exportSessionCheckpoint(store, session.id, {
+      revision: 1,
+      actionId: "export",
+    });
+    expect(checkpoint.pluginData).toEqual([]);
+
+    await replaceSessionFromCheckpoint(store, checkpoint);
+    expect(
+      await store.getPluginData(
+        session.id,
+        counterRow.pluginId,
+        counterRow.namespace,
+        counterRow.key,
+      ),
+    ).toEqual(counterRow);
+
+    await replaceSessionFromCheckpoint(store, checkpoint, {
+      session: {
+        ...session,
+        metadata: { sessionIncarnationNonce: "fresh-incarnation" },
+      },
+    });
+    expect(
+      await store.getPluginData(
+        session.id,
+        counterRow.pluginId,
+        counterRow.namespace,
+        counterRow.key,
+      ),
+    ).toBeNull();
+  });
   it("keeps recovery records without copying model diagnostics into a private checkpoint", async () => {
     const store = createMemoryStore();
     const session = makeSession({

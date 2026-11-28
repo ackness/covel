@@ -7,6 +7,16 @@ const routeMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   booted: true,
   sid: undefined as string | undefined,
+  executionRecovery: null as {
+    sessionId: string;
+    status: null;
+    hydrating: boolean;
+    checking: boolean;
+    stalled?: boolean;
+    error?: string;
+  } | null,
+  backToWorldSelect: vi.fn(),
+  refreshExecutionRecovery: vi.fn(),
 }));
 
 const slotMocks = vi.hoisted(() => ({
@@ -33,14 +43,19 @@ vi.mock("@/stores/session-store.js", () => ({
       presets: [],
       llmConfig: null,
       messages: [],
+      executionRecovery: routeMocks.executionRecovery,
+      executionSteps: [],
     },
     boot: vi.fn(),
     selectWorld: vi.fn(),
     startGame: vi.fn(),
     resumeSession: vi.fn(),
     resumeSessionById: vi.fn().mockResolvedValue(undefined),
+    retryInterruptedTurn: vi.fn(),
+    refreshExecutionRecovery: routeMocks.refreshExecutionRecovery,
+    abortActiveTurn: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn(),
-    backToWorldSelect: vi.fn(),
+    backToWorldSelect: routeMocks.backToWorldSelect,
     updateWorldLocal: vi.fn(),
     addWorldLocal: vi.fn(),
     removeWorldLocal: vi.fn(),
@@ -77,7 +92,12 @@ vi.mock("@/components/onboarding-wizard/persistence.js", () => ({
   isOnboarded: () => true,
 }));
 
+vi.mock("@/settings/SettingsDialog.js", () => ({
+  SettingsDialog: () => null,
+}));
+
 vi.mock("@/lib/desktop-bridge.js", () => ({
+  getCovelIpc: () => null,
   initDesktopBridge: () => vi.fn(),
   subscribeServerStatus: () => vi.fn(),
 }));
@@ -90,6 +110,9 @@ afterEach(() => {
   cleanup();
   routeMocks.booted = true;
   routeMocks.sid = undefined;
+  routeMocks.executionRecovery = null;
+  routeMocks.backToWorldSelect.mockClear();
+  routeMocks.refreshExecutionRecovery.mockClear();
   slotMocks.refresh.mockClear();
   routeMocks.navigate.mockClear();
 });
@@ -116,4 +139,35 @@ it.each([false, true])("announces session loading when booted=%s", (booted) => {
   if (!SessionPage) throw new Error("Session route was not registered");
   render(<SessionPage />);
   expect(screen.getByRole("status").textContent).toContain("加载中");
+});
+
+it("shows an actionable restore error screen with Back to worlds and Retry instead of spinning forever", () => {
+  const SessionPage = routeMocks.component;
+  if (!SessionPage) throw new Error("Session route was not registered");
+
+  const { rerender } = render(<SessionPage />);
+  routeMocks.executionRecovery = {
+    sessionId: "old-save",
+    status: null,
+    hydrating: false,
+    checking: false,
+    stalled: true,
+    error: "schemaVersion must be 3",
+  };
+  rerender(<SessionPage />);
+
+  expect(screen.queryByRole("status")).toBeNull();
+  const alert = screen.getByRole("alert");
+  expect(alert.textContent).toContain("schemaVersion must be 3");
+
+  fireEvent.click(screen.getByRole("button", { name: "返回世界列表" }));
+  expect(routeMocks.backToWorldSelect).toHaveBeenCalledTimes(1);
+  expect(routeMocks.navigate).toHaveBeenCalledWith({
+    to: "/session",
+    search: {},
+    replace: true,
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
+  expect(routeMocks.refreshExecutionRecovery).toHaveBeenCalledTimes(1);
 });

@@ -20,7 +20,12 @@ import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
 import { actionApprovalSchema, type ActionApproval } from "./actions.js";
 import { buildSlotConfigHeaderInternal } from "./model-settings.js";
-import { isNotFound, request, requestResponse } from "./request.js";
+import {
+  isNotFound,
+  request,
+  requestResponse,
+  type RequestOptions,
+} from "./request.js";
 import { requestPluginToggle } from "./plugin-toggle.js";
 import { ignoreError } from "../../lib/ignore-error.js";
 import { verifyCreatedSessionCredential } from "./session-credential-cleanup.js";
@@ -419,6 +424,7 @@ export function warnWhenCheckpointNearLimit(
 export async function uploadBrowserCheckpoint(
   sessionId: string,
   checkpoint: BrowserCheckpoint,
+  options?: Pick<RequestOptions, "silentCodes">,
 ): Promise<{
   ok: true;
   revision: number;
@@ -429,7 +435,11 @@ export async function uploadBrowserCheckpoint(
   warnWhenCheckpointNearLimit(sessionId, body);
   return request(
     `/api/sessions/${encodeURIComponent(sessionId)}/browser-checkpoint`,
-    { method: "PUT", body },
+    {
+      method: "PUT",
+      body,
+      ...(options?.silentCodes ? { silentCodes: options.silentCodes } : {}),
+    },
   );
 }
 

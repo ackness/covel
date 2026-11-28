@@ -8,7 +8,11 @@ import { exportChat } from "@/lib/chat-export.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
 import { usePrepWorldRestore } from "@/hooks/use-prep-world-restore.js";
-import { onSettingsRequest, type SessionPanel } from "@/lib/nav-events.js";
+import {
+  emitWorldListRequest,
+  onSettingsRequest,
+  type SessionPanel,
+} from "@/lib/nav-events.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { worldDisplayText, worldPlayLocale } from "@/lib/world-locale.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
@@ -171,6 +175,12 @@ function SessionScreen() {
     });
   }, []);
 
+  const returnToWorldSelect = useCallback(() => {
+    backToWorldSelect();
+    replaceSessionUrl();
+    emitWorldListRequest();
+  }, [backToWorldSelect, replaceSessionUrl]);
+
   // Loading (boot or auto-resume in progress)
   if (!state.booted && !state.bootError) {
     return (
@@ -186,23 +196,82 @@ function SessionScreen() {
       <div className="flex h-full items-center justify-center p-6">
         <div
           role="alert"
-          className="max-w-lg space-y-4 border border-border p-6"
+          className="max-w-lg w-full space-y-4 border border-border p-6"
         >
-          <p className="text-sm text-destructive">{navigation.error}</p>
-          <button
-            type="button"
-            onClick={navigation.retry}
-            className="border border-border px-3 py-2 text-sm"
-          >
-            {t("error.boot.retry", "Retry")}
-          </button>
+          <p className="text-sm text-destructive break-all">
+            {navigation.error}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={returnToWorldSelect}
+              className="border border-primary bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary/90"
+            >
+              {t("session.backToWorlds")}
+            </button>
+            <button
+              type="button"
+              onClick={navigation.retry}
+              className="border border-border px-3 py-2 text-sm hover:bg-muted"
+            >
+              {t("error.boot.retry")}
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Auto-resuming from URL — show spinner while loading
+  // Auto-resuming from URL or hydrating local save
   if (!state.session && state.executionRecovery) {
+    const hydrateFailed =
+      !!state.executionRecovery.stalled &&
+      !!state.executionRecovery.error &&
+      !state.executionRecovery.hydrating &&
+      !state.executionRecovery.checking &&
+      !state.executionRecovery.status;
+    if (hydrateFailed) {
+      return (
+        <div className="flex h-full items-center justify-center p-6">
+          <div
+            role="alert"
+            className="max-w-lg w-full space-y-4 border border-border p-6"
+          >
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <span className="text-sm font-medium">
+                {t("session.restoreFailedTitle")}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground break-all">
+              {state.executionRecovery.error}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={returnToWorldSelect}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {t("session.backToWorlds")}
+              </button>
+              <button
+                type="button"
+                onClick={refreshExecutionRecovery}
+                className="px-3 py-2 text-xs uppercase tracking-widest border border-border hover:bg-muted"
+              >
+                {t("error.boot.retry")}
+              </button>
+            </div>
+            <SettingsDialog
+              open={settings.open}
+              onOpenChange={settings.onOpenChange}
+              initialKey={settings.initialKey}
+              plugins={state.plugins}
+            />
+          </div>
+        </div>
+      );
+    }
     return (
       <div
         role="status"
@@ -354,7 +423,9 @@ function SessionScreen() {
         onSettingsOpenChange={settings.onOpenChange}
         settingsInitialKey={settings.initialKey}
         onSelectWorld={selectWorld}
-        onResumeSession={(session) => void resumeSession(session)}
+        onResumeSession={(session) =>
+          void resumeSession(session).catch(() => {})
+        }
         onWorldUpdated={updateWorldLocal}
         onRefreshWorlds={() => void refreshWorlds()}
         onWorldCreated={addWorldLocal}
