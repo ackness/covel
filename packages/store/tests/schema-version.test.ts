@@ -70,7 +70,7 @@ runSchemaVersionTests("SqliteStore", () => {
 const PINNED_SHAPES = {
   version: 9,
   sqlite: "452632f3abc893c9c92e537eca27e136f65fd5cfbd2c035cfd2580c6d7d53b20",
-  pg: "56d109ed82f5a7e8332942952a38c33e0820d44277ce22f30b1db81360f93d47",
+  pg: "c0a02c6c66cd0cc18d793d9cf66e8e477e72b4609074ee67d1921ddf14ad793e",
 };
 
 function shapeDigest(tables: readonly unknown[], dialect: "sqlite" | "pg") {

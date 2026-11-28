@@ -1039,6 +1039,13 @@ Scoped selector retries use host-validated committed public sources; manual call
 - This field does not apply to steering requests.
 - Duplicate records in existing development data are not merged automatically. The affected sessions must be created again.
 
+**`payload.branchFromNodeId`**
+
+`submit_actions` accepts an optional target branch node ID for checking out a historical turn node before running the submission. Until transactional branch checkout is wired, the server validates the node during admission and under the session lock, refusing the request on `error.occurred` without writing messages or state:
+
+- Node does not exist or belongs to another session: `code: "branch_node_not_found"`.
+- Node exists but historical branch execution is not yet available: `code: "branch_checkout_required"`.
+
 **The difference between a chat turn and a plugin call**
 
 - Natural language from the player goes through `submit_actions` (one `say` action) on `/api/actions`. It triggers the main flow that writes the story.

@@ -741,7 +741,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 校验规则：
 
-- 当前 `BrowserCheckpoint` 的 `schemaVersion` 是 `2`。其他版本直接拒绝。
+- 当前 `BrowserCheckpoint` 的 `schemaVersion` 是 `3`。其他版本直接拒绝。
 - 边界上校验必填的会话时钟（session clock）、规范的 `origin` / `commitStatus` 和快照 schema。
 - 所有外部记录用 Zod 校验结构。
 - 顶层和快照内的会话域记录必须属于 checkpoint 的 `sessionId`，`world.id` 必须等于 `session.worldId`。违反时返回 `400`。
@@ -5056,6 +5056,30 @@ runtime 导出的处理：
 - **要么全成，要么全不成**：分叉在父会话的执行锁内读取来源数据，在一个事务里写入。中途任何一步失败都会回滚，不会留下半成品的子会话。
 - **世界检查**：提交前检查关联的世界仍然存在而且没在删除。没有关联世界的会话照样可以分叉。
 
+### 回合分支
+
+会话内的回合分支树（`turn_nodes`）暴露以下四个端点，使用统一的会话访问守卫；所有变更端点在结算屏障和会话锁内重新校验会话所有者、化身和删除状态。
+
+#### `GET /api/sessions/:id/branches`
+
+返回会话的分支拓扑摘要（`SessionBranchSummary`）：`activeNodeId`、`branchEpoch` 和按 `(createdAt, id)` 排序的 `nodes[]`（每项包含 `id`、`parentNodeId`、`activeChildId`、`turnId`、`logicalTurn`、`seq`、`checkpointKind`、`createdAt`、`childCount`，以及可选的 `label` 和 `inputSummary`）。
+
+#### `POST /api/sessions/:id/branches/switch`
+
+请求体：`{ "nodeId": string, "discardUnsettled"?: boolean }`。校验请求体与目标节点归属后调用存储的事务性 checkout 能力，并返回更新后的 `SessionBranchSummary`。在底层存储尚未接入 `checkoutTurnNode` 时返回 `501 { "code": "branching_unavailable" }`。
+
+#### `PATCH /api/sessions/:id/branches/nodes/:nodeId`
+
+请求体：`{ "label": string | null }`（最多 256 字符；传 `null` 清除标签）。更新非根节点的标签并返回该节点的 `TurnNodeSummary`。根节点返回 `400 cannot_rename_root_node`，不存在或不属于当前会话返回 `404 not_found`。
+
+#### `DELETE /api/sessions/:id/branches/nodes/:nodeId`
+
+请求体可省略或为 `{ "discardUnsettled"?: boolean }`（非空但格式错误的 JSON 返回 `400 invalid_json_body`）。在单个事务内删除以 `nodeId` 为根的整个非活跃子树，并将父节点指向它的 `activeChildId` 切换到剩余兄弟节点中序号最小的一项（没有剩余时为 `null`），返回 `{ deletedNodeIds, activeNodeId, branchEpoch, switched }`。
+
+- 根节点返回 `400 cannot_delete_root_node`。
+- 不存在或不属于当前会话返回 `404 not_found`。
+- 目标子树包含当前 `activeNodeId` 时，在事务性 checkout 接入前返回 `409 branch_checkout_required`，不删除任何节点。
+
 ### 角色数据
 
 > [!NOTE]
@@ -5313,16 +5337,17 @@ provider 运行期间，流只报告 runtime/step/tool 进度。每次执行提�
 
 各 `type` 的 `payload`：
 
-| `payload` 字段    | 适用 `type`             | 必填 | 说明                                                 |
-| ----------------- | ----------------------- | ---- | ---------------------------------------------------- |
-| `actions`         | `submit_actions`        | 是   | 1–8 个行动，见 [`submit_actions`](#submit_actions)   |
-| `inputMessageId`  | `submit_actions`        | 否   | 浏览器先保存的玩家输入的 ID，见[协议](./protocol.md) |
-| `loreOverride`    | `start_session`         | 否   | 覆盖世界背景的文本，最多 500000 字符                 |
-| —                 | `retry_turn`            | —    | `payload` 为空对象                                   |
-| `runtimeId`       | `retry_runtime`         | 是   | 只重跑这一个 runtime                                 |
-| `retryFromTurnId` | `retry_runtime`         | 否   | 指明要修复的是哪个回合里的失败                       |
-| `runtimeIds`      | `retry_failed_runtimes` | 是   | 1–20 个不重复的、已启用的 runtime ID                 |
-| `retryFromTurnId` | `retry_failed_runtimes` | 是   | 这些 runtime 失败时所在的、已提交的原回合            |
+| `payload` 字段     | 适用 `type`             | 必填 | 说明                                                                                                                            |
+| ------------------ | ----------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `actions`          | `submit_actions`        | 是   | 1–8 个行动，见 [`submit_actions`](#submit_actions)                                                                              |
+| `inputMessageId`   | `submit_actions`        | 否   | 浏览器先保存的玩家输入的 ID，见[协议](./protocol.md)                                                                            |
+| `branchFromNodeId` | `submit_actions`        | 否   | 目标历史分支节点 ID；在事务性分支 checkout 上线前于准入与锁准备阶段以 `branch_node_not_found` / `branch_checkout_required` 拒绝 |
+| `loreOverride`     | `start_session`         | 否   | 覆盖世界背景的文本，最多 500000 字符                                                                                            |
+| —                  | `retry_turn`            | —    | `payload` 为空对象                                                                                                              |
+| `runtimeId`        | `retry_runtime`         | 是   | 只重跑这一个 runtime                                                                                                            |
+| `retryFromTurnId`  | `retry_runtime`         | 否   | 指明要修复的是哪个回合里的失败                                                                                                  |
+| `runtimeIds`       | `retry_failed_runtimes` | 是   | 1–20 个不重复的、已启用的 runtime ID                                                                                            |
+| `retryFromTurnId`  | `retry_failed_runtimes` | 是   | 这些 runtime 失败时所在的、已提交的原回合                                                                                       |
 
 > [!NOTE]
 > 玩家输入只走 `submit_actions`：发言是 `say`，斜杠命令是 `command`，回答交互是带 `interaction` 的行动。插件里要发事件，请用内置的 `emit-event` 工具。

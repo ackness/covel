@@ -101,6 +101,9 @@ export const session = sessionState.extend({
     .optional(),
   embeddingModelId: z.number().nullable().optional(),
   embeddingLockedAt: timestamp.nullable().optional(),
+  activeNodeId: nonEmptyString.nullable().optional(),
+  branchEpoch: z.number().int().nonnegative().optional(),
+  branchWriteWatermark: z.number().int().nonnegative().optional(),
 });
 
 const inputSource = z.object({
@@ -348,6 +351,7 @@ export const checkpointLifecycleArrays = {
       turnId: z.string(),
       kind: z.enum(["auto", "manual", "fork"]),
       parentId: z.string().optional(),
+      branchNodeId: nonEmptyString.optional(),
       payload: snapshotPayloadSchema,
     }),
   ),

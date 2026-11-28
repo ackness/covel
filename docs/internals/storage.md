@@ -68,12 +68,12 @@ SQLite 是默认。桌面客户端和自部署网页版都用它，普通玩家�
 
 **世界设定不做进程级缓存。** 世界设定和记忆块的 schema 每次都从当前操作的 DataStore 读取。已提交的修改、同 ID 的替换，在下一次读取时就能看到；互相独立的 store 不会意外共用世界记录。运行时设置则在每次操作开始时取一份，之后的修改不会影响正在进行的那次操作。
 
-**写入顺序。** 每个会话有一个写入计数器（`session_write_counters`）。每存一条回合消息、每次插入、修改或删除一条设定集条目、角色或插件数据，都从计数器取下一个号。号码在写入它的那条语句里取，计数器的这一行一直锁到事务结束，所以同一个会话的号码按保存顺序排列：看到号码 N 时，比 N 小的号码都已经看得到。这件事由数据库触发器完成（`packages/store/src/common/write-order-ddl.ts`），每条写入路径都算在内，内存后端用同样的规则。
+**写入顺序。** 每个会话有一个写入计数器（`session_write_counters`）。每存一条回合消息、展示消息（`messages`）、交互记录（`interaction_records`）或玩家表单输入（`player_inputs`），以及每次插入、修改或删除一条设定集条目、角色或插件数据，都从计数器取下一个号。号码在写入它的那条语句里取，计数器的这一行一直锁到事务结束，所以同一个会话的号码按保存顺序排列：看到号码 N 时，比 N 小的号码都已经看得到。这件事由数据库触发器完成（`packages/store/src/common/write-order-ddl.ts`），每条写入路径都算在内，内存后端用同样的规则。
 
-- 回合消息把号码存在 `write_seq`。增量读取（`listTurnMessagesAfter`、插件的 `readTurnMessages`）按它前进，而不是按 `createdAt`：后台执行在运行时就取了时间，可能在之后的回合保存完才保存，按时间的游标会永远跳过它。时间线本身仍按时间排序。
+- 回合消息把号码存在 `write_seq`。增量读取（`listTurnMessagesAfter`、插件的 `readTurnMessages`）按它前进，而不是按 `createdAt`：后台执行在运行时就取了时间，可能在之后的回合保存完才保存，按时间的游标会永远跳过它。时间线本身仍按时间排序。`messages`、`interaction_records` 和 `player_inputs` 也把号码记在各自的 `write_seq` 列里，供分支检查点按写入顺序对齐。
 - 设定集条目、角色和插件数据的最近一次变化存在 `record_changes`，每条记录一行，删除也留一行（墓碑）。`listRecordChanges` 按号码读出来；这张表随会话里出现过的记录增长，不随写入次数增长。
 - 删除会话时，删掉这些记录的触发器又会写入变化，所以注册表把 `record_changes` 和 `session_write_counters` 放在最后删。
-- 这一列和两张表从数据 schema 版本 5 开始有。版本 4 的 SQLite 或 PostgreSQL 数据库在启动时就被拒绝打开（`StoreSchemaVersionError`），旧库不会被改动；先备份，再换一个新的数据库，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。
+- 这一列和两张表从数据 schema 版本 5 开始有，版本 9 将 `write_seq` 扩展到了 `messages`、`interaction_records` 和 `player_inputs`。旧版本的 SQLite 或 PostgreSQL 数据库在启动时会被拒绝打开（`StoreSchemaVersionError`），旧库不会被改动；先备份，再换一个新的数据库，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。
 
 **归档向量的写入。** 归档索引不再每回合读取全部角色、设定集和插件数据。每次写入任务从上次的位置读变化，逐条读取变化指向的那条记录：记录还在就嵌入它，记录不在、被停用或没有文字就删掉它的向量。向量里已经是同样的文字时不再调用 embedding。
 
@@ -224,7 +224,7 @@ BrowserVault schema 6 在每个检查点旁边存一份很小的“会话头”�
 
 `BrowserCheckpoint` 包含恢复一个会话所需的每个领域：会话和世界记录、消息和执行日志、事件和 trace、角色、插件数据、角色 schema、自有的设定集条目、交互、挂起、快照，以及生命周期账本。
 
-只支持当前格式，信封是 schema v2。存储边界会拒绝：缺少会话时钟字段的、执行来源或状态不是规范值的、旧的快照载荷，以及 schema v1 的检查点。
+只支持当前格式，信封是 schema v3。存储边界会拒绝：缺少会话时钟字段的、执行来源或状态不是规范值的、旧的快照载荷、不合法的分支元数据，以及 schema v2 及更早版本的检查点。
 
 ## Browser Databases
 
@@ -481,7 +481,7 @@ Dexie BrowserVault 的 schema 归 `apps/web` 所有，不作为服务端 `DataSt
 - PostgreSQL 用每张表各自的序列分配消息、trace 和回合产物的位置，多个连接同时写也一样。
 - SQLite 在它串行化的写入边界内分配。
 - 回滚后序号有空洞是正常的。按顺序导入时，按导入列表的顺序分配新的位置。游标分页和完整列表用相同的位置。
-- 两个 SQL 后端的数据 schema 版本都是 8。启动时会检查它，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。版本 8 移除了三张内核状态表，schema 7 的 SQLite 和 PostgreSQL 开发数据库及其快照必须重建。浏览器存档的版本不变。
+- 两个 SQL 后端的数据 schema 版本都是 9。启动时会检查它，见[启动时检查数据 schema 版本](#capabilities-and-migrations)。版本 9 新增了 `turn_nodes` 表、会话的分支字段、快照的 `branch_node_id` 列以及追加表的 `write_seq` 列，浏览器检查点信封也升级到了版本 3；更早版本的 SQLite / PostgreSQL 开发数据库和浏览器检查点必须重建。
 
 **向量检索。** 先按会话、插件、命名空间过滤，再精确选出 top-K。内存、SQLite 和 PostgreSQL 都返回欧氏 L2 距离。PostgreSQL 会把过滤后的候选物化，而不是用全局的近似索引，因为后者在过滤之后可能漏掉命中。
 
@@ -573,7 +573,7 @@ MemoryStore、SQLite、PostgreSQL 和浏览器检查点都保持这些身份。�
 - 标为 `exported` 的表恰好对应检查点领域，包括记录数组、生命周期数组和单条记录。这里表示检查点有该领域，不保证复制全部行；例如工具调用和事件数组目前导出为空。
 - 会话字段的快照登记与 `SnapshotSessionState` 中的同名字段一致。类型检查还要求新增 `SessionRecord`、快照或检查点字段时补齐对应登记或测试映射。
 
-`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。座位等内核会话状态放在会话记录上。三张内核状态表已在数据 schema 8 中移除。需要重建 schema 7 的 SQLite 数据库（包括桌面数据库）和 PostgreSQL 开发数据库卷，其中的快照也随之删除。BrowserVault、检查点和快照载荷的版本保持不变。
+`plugin_data` 的行归 `plugin_id` 所有；`_` 命名空间和 `__kernel:` 所有者是内核分区。控制面命名空间不进入快照和分叉。座位与分支游标等内核会话状态放在会话记录上；`turn_nodes` 表不进入快照、检查点和分叉。数据 schema 9 与浏览器检查点 v3 的变更要求重建更早版本的 SQLite / PostgreSQL 开发数据库和浏览器检查点；BrowserVault 与快照载荷版本保持不变。
 
 分叉行为已登记，但 store 测试无法依赖 `apps/server`，因此不核对分叉实现。会话 `metadata` 的子键不在字段检查范围内；目前没有重置路径，操作记录表也尚未创建，本登记不为它们声明行为。
 

@@ -82,7 +82,7 @@ export function toSnapshotRecord(
     turnId: row.turnId,
     kind: requireSnapshotKind(row.kind),
     parentId: row.parentId ?? undefined,
-    branchNodeId: row.branchNodeId ?? undefined,
+    ...(row.branchNodeId != null ? { branchNodeId: row.branchNodeId } : {}),
     payload: requireSnapshotPayload(json.readRequired(row.payload)),
     createdAt: row.createdAt,
   };

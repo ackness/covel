@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { DataStore, RecordChange } from "../../types.js";
 import {
   makeCharacter,
+  makeInteractionRecord,
   makeLorebookEntry,
+  makeMessage,
+  makePlayerInput,
   makeSession,
   makeTurnMessage,
   ts,
@@ -144,6 +147,53 @@ export function registerWriteOrderStoreSuites(getStore: () => DataStore): void {
       await store.appendTurnMessage(makeTurnMessage({ sessionId }));
       const [message] = await store.listTurnMessagesAfter(sessionId, null, 10);
       expect(message?.writeSeq).toBe(1);
+    });
+
+    it("advances consistently across messages, interactions, player inputs and adoption", async () => {
+      const sessionId = "sess-write-append-parity";
+      await store.createSession(makeSession({ id: sessionId }));
+
+      const draft = makeMessage({
+        id: "msg-draft",
+        sessionId,
+        role: "user",
+        content: "hello",
+        metadata: undefined,
+      });
+      await store.addMessage(draft); // write_seq 1
+      await store.commitPlayerInputMessage({
+        ...draft,
+        metadata: { turnId: "turn-1" },
+      }); // adopts existing row — must NOT advance write_seq
+      await store.commitPlayerInputMessage(
+        makeMessage({
+          id: "msg-direct",
+          sessionId,
+          role: "user",
+          content: "direct",
+          metadata: { turnId: "turn-2" },
+        }),
+      ); // insert — write_seq 2
+      await store.saveInteractionRecord(makeInteractionRecord({ sessionId })); // write_seq 3
+      await store.savePlayerInput(makePlayerInput({ sessionId })); // write_seq 4
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.addMessage(makeMessage({ id: "msg-rolled", sessionId }));
+          await tx.saveInteractionRecord(makeInteractionRecord({ sessionId }));
+          await tx.savePlayerInput(makePlayerInput({ sessionId }));
+          throw new Error("rollback-append");
+        }),
+      ).rejects.toThrow("rollback-append");
+
+      await store.appendTurnMessage(
+        makeTurnMessage({ id: "tm-after", sessionId }),
+      );
+      const [turnMessage] = await store.listTurnMessagesAfter(
+        sessionId,
+        null,
+        10,
+      );
+      expect(turnMessage?.writeSeq).toBe(5);
     });
 
     it("never shows a number before a lower one that is still being saved", async () => {

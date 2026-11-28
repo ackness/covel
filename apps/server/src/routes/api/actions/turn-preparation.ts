@@ -15,7 +15,7 @@ import {
   type TurnControl,
 } from "@covel/runtime";
 import type { RuntimeManifest, TurnAction } from "@covel/shared";
-import type { SessionRecord } from "@covel/store";
+import type { DataStore, SessionRecord } from "@covel/store";
 import { syncSessionRuntimes } from "../execution-context.js";
 import { ActionRejectedError, entryRejection } from "./action-rejection.js";
 import {
@@ -35,6 +35,26 @@ import {
 import { prepareRuntimeRetry, type RuntimeRetryPlan } from "./runtime-retry.js";
 import { ActionValidationError } from "./submit-actions.js";
 import type { TurnPhase, TurnStopped } from "./turn-request.js";
+
+/** Reject `submit_actions.payload.branchFromNodeId` until branch checkout exists. */
+export async function assertBranchFromNodeSupported(
+  store: DataStore,
+  sessionId: string,
+  branchFromNodeId: string | undefined,
+): Promise<void> {
+  if (branchFromNodeId === undefined) return;
+  const node = await store.getTurnNode(branchFromNodeId);
+  if (!node || node.sessionId !== sessionId) {
+    throw new ActionRejectedError(
+      "The requested branch node was not found",
+      "branch_node_not_found",
+    );
+  }
+  throw new ActionRejectedError(
+    "Historical branch execution is not available yet",
+    "branch_checkout_required",
+  );
+}
 
 /** A turn admitted under the lock, not yet started. */
 export interface PreparedTurn {
@@ -74,17 +94,11 @@ export async function prepareLockedTurn(
   // compaction appended to a non-active session. The throw surfaces
   // as an `error.occurred` SSE event via the request's failure path.
   const liveSession = await host.readLiveSession();
-  if (type === "submit_actions" && payload.branchFromNodeId !== undefined) {
-    const node = await store.getTurnNode(payload.branchFromNodeId);
-    if (!node || node.sessionId !== sessionId) {
-      throw new ActionRejectedError(
-        "The requested branch node was not found",
-        "branch_node_not_found",
-      );
-    }
-    throw new ActionRejectedError(
-      "Historical branch execution is not available yet",
-      "branch_checkout_required",
+  if (!turnArgs.generated && type === "submit_actions") {
+    await assertBranchFromNodeSupported(
+      store,
+      sessionId,
+      payload.branchFromNodeId,
     );
   }
   if (turnArgs.generated) {

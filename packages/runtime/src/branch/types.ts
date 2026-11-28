@@ -1,3 +1,4 @@
+import type { TurnNodeCheckpointKind } from "@covel/shared/branch";
 import type {
   CharacterRecord,
   CharacterSchemaRecord,
@@ -13,9 +14,17 @@ import type {
   TurnMessageRecord,
 } from "@covel/store";
 
+export type { TurnNodeCheckpointKind };
+
 /** A keyed collection change captured between two branch checkpoints. */
 export interface BranchCollectionDelta<T> {
   readonly upserts: readonly T[];
+  /**
+   * Canonical deletion keys for the collection:
+   * - characters: `character.id`
+   * - pluginData: `branchPluginDataKey(pluginId, namespace, key)`
+   * - lorebookEntries: `branchLorebookEntryKey(owner, id)`
+   */
   readonly deletes: readonly string[];
 }
 
@@ -56,8 +65,6 @@ export interface BranchBasePayload {
   readonly interactionRecords: readonly InteractionRecordRow[];
 }
 
-export type TurnNodeCheckpointKind = "base" | "delta";
-
 /** Minimal persisted node shape needed to materialize a branch. */
 export interface BranchTurnNode {
   readonly id: string;
@@ -71,6 +78,8 @@ export interface BranchTurnNode {
   readonly baseNodeId: string;
   readonly depthFromBase: number;
   readonly statePayload: BranchBasePayload | TurnStateDelta;
+  /** Optional post-commit delta sealed onto this node before branching away. */
+  readonly tailDelta?: TurnStateDelta | null;
 }
 
 /** Fully materialized state at a node. */

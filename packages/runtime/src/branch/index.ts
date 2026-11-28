@@ -11,7 +11,9 @@ export {
   BranchNodeNotFoundError,
   activeBranchPath,
   activeLeafFromNode,
+  branchLorebookEntryKey,
   branchPathToNode,
+  branchPluginDataKey,
   lowestCommonAncestor,
   materializeBranchState,
 } from "./materialize.js";

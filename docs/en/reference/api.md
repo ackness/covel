@@ -741,7 +741,7 @@ To create a new local save, the client first creates the session on the server w
 
 Validation rules:
 
-- The `schemaVersion` of the current `BrowserCheckpoint` is `2`. Other versions are rejected outright.
+- The `schemaVersion` of the current `BrowserCheckpoint` is `3`. Other versions are rejected outright.
 - At the boundary, it checks the required session clock, the canonical `origin` / `commitStatus`, and the snapshot schema.
 - All external records have their structure checked with Zod.
 - Session-domain records at the top level and inside snapshots must belong to the checkpoint's `sessionId`, and `world.id` must equal `session.worldId`. A violation returns `400`.
@@ -5060,6 +5060,30 @@ Other rules:
 - **All or nothing**: A fork reads the source data while holding the parent session's execution lock, and it writes everything in one transaction. If any step fails partway through, everything is rolled back, and no half-built child session is left behind.
 - **World check**: Before the commit, the server checks that the linked world still exists and is not being deleted. A session with no linked world can still be forked.
 
+### Turn Branches
+
+The in-session turn tree (`turn_nodes`) exposes four routes protected by the standard session access guard. All mutating routes run under the settled session lock and revalidate session ownership, incarnation identity, and deletion status.
+
+#### `GET /api/sessions/:id/branches`
+
+Returns the session's branch topology summary (`SessionBranchSummary`): `activeNodeId`, `branchEpoch`, and `nodes[]` ordered by `(createdAt, id)`. Each node carries `id`, `parentNodeId`, `activeChildId`, `turnId`, `logicalTurn`, `seq`, `checkpointKind`, `createdAt`, `childCount`, plus optional `label` and `inputSummary`.
+
+#### `POST /api/sessions/:id/branches/switch`
+
+Request body: `{ "nodeId": string, "discardUnsettled"?: boolean }`. Validates the body and target node ownership, invokes the store's transactional checkout capability, and returns the updated `SessionBranchSummary`. Returns `501 { "code": "branching_unavailable" }` until `checkoutTurnNode` is wired on the store.
+
+#### `PATCH /api/sessions/:id/branches/nodes/:nodeId`
+
+Request body: `{ "label": string | null }` (up to 256 characters; `null` clears the label). Updates a non-root node's label and returns its `TurnNodeSummary`. Returns `400 cannot_rename_root_node` for the root node and `404 not_found` when the node does not exist or belongs to another session.
+
+#### `DELETE /api/sessions/:id/branches/nodes/:nodeId`
+
+Accepts an empty body or `{ "discardUnsettled"?: boolean }` (malformed non-empty JSON returns `400 invalid_json_body`). Deletes the entire inactive subtree rooted at `nodeId` inside one transaction, reassigns the parent's `activeChildId` to the lowest-`seq` surviving sibling (or `null` when none remain), and returns `{ deletedNodeIds, activeNodeId, branchEpoch, switched }`.
+
+- Root node returns `400 cannot_delete_root_node`.
+- Missing or cross-session node returns `404 not_found`.
+- A subtree containing the session's `activeNodeId` returns `409 branch_checkout_required` without deleting any nodes until transactional checkout is available.
+
 ### Character Data
 
 > [!NOTE]
@@ -5317,16 +5341,17 @@ Validation rules:
 
 `payload` for each `type`:
 
-| `payload` field   | Applies to `type`       | Required | Description                                                                           |
-| ----------------- | ----------------------- | -------- | ------------------------------------------------------------------------------------- |
-| `actions`         | `submit_actions`        | Yes      | 1 to 8 actions; see [`submit_actions`](#submit_actions)                               |
-| `inputMessageId`  | `submit_actions`        | No       | The ID of the player input the browser saved first; see the [protocol](./protocol.md) |
-| `loreOverride`    | `start_session`         | No       | Text that overrides the world background. Up to 500000 characters                     |
-| —                 | `retry_turn`            | —        | `payload` is an empty object                                                          |
-| `runtimeId`       | `retry_runtime`         | Yes      | Runs only this one runtime again                                                      |
-| `retryFromTurnId` | `retry_runtime`         | No       | Says which turn the failure to fix comes from                                         |
-| `runtimeIds`      | `retry_failed_runtimes` | Yes      | 1–20 unique, enabled runtime IDs                                                      |
-| `retryFromTurnId` | `retry_failed_runtimes` | Yes      | The committed original turn where these runtimes failed                               |
+| `payload` field    | Applies to `type`       | Required | Description                                                                                                                                                    |
+| ------------------ | ----------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actions`          | `submit_actions`        | Yes      | 1 to 8 actions; see [`submit_actions`](#submit_actions)                                                                                                        |
+| `inputMessageId`   | `submit_actions`        | No       | The ID of the player input the browser saved first; see the [protocol](./protocol.md)                                                                          |
+| `branchFromNodeId` | `submit_actions`        | No       | Target historical branch node ID; refused during admission and lock preparation with `branch_node_not_found` / `branch_checkout_required` until checkout lands |
+| `loreOverride`     | `start_session`         | No       | Text that overrides the world background. Up to 500000 characters                                                                                              |
+| —                  | `retry_turn`            | —        | `payload` is an empty object                                                                                                                                   |
+| `runtimeId`        | `retry_runtime`         | Yes      | Runs only this one runtime again                                                                                                                               |
+| `retryFromTurnId`  | `retry_runtime`         | No       | Says which turn the failure to fix comes from                                                                                                                  |
+| `runtimeIds`       | `retry_failed_runtimes` | Yes      | 1–20 unique, enabled runtime IDs                                                                                                                               |
+| `retryFromTurnId`  | `retry_failed_runtimes` | Yes      | The committed original turn where these runtimes failed                                                                                                        |
 
 > [!NOTE]
 > Player input goes only through `submit_actions`: speech is `say`, a slash command is `command`, and an answer to an interaction is an action that carries `interaction`. To send an event from a plugin, use the built-in `emit-event` tool.

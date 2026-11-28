@@ -781,12 +781,3 @@ export * from "./schemas/plugin-theme.js";
 export * from "./plugin-theme-css.js";
 export * from "./plugin-theme.js";
 export { diagnosticErrorKind } from "./utils/diagnostic-error.js";
-
-export {
-  branchDeleteRequestSchema,
-  branchLabelRequestSchema,
-  branchSwitchRequestSchema,
-  sessionBranchSummarySchema,
-  turnNodeInputSummarySchema,
-  turnNodeSummarySchema,
-} from "./schemas/branch.js";

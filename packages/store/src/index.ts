@@ -131,7 +131,8 @@ export type {
   SnapshotSessionState,
   SnapshotKind,
   RuntimeExportRecord,
-  TurnNodeRecord,
+  TurnNodeCheckpointKind,
   TurnNodeInputSummary,
-  TurnNodeSummary,
+  TurnNodeMetadata,
+  TurnNodeRecord,
 } from "./types.js";

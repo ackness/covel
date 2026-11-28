@@ -133,7 +133,9 @@ export const sessions = pgTable("sessions", {
     ]),
   activeNodeId: text("active_node_id"),
   branchEpoch: integer("branch_epoch").notNull().default(0),
-  branchWriteWatermark: integer("branch_write_watermark").notNull().default(0),
+  branchWriteWatermark: bigint("branch_write_watermark", { mode: "number" })
+    .notNull()
+    .default(0),
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -585,7 +587,9 @@ export const turnNodes = pgTable(
     playerInputsAdded: jsonb("player_inputs_added").notNull(),
     interactionRecordsAdded: jsonb("interaction_records_added").notNull(),
     mediaRefIds: jsonb("media_ref_ids").notNull(),
-    capturedThroughWriteSeq: bigint("captured_through_write_seq", { mode: "number" }).notNull(),
+    capturedThroughWriteSeq: bigint("captured_through_write_seq", {
+      mode: "number",
+    }).notNull(),
     createdAt: text("created_at").notNull(),
   },
   (table) => [

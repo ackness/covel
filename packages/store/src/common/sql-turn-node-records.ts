@@ -3,7 +3,11 @@ import type { Column, Table } from "drizzle-orm";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
-import type { TurnNodeRecord, DataStore } from "../types.js";
+import type {
+  DataStore,
+  TurnNodeCheckpointKind,
+  TurnNodeRecord,
+} from "../types.js";
 import { SessionRecordScopeConflictError } from "../errors.js";
 
 type TurnNodesTable = Table & {
@@ -40,11 +44,25 @@ interface TurnNodeRow {
 export interface SqlTurnNodeDeps {
   readonly runner: SqlRunner;
   readonly json: JsonReader;
-  readonly values: Pick<InsertValueBuilders, "turnNodeInsert" | "turnNodeUpdate">;
+  readonly values: Pick<
+    InsertValueBuilders,
+    "turnNodeInsert" | "turnNodeUpdate"
+  >;
   readonly table: TurnNodesTable;
 }
 
+export function requireTurnNodeCheckpointKind(
+  value: string,
+): TurnNodeCheckpointKind {
+  if (value !== "base" && value !== "delta") {
+    throw new Error(`Invalid turn node checkpointKind: ${value}`);
+  }
+  return value;
+}
+
 function toRecord(row: TurnNodeRow, json: JsonReader): TurnNodeRecord {
+  const inputSummary = json.read(row.inputSummary);
+  const tailDelta = json.read(row.tailDelta);
   return {
     id: row.id,
     sessionId: row.sessionId,
@@ -55,26 +73,26 @@ function toRecord(row: TurnNodeRow, json: JsonReader): TurnNodeRecord {
     logicalTurn: row.logicalTurn,
     seq: row.seq,
     ...(row.label !== null ? { label: row.label } : {}),
-    ...(json.read(row.inputSummary) !== undefined
-      ? {
-          inputSummary: json.read(
-            row.inputSummary,
-          ) as TurnNodeRecord["inputSummary"],
-        }
+    ...(inputSummary !== undefined
+      ? { inputSummary: inputSummary as TurnNodeRecord["inputSummary"] }
       : {}),
-    checkpointKind: row.checkpointKind as TurnNodeRecord["checkpointKind"],
+    checkpointKind: requireTurnNodeCheckpointKind(row.checkpointKind),
     baseNodeId: row.baseNodeId,
     depthFromBase: row.depthFromBase,
     statePayload: json.readRequired(row.statePayload),
-    ...(json.read(row.tailDelta) !== undefined
-      ? { tailDelta: json.read(row.tailDelta) }
-      : {}),
+    ...(tailDelta !== undefined ? { tailDelta } : {}),
     messagesAdded: json.readRequired(row.messagesAdded) as readonly unknown[],
-    turnMessagesAdded: json.readRequired(row.turnMessagesAdded) as readonly unknown[],
-    playerInputsAdded: json.readRequired(row.playerInputsAdded) as readonly unknown[],
-    interactionRecordsAdded: json.readRequired(row.interactionRecordsAdded) as readonly unknown[],
+    turnMessagesAdded: json.readRequired(
+      row.turnMessagesAdded,
+    ) as readonly unknown[],
+    playerInputsAdded: json.readRequired(
+      row.playerInputsAdded,
+    ) as readonly unknown[],
+    interactionRecordsAdded: json.readRequired(
+      row.interactionRecordsAdded,
+    ) as readonly unknown[],
     mediaRefIds: json.readRequired(row.mediaRefIds) as readonly string[],
-    capturedThroughWriteSeq: row.capturedThroughWriteSeq,
+    capturedThroughWriteSeq: Number(row.capturedThroughWriteSeq),
     createdAt: row.createdAt,
   };
 }
@@ -88,8 +106,10 @@ export function createSqlTurnNodeRecords(
   deps: SqlTurnNodeDeps,
 ): SqlTurnNodeRecords {
   const { runner, json, values, table } = deps;
+  const { byteOrder } = runner;
   return {
     async saveTurnNode(record) {
+      requireTurnNodeCheckpointKind(record.checkpointKind);
       await runner.insert(table, values.turnNodeInsert(record), {
         target: table.id,
         set: values.turnNodeUpdate(record),
@@ -109,7 +129,7 @@ export function createSqlTurnNodeRecords(
     async listTurnNodes(sessionId) {
       const rows = await runner.select<TurnNodeRow>(table, {
         where: eq(table.sessionId, sessionId),
-        orderBy: [asc(table.createdAt)],
+        orderBy: [asc(table.createdAt), asc(byteOrder(table.id))],
       });
       return rows.map((row) => toRecord(row, json));
     },

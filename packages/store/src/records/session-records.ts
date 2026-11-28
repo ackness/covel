@@ -48,28 +48,30 @@ export interface SessionRecord {
   readonly branchWriteWatermark?: number;
 }
 
+export type SessionUpdatePatch = Partial<
+  Pick<
+    SessionRecord,
+    | "status"
+    | "activePlugins"
+    | "locale"
+    | "updatedAt"
+    | "metadata"
+    | "embeddingModelId"
+    | "embeddingLockedAt"
+    | "runtimeModelOverrides"
+    | "phase"
+    | "completedPlayerTurns"
+    | "setupRuntimes"
+    | "seats"
+    | "activeNodeId"
+    | "branchEpoch"
+    | "branchWriteWatermark"
+  >
+>;
+
 export function mergeSessionPatch(
   existing: SessionRecord,
-  patch: Partial<
-    Pick<
-      SessionRecord,
-      | "status"
-      | "activePlugins"
-      | "locale"
-      | "updatedAt"
-      | "metadata"
-      | "embeddingModelId"
-      | "embeddingLockedAt"
-      | "runtimeModelOverrides"
-      | "phase"
-      | "completedPlayerTurns"
-      | "setupRuntimes"
-      | "seats"
-      | "activeNodeId"
-      | "branchEpoch"
-      | "branchWriteWatermark"
-    >
-  >,
+  patch: SessionUpdatePatch,
 ): SessionRecord {
   const metadata: Record<string, unknown> = {
     ...existing.metadata,
@@ -81,6 +83,13 @@ export function mergeSessionPatch(
   return {
     ...existing,
     ...patch,
+    activeNodeId:
+      "activeNodeId" in patch
+        ? (patch.activeNodeId ?? null)
+        : (existing.activeNodeId ?? null),
+    branchEpoch: patch.branchEpoch ?? existing.branchEpoch ?? 0,
+    branchWriteWatermark:
+      patch.branchWriteWatermark ?? existing.branchWriteWatermark ?? 0,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   };
 }

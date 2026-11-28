@@ -418,7 +418,9 @@ export {
   BranchNodeNotFoundError,
   activeBranchPath,
   activeLeafFromNode,
+  branchLorebookEntryKey,
   branchPathToNode,
+  branchPluginDataKey,
   lowestCommonAncestor,
   materializeBranchState,
 } from "./branch/index.js";

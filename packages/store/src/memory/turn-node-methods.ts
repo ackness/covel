@@ -1,25 +1,53 @@
-import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { sortByCursorAsc } from "../common/pagination.js";
+import { requireTurnNodeCheckpointKind } from "../common/sql-turn-node-records.js";
 import type { TurnNodeRecord } from "../types.js";
-import { SessionRecordScopeConflictError } from "../errors.js";
+import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { assertSessionRecordScope } from "./session-record-scope.js";
+
+/** Normalize optional/nullable fields so MemoryStore matches SQL round-trips. */
+function normalizeTurnNode(record: TurnNodeRecord): TurnNodeRecord {
+  requireTurnNodeCheckpointKind(record.checkpointKind);
+  const {
+    label,
+    inputSummary,
+    tailDelta,
+    parentNodeId,
+    activeChildId,
+    ...rest
+  } = record;
+  return {
+    ...rest,
+    parentNodeId: parentNodeId ?? null,
+    activeChildId: activeChildId ?? null,
+    ...(label != null ? { label } : {}),
+    ...(inputSummary != null ? { inputSummary } : {}),
+    ...(tailDelta != null ? { tailDelta } : {}),
+  };
+}
 
 export function createTurnNodeMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async saveTurnNode(record: TurnNodeRecord) {
-      const existing = state.turnNodes.get(record.id);
-      if (existing && existing.sessionId !== record.sessionId) {
-        throw new SessionRecordScopeConflictError("turn_node", record.id);
-      }
-      state.turnNodes.set(record.id, structuredClone(record));
+      assertSessionRecordScope(
+        "turn_node",
+        record,
+        state.turnNodes.get(record.id)?.sessionId,
+      );
+      state.turnNodes.set(
+        record.id,
+        structuredClone(normalizeTurnNode(record)),
+      );
     },
     async getTurnNode(id: string) {
       const record = state.turnNodes.get(id);
       return record ? structuredClone(record) : null;
     },
     async listTurnNodes(sessionId: string) {
-      return [...state.turnNodes.values()]
-        .filter((record) => record.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .map((record) => structuredClone(record));
+      return sortByCursorAsc(
+        [...state.turnNodes.values()].filter(
+          (record) => record.sessionId === sessionId,
+        ),
+      ).map((record) => structuredClone(record));
     },
     async deleteTurnNode(id: string) {
       state.turnNodes.delete(id);

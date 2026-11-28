@@ -1,14 +1,10 @@
 /** Persisted implicit turn-tree records used for in-session branching. */
+import type {
+  TurnNodeCheckpointKind,
+  TurnNodeInputSummary,
+} from "@covel/shared/branch";
 
-export type TurnNodeCheckpointKind = "base" | "delta";
-
-export interface TurnNodeInputSummary {
-  readonly kind: "editable-text" | "structured-actions";
-  readonly content: string;
-  readonly actions: readonly unknown[];
-  readonly hasUserBubble: boolean;
-  readonly replayable?: boolean;
-}
+export type { TurnNodeCheckpointKind, TurnNodeInputSummary };
 
 export interface TurnNodeRecord {
   readonly id: string;
@@ -35,9 +31,7 @@ export interface TurnNodeRecord {
   readonly createdAt: string;
 }
 
-export type TurnNodeInsert = TurnNodeRecord;
-
-export type TurnNodeSummary = Pick<
+export type TurnNodeMetadata = Pick<
   TurnNodeRecord,
   | "id"
   | "sessionId"

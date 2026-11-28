@@ -26,7 +26,10 @@ export type { ServerSettingRecord } from "./records/server-setting-records.js";
 export type { PluginGrantRecord } from "./records/plugin-grant-records.js";
 export type { InstanceDataRecord } from "./records/instance-data-records.js";
 
-export type { SessionRecord } from "./records/session-records.js";
+export type {
+  SessionRecord,
+  SessionUpdatePatch,
+} from "./records/session-records.js";
 export { mergeSessionPatch } from "./records/session-records.js";
 
 export type {
@@ -73,8 +76,8 @@ export type {
 export type {
   TurnNodeCheckpointKind,
   TurnNodeInputSummary,
+  TurnNodeMetadata,
   TurnNodeRecord,
-  TurnNodeSummary,
 } from "./records/branch-records.js";
 
 // Session-lifecycle records live in @covel/shared (the cross-layer contract);
@@ -101,7 +104,10 @@ import type { WorldRecord } from "./records/world-records.js";
 import type { ServerSettingRecord } from "./records/server-setting-records.js";
 import type { PluginGrantRecord } from "./records/plugin-grant-records.js";
 import type { InstanceDataRecord } from "./records/instance-data-records.js";
-import type { SessionRecord } from "./records/session-records.js";
+import type {
+  SessionRecord,
+  SessionUpdatePatch,
+} from "./records/session-records.js";
 import type {
   FailedRuntimeResult,
   TurnResultRecord,
@@ -172,26 +178,7 @@ export interface SessionStore {
    * updates of the same key still race (one wins), and a caller that reads
    * metadata to decide what to write needs the session lock.
    */
-  updateSession(
-    id: string,
-    patch: Partial<
-      Pick<
-        SessionRecord,
-        | "status"
-        | "activePlugins"
-        | "locale"
-        | "updatedAt"
-        | "metadata"
-        | "embeddingModelId"
-        | "embeddingLockedAt"
-        | "runtimeModelOverrides"
-        | "phase"
-        | "completedPlayerTurns"
-        | "setupRuntimes"
-        | "seats"
-      >
-    >,
-  ): Promise<void>;
+  updateSession(id: string, patch: SessionUpdatePatch): Promise<void>;
   listSessions(): Promise<SessionRecord[]>;
   deleteSession(id: string): Promise<void>;
 }

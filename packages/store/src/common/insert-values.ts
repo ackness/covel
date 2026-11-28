@@ -37,6 +37,7 @@ import type {
   ToolCallRecordRow,
   TraceEventRecord,
   TurnMessageRecord,
+  TurnNodeRecord,
   TurnResultRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
@@ -50,26 +51,8 @@ import { normalizeWorldRecord } from "../records/world-records.js";
  * The mutable subset of {@link SessionRecord} accepted by `updateSession`.
  * Mirrors `DataStore["updateSession"]`'s patch parameter.
  */
-export type SessionUpdatePatch = Partial<
-  Pick<
-    SessionRecord,
-    | "status"
-    | "activePlugins"
-    | "locale"
-    | "updatedAt"
-    | "metadata"
-    | "embeddingModelId"
-    | "embeddingLockedAt"
-    | "runtimeModelOverrides"
-    | "phase"
-    | "completedPlayerTurns"
-    | "setupRuntimes"
-    | "seats"
-    | "activeNodeId"
-    | "branchEpoch"
-    | "branchWriteWatermark"
-  >
->;
+export type { SessionUpdatePatch } from "../records/session-records.js";
+import type { SessionUpdatePatch } from "../records/session-records.js";
 
 /**
  * Per-backend JSON serialization gateway injected into the value builders.
@@ -125,8 +108,8 @@ export interface InsertValueBuilders {
   ): Record<string, unknown>;
   snapshotInsert(record: SnapshotRecord): Record<string, unknown>;
   snapshotUpdate(record: SnapshotRecord): Record<string, unknown>;
-  turnNodeInsert(record: import("../records/branch-records.js").TurnNodeRecord): Record<string, unknown>;
-  turnNodeUpdate(record: import("../records/branch-records.js").TurnNodeRecord): Record<string, unknown>;
+  turnNodeInsert(record: TurnNodeRecord): Record<string, unknown>;
+  turnNodeUpdate(record: TurnNodeRecord): Record<string, unknown>;
   suspensionInsert(record: SuspensionRecord): Record<string, unknown>;
   suspensionUpdate(record: SuspensionRecord): Record<string, unknown>;
   logicalTurnLedgerInsert(
@@ -540,10 +523,15 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
       if ("seats" in patch) {
         values.seats = json.writeJson(requireSeats(patch.seats));
       }
-      if ("activeNodeId" in patch) values.activeNodeId = patch.activeNodeId ?? null;
-      if ("branchEpoch" in patch) values.branchEpoch = patch.branchEpoch;
-      if ("branchWriteWatermark" in patch)
+      if ("activeNodeId" in patch) {
+        values.activeNodeId = patch.activeNodeId ?? null;
+      }
+      if (patch.branchEpoch !== undefined) {
+        values.branchEpoch = patch.branchEpoch;
+      }
+      if (patch.branchWriteWatermark !== undefined) {
         values.branchWriteWatermark = patch.branchWriteWatermark;
+      }
       return values;
     },
 
@@ -604,7 +592,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
       };
     },
     turnNodeUpdate(record) {
-      const values = {
+      return {
         parentNodeId: record.parentNodeId ?? null,
         activeChildId: record.activeChildId ?? null,
         turnId: record.turnId,
@@ -625,8 +613,7 @@ function buildInsertValues(json: JsonWriter): InsertValueBuilders {
         mediaRefIds: json.writeJson(record.mediaRefIds),
         capturedThroughWriteSeq: record.capturedThroughWriteSeq,
         createdAt: record.createdAt,
-      } as Record<string, unknown>;
-      return values;
+      };
     },
 
     suspensionInsert(record) {

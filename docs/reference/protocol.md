@@ -1040,6 +1040,13 @@ data: {
 - 这个字段不适用于 steering 请求。
 - 已有开发数据里的重复记录不会自动合并，需要重新创建受影响的会话。
 
+**`payload.branchFromNodeId`**
+
+`submit_actions` 可选传入目标分支节点 ID，用于在执行本次提交前切到对应的历史回合节点。在完整的事务性分支 checkout 上线前，服务端在请求准入和会话锁准备阶段校验该节点，通过 `error.occurred` 拒绝且不写入任何消息或状态：
+
+- 节点不存在或不属于当前会话：`code: "branch_node_not_found"`。
+- 节点存在但历史分支执行尚未接入：`code: "branch_checkout_required"`。
+
 **聊天回合和插件调用的区别**
 
 - 玩家发送的自然语言走 `/api/actions` 的 `submit_actions`（一个 `say` 行动），触发写故事的主流程。

@@ -6,10 +6,12 @@
  * Every write takes the next number of its session from
  * `session_write_counters`:
  *
- *  - a turn message stores it in `write_seq`, the cursor of incremental readers
- *    (`listTurnMessagesAfter`). `created_at` is taken while an execution runs,
- *    and a background execution can be saved after a later turn, so a cursor on
- *    `created_at` would step over it for good;
+ *  - `turn_messages`, `messages`, `interaction_records` and `player_inputs`
+ *    store it in `write_seq`, providing a commit-ordered cursor for incremental
+ *    readers (`listTurnMessagesAfter`) and branch checkpoints. `created_at` is
+ *    taken while an execution runs, and a background execution can be saved
+ *    after a later turn, so a cursor on `created_at` would step over it for
+ *    good;
  *  - an insert, update or delete of a lorebook entry, character or plugin data
  *    row stores it in that record's `record_changes` row, which also keeps the
  *    deletions (`listRecordChanges`).
@@ -172,6 +174,18 @@ export function pgWriteOrderTriggersSql(): string {
   END;
   $fn$;
 
+  CREATE OR REPLACE FUNCTION messages_write_seq() RETURNS trigger
+    LANGUAGE plpgsql AS $fn$
+  BEGIN
+    -- AFTER INSERT so commitPlayerInputMessage's ON CONFLICT DO NOTHING
+    -- adoption path does not advance session_write_counters.
+    UPDATE messages
+      SET write_seq = covel_next_session_write(NEW.session_id)
+      WHERE id = NEW.id;
+    RETURN NULL;
+  END;
+  $fn$;
+
   DO $trg$
   BEGIN
     IF NOT EXISTS (
@@ -186,8 +200,24 @@ export function pgWriteOrderTriggersSql(): string {
         EXECUTE FUNCTION turn_messages_write_seq();
     END IF;
   END;
+  $trg$;
+
+  DO $trg$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'messages_write_seq'
+        AND tgrelid = 'messages'::regclass
+        AND NOT tgisinternal
+    ) THEN
+      CREATE TRIGGER messages_write_seq
+        AFTER INSERT ON messages
+        FOR EACH ROW
+        EXECUTE FUNCTION messages_write_seq();
+    END IF;
+  END;
   $trg$;`;
-  const appendOnly = ["messages", "interaction_records", "player_inputs"].map(
+  const appendOnly = ["interaction_records", "player_inputs"].map(
     (table) => `
   DO $trg$
   BEGIN

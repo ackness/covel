@@ -53,6 +53,7 @@ import {
   runActionRequest,
 } from "./actions/run-request.js";
 import { ActionValidationError } from "./actions/submit-actions.js";
+import { assertBranchFromNodeSupported } from "./actions/turn-preparation.js";
 import {
   createTurnHost,
   type ActionTurnRequest,
@@ -186,6 +187,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // request's advancement. Revalidate under the lock before any writes.
   if (type === "submit_actions" && admissionContext && admissionActions) {
     try {
+      await assertBranchFromNodeSupported(
+        store,
+        sessionId,
+        payload.branchFromNodeId,
+      );
       await assertRecoverableTurn(store, sessionId, payload.recoverFromTurnId, {
         type,
         payload,
@@ -235,7 +241,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // No-op when the store has no vector capability or no embed slot is
   // configured. See apps/server/src/embedding-lock.ts for rationale.
   const ensureEmbeddingLock = c.get("ensureEmbeddingLock");
-  if (ensureEmbeddingLock) {
+  if (!admissionRejection && ensureEmbeddingLock) {
     try {
       await ensureEmbeddingLock(sessionId);
     } catch (err) {
