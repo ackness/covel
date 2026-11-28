@@ -55,6 +55,10 @@
     "./platform": {
       "types": "./src/platform/index.ts",
       "import": "./src/platform/index.ts"
+    },
+    "./branch": {
+      "types": "./src/branch/index.ts",
+      "import": "./src/branch/index.ts"
     }
   },
   "scripts": {

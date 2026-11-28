@@ -19,6 +19,7 @@ import type {
   TraceEventRecord,
   TurnMessageRecord,
   TurnResultRecord,
+  TurnNodeRecord,
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
@@ -55,6 +56,9 @@ export function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
     ],
     locale: "zh-CN",
     activePlugins: [],
+    activeNodeId: null,
+    branchEpoch: 0,
+    branchWriteWatermark: 0,
     createdAt: ts(),
     updatedAt: ts(),
     ...overrides,
@@ -72,6 +76,33 @@ export function makeTurnResult(
     origin: "player",
     commitStatus: "pending",
     durationMs: 100,
+    createdAt: ts(),
+    ...overrides,
+  };
+}
+
+export function makeTurnNode(
+  overrides?: Partial<TurnNodeRecord>,
+): TurnNodeRecord {
+  return {
+    id: id(),
+    sessionId: "sess-1",
+    parentNodeId: null,
+    activeChildId: null,
+    turnId: "turn-1",
+    turnIds: ["turn-1"],
+    logicalTurn: 0,
+    seq: 0,
+    checkpointKind: "base",
+    baseNodeId: "node-1",
+    depthFromBase: 0,
+    statePayload: {},
+    messagesAdded: [],
+    turnMessagesAdded: [],
+    playerInputsAdded: [],
+    interactionRecordsAdded: [],
+    mediaRefIds: [],
+    capturedThroughWriteSeq: 0,
     createdAt: ts(),
     ...overrides,
   };

@@ -39,6 +39,8 @@ export type ActionRequest = {
       readonly payload: {
         readonly actions: readonly TurnActionRequest[];
         readonly inputMessageId?: string;
+        /** Historical node to materialize before executing this submission. */
+        readonly branchFromNodeId?: string;
       };
     })
   | (ActionRequestBase & {

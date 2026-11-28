@@ -488,6 +488,9 @@ sessionRoutes.post("/", async (c) => {
     completedPlayerTurns: 0,
     setupRuntimes: {},
     seats: defaultSessionSeats(parsedCreate.seatRole),
+    activeNodeId: null,
+    branchEpoch: 0,
+    branchWriteWatermark: 0,
     // Persist selection; execution and lifecycle hooks use only live grants.
     activePlugins: plugins,
     createdAt: now,

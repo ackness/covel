@@ -26,6 +26,7 @@ import {
   makeToolCall,
   makeTraceEvent,
   makeTurnMessage,
+  makeTurnNode,
   makeTurnResult,
   makeWorldDataImportLedger,
   ts,
@@ -178,6 +179,11 @@ const CASCADE_PROBES: Readonly<Record<SessionScopedMemoryKey, CascadeProbe>> = {
     seed: (store, sessionId) => store.saveSnapshot(makeSnapshot({ sessionId })),
     count: async (store, sessionId) =>
       (await store.listSnapshots(sessionId)).length,
+  },
+  turnNodes: {
+    seed: (store, sessionId) => store.saveTurnNode(makeTurnNode({ sessionId })),
+    count: async (store, sessionId) =>
+      (await store.listTurnNodes(sessionId)).length,
   },
   logicalTurnLedger: {
     seed: async (store, sessionId) => {

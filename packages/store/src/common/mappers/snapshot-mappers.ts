@@ -18,6 +18,7 @@ export interface SnapshotRow {
   turnId: string;
   kind: string;
   parentId: string | null;
+  branchNodeId: string | null;
   payload: unknown;
   createdAt: string;
 }
@@ -81,6 +82,7 @@ export function toSnapshotRecord(
     turnId: row.turnId,
     kind: requireSnapshotKind(row.kind),
     parentId: row.parentId ?? undefined,
+    ...(row.branchNodeId != null ? { branchNodeId: row.branchNodeId } : {}),
     payload: requireSnapshotPayload(json.readRequired(row.payload)),
     createdAt: row.createdAt,
   };

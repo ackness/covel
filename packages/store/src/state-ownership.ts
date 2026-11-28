@@ -212,6 +212,14 @@ export const KERNEL_TABLE_OWNERSHIP: Readonly<
     fork: "rebuilt",
     note: "Fork creates a provenance snapshot, not a copy of snapshot history.",
   },
+  turn_nodes: {
+    owner: "kernel",
+    scope: "session",
+    snapshot: "excluded",
+    checkpoint: "excluded",
+    fork: "excluded",
+    note: "Implicit turn tree checkpoints are managed by the branch subsystem.",
+  },
   suspensions: {
     owner: "kernel",
     scope: "session",
@@ -304,4 +312,7 @@ export const SESSION_FIELD_OWNERSHIP: Readonly<
   completedPlayerTurns: { owner: "kernel", snapshot: "captured" },
   setupRuntimes: { owner: "kernel", snapshot: "captured" },
   seats: { owner: "kernel", snapshot: "captured" },
+  activeNodeId: { owner: "kernel", snapshot: "excluded" },
+  branchEpoch: { owner: "kernel", snapshot: "excluded" },
+  branchWriteWatermark: { owner: "kernel", snapshot: "excluded" },
 };

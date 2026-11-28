@@ -80,7 +80,7 @@ const domainRecords = {
 };
 const checkpoint: BrowserCheckpoint = JSON.parse(
   JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     sessionId,
     profile: "browser-private",
     session: makeSession({ id: sessionId }),
@@ -817,5 +817,53 @@ describe("orchestration checkpoint boundaries", () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it("refuses schemaVersion 2 and validates schema v3 session and snapshot branch fields", () => {
+    expect(() =>
+      validateBrowserCheckpoint({ ...checkpoint, schemaVersion: 2 }),
+    ).toThrow(BrowserSyncValidationError);
+
+    const valid = validateBrowserCheckpoint({
+      ...checkpoint,
+      session: {
+        ...checkpoint.session,
+        activeNodeId: "node-1",
+        branchEpoch: 2,
+        branchWriteWatermark: 14,
+      },
+      snapshots: [{ ...checkpoint.snapshots[0]!, branchNodeId: "node-1" }],
+    });
+    expect(valid.session.activeNodeId).toBe("node-1");
+    expect(valid.session.branchEpoch).toBe(2);
+    expect(valid.session.branchWriteWatermark).toBe(14);
+    expect(valid.snapshots[0]?.branchNodeId).toBe("node-1");
+
+    for (const invalidSession of [
+      { ...checkpoint.session, activeNodeId: "" },
+      { ...checkpoint.session, activeNodeId: 42 },
+      { ...checkpoint.session, branchEpoch: -1 },
+      { ...checkpoint.session, branchEpoch: 1.5 },
+      { ...checkpoint.session, branchWriteWatermark: -1 },
+      { ...checkpoint.session, branchWriteWatermark: "5" },
+    ]) {
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          session: invalidSession,
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    }
+
+    for (const invalidBranchNodeId of ["", 123, null]) {
+      expect(() =>
+        validateBrowserCheckpoint({
+          ...checkpoint,
+          snapshots: [
+            { ...checkpoint.snapshots[0]!, branchNodeId: invalidBranchNodeId },
+          ],
+        }),
+      ).toThrow(BrowserSyncValidationError);
+    }
   });
 });

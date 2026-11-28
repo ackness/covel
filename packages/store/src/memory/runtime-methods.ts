@@ -165,6 +165,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async saveInteractionRecord(record) {
       appendUniqueRow(state.interactionRecords, record, "Interaction record");
+      nextSessionWrite(state, record.sessionId);
     },
 
     async listInteractionRecords(sessionId, filters) {
@@ -229,6 +230,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       }
       state.messagePositions.set(record.id, state.messages.length);
       state.messages.push(record);
+      nextSessionWrite(state, record.sessionId);
     },
 
     async commitPlayerInputMessage(record) {
@@ -237,6 +239,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       if (index === undefined) {
         state.messagePositions.set(record.id, state.messages.length);
         state.messages.push(record);
+        nextSessionWrite(state, record.sessionId);
       } else {
         // Replace instead of mutating: transaction snapshots share row objects.
         state.messages[index] = adoptPlayerInputMessage(
@@ -434,6 +437,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async savePlayerInput(record) {
       appendUniqueRow(state.playerInputs, record, "Player input");
+      nextSessionWrite(state, record.sessionId);
     },
 
     async getLatestPlayerInput(sessionId) {

@@ -127,7 +127,14 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         record,
         state.snapshots.get(record.id)?.sessionId,
       );
-      state.snapshots.set(record.id, structuredClone(record));
+      const { branchNodeId, ...rest } = record;
+      state.snapshots.set(
+        record.id,
+        structuredClone({
+          ...rest,
+          ...(branchNodeId != null ? { branchNodeId } : {}),
+        }),
+      );
     },
 
     async getSnapshot(id) {
@@ -155,6 +162,7 @@ export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
         turnId: r.turnId,
         kind: r.kind,
         ...(r.parentId != null ? { parentId: r.parentId } : {}),
+        ...(r.branchNodeId != null ? { branchNodeId: r.branchNodeId } : {}),
         createdAt: r.createdAt,
         size: JSON.stringify(r.payload).length,
       }));

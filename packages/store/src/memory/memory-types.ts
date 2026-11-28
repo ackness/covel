@@ -16,6 +16,7 @@ import type {
   SessionSummaryRecord,
   SetupAttemptRecord,
   SnapshotRecord,
+  TurnNodeRecord,
   SuspensionRecord,
   ToolCallRecordRow,
   TraceEventRecord,
@@ -69,6 +70,7 @@ export interface MemoryState {
   readonly pluginData: Map<string, PluginDataRecord>;
   readonly suspensions: Map<string, SuspensionRecord>;
   readonly snapshots: Map<string, SnapshotRecord>;
+  readonly turnNodes: Map<string, TurnNodeRecord>;
   readonly vectorIndexProgress: Map<
     string,
     { sessionId: string; value: string }

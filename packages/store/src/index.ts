@@ -102,6 +102,7 @@ export type {
   EventRecord,
   MessageRecord,
   CharacterRecord,
+  CharacterSchemaRecord,
   PluginDataRecord,
   PluginDataBatchCasEntry,
   TraceEventRecord,
@@ -129,4 +130,9 @@ export type {
   SnapshotPayload,
   SnapshotSessionState,
   SnapshotKind,
+  RuntimeExportRecord,
+  TurnNodeCheckpointKind,
+  TurnNodeInputSummary,
+  TurnNodeMetadata,
+  TurnNodeRecord,
 } from "./types.js";

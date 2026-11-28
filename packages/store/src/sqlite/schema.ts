@@ -100,6 +100,9 @@ export const sessions = sqliteTable("sessions", {
     .default(
       '[{"id":"main","controller":"human","role":"player","characters":"auto"}]',
     ), // JSON Seat[]
+  activeNodeId: text("active_node_id"),
+  branchEpoch: integer("branch_epoch").notNull().default(0),
+  branchWriteWatermark: integer("branch_write_watermark").notNull().default(0),
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -186,6 +189,7 @@ export const messages = sqliteTable(
     content: text("content").notNull(),
     metadata: text("metadata"), // JSON
     createdAt: text("created_at").notNull(),
+    writeSeq: integer("write_seq").notNull().default(0),
     // The row's place among the session's rows of one `created_at`, numbered
     // by the store on insert: the messages of one commit list as written.
     seq: integer("seq").notNull(),
@@ -200,6 +204,7 @@ export const messages = sqliteTable(
       table.createdAt,
       table.seq,
     ),
+    index("messages_write_seq_idx").on(table.sessionId, table.writeSeq),
   ],
 );
 
@@ -367,6 +372,7 @@ export const interactionRecords = sqliteTable(
     payload: text("payload").notNull(), // JSON string
     metaData: text("meta_data"), // JSON string | null
     createdAt: text("created_at").notNull(),
+    writeSeq: integer("write_seq").notNull().default(0),
   },
   (table) => [
     index("interaction_records_session_time_idx").on(
@@ -374,6 +380,7 @@ export const interactionRecords = sqliteTable(
       table.timestamp,
     ),
     index("interaction_records_type_idx").on(table.sessionId, table.type),
+    index("interaction_records_write_seq_idx").on(table.sessionId, table.writeSeq),
   ],
 );
 
@@ -456,8 +463,12 @@ export const playerInputs = sqliteTable(
     formId: text("form_id").notNull(),
     values: text("values").notNull(), // JSON
     createdAt: text("created_at").notNull(),
+    writeSeq: integer("write_seq").notNull().default(0),
   },
-  (table) => [index("player_inputs_session_id_idx").on(table.sessionId)],
+  (table) => [
+    index("player_inputs_session_id_idx").on(table.sessionId),
+    index("player_inputs_write_seq_idx").on(table.sessionId, table.writeSeq),
+  ],
 );
 
 // ── Working Memory ────────────────────────────────────
@@ -537,6 +548,7 @@ export const stateSnapshots = sqliteTable(
     turnId: text("turn_id").notNull(),
     kind: text("kind").notNull(), // 'auto' | 'manual' | 'fork'
     parentId: text("parent_id"), // null except for kind='fork'
+    branchNodeId: text("branch_node_id"),
     payload: text("payload").notNull(), // JSON — SnapshotPayload
     createdAt: text("created_at").notNull(),
   },
@@ -552,6 +564,43 @@ export const stateSnapshots = sqliteTable(
     index("state_snapshots_parent_id_idx")
       .on(table.parentId)
       .where(isNotNull(table.parentId)),
+  ],
+);
+
+export const turnNodes = sqliteTable(
+  "turn_nodes",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull(),
+    parentNodeId: text("parent_node_id"),
+    activeChildId: text("active_child_id"),
+    turnId: text("turn_id").notNull(),
+    turnIds: text("turn_ids").notNull(),
+    logicalTurn: integer("logical_turn").notNull(),
+    seq: integer("seq").notNull(),
+    label: text("label"),
+    inputSummary: text("input_summary"),
+    checkpointKind: text("checkpoint_kind").notNull(),
+    baseNodeId: text("base_node_id").notNull(),
+    depthFromBase: integer("depth_from_base").notNull(),
+    statePayload: text("state_payload").notNull(),
+    tailDelta: text("tail_delta"),
+    messagesAdded: text("messages_added").notNull(),
+    turnMessagesAdded: text("turn_messages_added").notNull(),
+    playerInputsAdded: text("player_inputs_added").notNull(),
+    interactionRecordsAdded: text("interaction_records_added").notNull(),
+    mediaRefIds: text("media_ref_ids").notNull(),
+    capturedThroughWriteSeq: integer("captured_through_write_seq").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("turn_nodes_session_id_idx").on(table.sessionId),
+    index("turn_nodes_parent_seq_idx").on(
+      table.sessionId,
+      table.parentNodeId,
+      table.seq,
+    ),
+    index("turn_nodes_turn_id_idx").on(table.sessionId, table.turnId),
   ],
 );
 

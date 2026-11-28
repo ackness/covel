@@ -12,6 +12,7 @@ import {
   makeSnapshot,
   makeSnapshotPayload,
   makeSuspension,
+  makeTurnNode,
   ts,
 } from "../test-fixtures.js";
 
@@ -929,6 +930,157 @@ export function registerPersistenceStoreSuites(
           "claimed:x",
         ),
       ).toBe(false);
+    });
+  });
+
+  describe("TurnNodes", () => {
+    it("round-trips turn nodes, normalizes cleared labels, sorts by (createdAt, id), and rolls back", async () => {
+      const sessionId = "sess-turn-nodes";
+      await store.createSession(makeSession({ id: sessionId }));
+
+      const sameTime = "2026-01-01T00:00:01.000Z";
+      const nodeB = makeTurnNode({
+        id: "node-b",
+        sessionId,
+        parentNodeId: "node-a",
+        turnId: "turn-2",
+        turnIds: ["turn-2"],
+        logicalTurn: 1,
+        seq: 0,
+        label: "Branch B",
+        inputSummary: {
+          kind: "editable-text",
+          content: "Take the left door",
+          actions: [],
+          hasUserBubble: true,
+        },
+        checkpointKind: "delta",
+        baseNodeId: "node-a",
+        depthFromBase: 1,
+        statePayload: { session: { completedPlayerTurns: 1 } },
+        tailDelta: { messagesAdded: [] },
+        capturedThroughWriteSeq: 42,
+        createdAt: sameTime,
+      });
+      const nodeA = makeTurnNode({
+        id: "node-a",
+        sessionId,
+        parentNodeId: null,
+        activeChildId: "node-b",
+        turnId: "turn-1",
+        turnIds: ["turn-1"],
+        logicalTurn: 0,
+        seq: 0,
+        checkpointKind: "base",
+        baseNodeId: "node-a",
+        depthFromBase: 0,
+        capturedThroughWriteSeq: 10,
+        createdAt: sameTime,
+      });
+      const otherSessionNode = makeTurnNode({
+        id: "node-other",
+        sessionId: "sess-turn-nodes-other",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      });
+
+      await store.saveTurnNode(nodeB);
+      await store.saveTurnNode(nodeA);
+      await store.saveTurnNode(otherSessionNode);
+
+      const loadedB = await store.getTurnNode(nodeB.id);
+      expect(loadedB).toEqual(nodeB);
+      expect(await store.getTurnNode("missing-turn-node")).toBeNull();
+
+      // Deterministic (createdAt, id) order across Memory, SQLite, and PG.
+      const listed = await store.listTurnNodes(sessionId);
+      expect(listed.map((n) => n.id)).toEqual(["node-a", "node-b"]);
+
+      // Clearing label to null must round-trip without a null key on every backend.
+      await store.saveTurnNode({ ...nodeB, label: null });
+      const cleared = await store.getTurnNode(nodeB.id);
+      expect(cleared?.label).toBeUndefined();
+      expect("label" in (cleared ?? {})).toBe(false);
+
+      // Transaction rollback restores both saveTurnNode and deleteTurnNode.
+      await expect(
+        store.withTransaction(async (tx) => {
+          await tx.saveTurnNode({ ...nodeB, label: "rolled-back" });
+          await tx.deleteTurnNode(nodeA.id);
+          throw new Error("rollback-turn-nodes");
+        }),
+      ).rejects.toThrow("rollback-turn-nodes");
+      expect((await store.listTurnNodes(sessionId)).map((n) => n.id)).toEqual([
+        "node-a",
+        "node-b",
+      ]);
+      expect((await store.getTurnNode(nodeB.id))?.label).toBeUndefined();
+
+      await store.deleteTurnNode(nodeB.id);
+      expect(await store.getTurnNode(nodeB.id)).toBeNull();
+      expect((await store.listTurnNodes(sessionId)).map((n) => n.id)).toEqual([
+        "node-a",
+      ]);
+    });
+
+    it("preserves snapshot branchNodeId across getSnapshot, listSnapshots, and listSnapshotsPage", async () => {
+      const sessionId = "sess-snap-branch-node";
+      await store.createSession(makeSession({ id: sessionId }));
+      const linked = makeSnapshot({
+        id: "snap-branch-1",
+        sessionId,
+        branchNodeId: "node-1",
+        createdAt: ts(1000),
+      });
+      const unlinked = makeSnapshot({
+        id: "snap-branch-2",
+        sessionId,
+        createdAt: ts(2000),
+      });
+      await store.saveSnapshot(linked);
+      await store.saveSnapshot(unlinked);
+
+      expect((await store.getSnapshot(linked.id))?.branchNodeId).toBe("node-1");
+      expect(
+        (await store.getSnapshot(unlinked.id))?.branchNodeId,
+      ).toBeUndefined();
+
+      const page = await store.listSnapshotsPage(sessionId, { limit: 10 });
+      expect(page.map((row) => [row.id, row.branchNodeId])).toEqual([
+        ["snap-branch-1", "node-1"],
+        ["snap-branch-2", undefined],
+      ]);
+    });
+
+    it("persists and updates session branch metadata identically across backends", async () => {
+      const sessionId = "sess-branch-meta";
+      await store.createSession(makeSession({ id: sessionId }));
+      const initial = await store.getSession(sessionId);
+      expect(initial).toMatchObject({
+        activeNodeId: null,
+        branchEpoch: 0,
+        branchWriteWatermark: 0,
+      });
+
+      await store.updateSession(sessionId, {
+        activeNodeId: "node-leaf",
+        branchEpoch: 3,
+        branchWriteWatermark: 99,
+      });
+      expect(await store.getSession(sessionId)).toMatchObject({
+        activeNodeId: "node-leaf",
+        branchEpoch: 3,
+        branchWriteWatermark: 99,
+      });
+
+      await store.updateSession(sessionId, {
+        activeNodeId: null,
+        branchEpoch: undefined,
+      });
+      expect(await store.getSession(sessionId)).toMatchObject({
+        activeNodeId: null,
+        branchEpoch: 3,
+        branchWriteWatermark: 99,
+      });
     });
   });
 }

@@ -94,6 +94,11 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
             128,
             ACTION_ID_PATTERN,
           ).optional(),
+          branchFromNodeId: requiredActionString(
+            "branchFromNodeId",
+            128,
+            ACTION_ID_PATTERN,
+          ).optional(),
           ...actionRecoveryPayload,
         })
         .strict(),

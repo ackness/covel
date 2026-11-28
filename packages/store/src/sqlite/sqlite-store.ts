@@ -43,6 +43,7 @@ import { createSqliteWorlds } from "./sqlite-worlds.js";
 import { createSqliteServerSettings } from "./sqlite-server-settings.js";
 import { createSqlitePluginGrants } from "./sqlite-plugin-grants.js";
 import { createSqliteInstanceData } from "./sqlite-instance-data.js";
+import { createSqliteTurnNodeRecords } from "./sqlite-turn-node-records.js";
 
 // ── Factory ─────────────────────────────────────────────────────
 
@@ -95,6 +96,7 @@ export function createSqliteStore(
     ...createSqlitePluginGrants(db),
     ...createSqliteInstanceData(db),
     ...createSqliteSnapshotRecords(db),
+    ...createSqliteTurnNodeRecords(db),
     ...createSqliteLifecycleRecords(db),
     ...createSqliteExportRecords(db),
   };

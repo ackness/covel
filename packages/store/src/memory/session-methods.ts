@@ -18,7 +18,12 @@ export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
         throw new SessionAlreadyExistsError(session.id);
       }
       requireSeats(session.seats);
-      state.sessions.set(session.id, session);
+      state.sessions.set(session.id, {
+        ...session,
+        activeNodeId: session.activeNodeId ?? null,
+        branchEpoch: session.branchEpoch ?? 0,
+        branchWriteWatermark: session.branchWriteWatermark ?? 0,
+      });
     },
 
     async getSession(id) {

@@ -133,6 +133,8 @@ export interface SnapshotRecord {
   readonly turnId: string;
   readonly kind: SnapshotKind;
   readonly parentId?: string;
+  /** Turn-tree node active when the snapshot was captured. */
+  readonly branchNodeId?: string;
   readonly payload: SnapshotPayload;
   readonly createdAt: string;
 }
@@ -151,6 +153,7 @@ export interface SnapshotMetadata {
   readonly turnId: string;
   readonly kind: SnapshotKind;
   readonly parentId?: string;
+  readonly branchNodeId?: string;
   readonly createdAt: string;
   readonly size: number;
 }
