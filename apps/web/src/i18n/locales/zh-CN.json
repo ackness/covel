@@ -361,6 +361,8 @@
     "recoveryRefresh": "检查状态",
     "recoveryStop": "停止任务",
     "recoveryStopFailed": "未能停止任务，请检查状态后再试。",
+    "restoreFailedTitle": "无法打开此存档",
+    "backToWorlds": "返回世界列表",
     "setupFailedTitle": "开局准备没有完成",
     "setupFailedDetail": "某个准备步骤失败了，重试可继续未完成的步骤。",
     "setupRetry": "重试开局准备",

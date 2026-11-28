@@ -5,7 +5,13 @@ import {
   useLocation,
   useNavigate,
 } from "@tanstack/react-router";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   Bug,
@@ -132,9 +138,29 @@ function RootLayout() {
   })();
 
   const goWorld = () => {
-    if (sessionState.session) backToWorldSelect();
+    if (
+      sessionState.session ||
+      sessionState.world ||
+      sessionState.executionRecovery
+    ) {
+      backToWorldSelect();
+    }
     navigate({ to: "/session", search: {} });
     emitWorldListRequest();
+  };
+  const handleBrandClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    goWorld();
   };
   const goSession = () => navigate({ to: "/session", search: sessionSearch });
   const goSettings = () => {
@@ -189,6 +215,8 @@ function RootLayout() {
   const brand = (
     <Link
       to="/session"
+      search={{}}
+      onClick={handleBrandClick}
       className="ui-brand-title ui-title flex shrink-0 items-center gap-2 tracking-tight text-lg"
       style={isElectron ? noDragStyle : undefined}
     >
@@ -224,6 +252,8 @@ function RootLayout() {
           >
             <Link
               to="/session"
+              search={{}}
+              onClick={handleBrandClick}
               aria-label="Covel"
               className="mb-3 block"
               style={isElectron ? noDragStyle : undefined}

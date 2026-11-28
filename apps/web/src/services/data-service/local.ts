@@ -55,6 +55,16 @@ import type {
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
 const CATALOG_REQUEST_TIMEOUT_MS = 5000;
+const EPHEMERAL_SERVER_JOB_NAMESPACES = new Set([
+  "_runtime_jobs",
+  "_runtime_job_control",
+]);
+
+function hasEphemeralServerJobRows(checkpoint: BrowserCheckpoint): boolean {
+  return checkpoint.pluginData.some((row) =>
+    EPHEMERAL_SERVER_JOB_NAMESPACES.has(row.namespace),
+  );
+}
 
 const browserGameDataResetListeners = new Set<() => void>();
 
@@ -800,6 +810,7 @@ export class LocalDataService implements DataService {
     await syncWorldToServer(world);
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
+    let createdServerSession = false;
     try {
       await api.getSession(serverSessionId, { silentErrors: true });
     } catch (err) {
@@ -826,14 +837,59 @@ export class LocalDataService implements DataService {
             ).excluded
           : [],
       );
+      createdServerSession = true;
+    }
+
+    const stripEphemeralJobRows = async () =>
+      this.mutateCheckpointNow(sessionId, "strip-runtime-jobs", (current) => ({
+        ...current,
+        pluginData: current.pluginData.filter(
+          (row) => !EPHEMERAL_SERVER_JOB_NAMESPACES.has(row.namespace),
+        ),
+      }));
+
+    // A brand-new server mirror cannot have live background workers or a
+    // matching WorkspaceHead, so stale job bookkeeping from a prior process
+    // must be stripped before upload (the server rejects untrusted job rows).
+    if (createdServerSession && hasEphemeralServerJobRows(checkpoint)) {
+      checkpoint = await stripEphemeralJobRows();
     }
 
     // Every save starts from the server's first export, so the upload restores
     // it whole; a retained input delta asks the browser to reconcile.
-    const uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
-      ...checkpoint,
-      world: serverCheckpointWorld(world),
-    });
+    const checkpointWorld = serverCheckpointWorld(world);
+    const hasStaleJobs = hasEphemeralServerJobRows(checkpoint);
+    let uploaded;
+    try {
+      uploaded = hasStaleJobs
+        ? await api.uploadBrowserCheckpoint(
+            serverSessionId,
+            { ...checkpoint, world: checkpointWorld },
+            { silentCodes: ["invalid_checkpoint"] },
+          )
+        : await api.uploadBrowserCheckpoint(serverSessionId, {
+            ...checkpoint,
+            world: checkpointWorld,
+          });
+    } catch (err) {
+      // If the server still has the session record (e.g. after WorkspaceHead
+      // cache eviction or an earlier failed upload) without a matching live
+      // head, strip the dead server job bookkeeping and retry once.
+      if (
+        hasStaleJobs &&
+        err instanceof ApiError &&
+        err.status === 400 &&
+        err.code === "invalid_checkpoint"
+      ) {
+        checkpoint = await stripEphemeralJobRows();
+        uploaded = await api.uploadBrowserCheckpoint(serverSessionId, {
+          ...checkpoint,
+          world: checkpointWorld,
+        });
+      } else {
+        throw err;
+      }
+    }
     if (uploaded.reconcileRequired) {
       // Adopt initialization or retained detached writes before any action.
       const actionId = `hydrate:${checkpoint.revision}`;

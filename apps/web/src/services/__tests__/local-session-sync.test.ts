@@ -1349,4 +1349,130 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(vault.getPendingCommit("sess-stale-409")).resolves.toBeNull();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalled();
   });
+
+  it("strips stale _runtime_jobs and _runtime_job_control rows before uploading to a recreated server session", async () => {
+    const service = await serviceWithWorld();
+    await createSave(service, "world-1", "sess-stale-jobs", [], "en-US");
+    const current = (await vault.getLatestCheckpoint("sess-stale-jobs"))!;
+    const now = "2026-10-01T00:00:00.000Z";
+    const savedNote = {
+      id: "note-1",
+      sessionId: "sess-stale-jobs",
+      pluginId: "notes",
+      namespace: "entries",
+      key: "k1",
+      value: { text: "keep me" },
+      createdAt: now,
+      updatedAt: now,
+    };
+    const withStaleJobs: BrowserCheckpoint = {
+      ...current,
+      revision: current.revision + 1,
+      actionId: "server-turn-with-jobs",
+      committedAt: now,
+      pluginData: [
+        savedNote,
+        {
+          id: "job-control-row",
+          sessionId: "sess-stale-jobs",
+          pluginId: "media",
+          namespace: "_runtime_job_control",
+          key: "sequence",
+          value: { sequence: 2 },
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: "job-row",
+          sessionId: "sess-stale-jobs",
+          pluginId: "media",
+          namespace: "_runtime_jobs",
+          key: "job-1",
+          value: { status: "succeeded" },
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    };
+    await vault.applySessionCommit({
+      baseRevision: current.revision,
+      revision: withStaleJobs.revision,
+      actionId: withStaleJobs.actionId,
+      checkpoint: withStaleJobs,
+    });
+
+    restartServer();
+    api.uploadBrowserCheckpoint.mockClear();
+
+    await createSessionWorkspace(new LocalDataService(vault), "local").hydrate(
+      "sess-stale-jobs",
+    );
+
+    expect(api.createSession).toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledTimes(1);
+    const uploaded = api.uploadBrowserCheckpoint.mock.calls[0]![1];
+    expect(uploaded.pluginData).toEqual([savedNote]);
+    expect(
+      (await vault.getLatestCheckpoint("sess-stale-jobs"))?.pluginData,
+    ).toEqual([savedNote]);
+  });
+
+  it("strips stale runtime job rows and retries once when an existing server session without a head rejects them", async () => {
+    const service = await serviceWithWorld();
+    await createSave(service, "world-1", "sess-evicted-head", [], "en-US");
+    const current = (await vault.getLatestCheckpoint("sess-evicted-head"))!;
+    const now = "2026-10-01T00:00:00.000Z";
+    const withStaleControl: BrowserCheckpoint = {
+      ...current,
+      revision: current.revision + 1,
+      actionId: "server-turn-evicted",
+      committedAt: now,
+      pluginData: [
+        {
+          id: "job-control-row",
+          sessionId: "sess-evicted-head",
+          pluginId: "media",
+          namespace: "_runtime_job_control",
+          key: "sequence",
+          value: { sequence: 1 },
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    };
+    await vault.applySessionCommit({
+      baseRevision: current.revision,
+      revision: withStaleControl.revision,
+      actionId: withStaleControl.actionId,
+      checkpoint: withStaleControl,
+    });
+
+    api.uploadBrowserCheckpoint.mockClear();
+    api.uploadBrowserCheckpoint.mockRejectedValueOnce(
+      new ApiError(
+        400,
+        "/api/sessions/sess-evicted-head/browser-checkpoint",
+        JSON.stringify({
+          error:
+            'Reserved plugin-data namespace "_runtime_job_control" cannot be loaded from a browser checkpoint',
+          code: "invalid_checkpoint",
+        }),
+      ),
+    );
+
+    await createSessionWorkspace(new LocalDataService(vault), "local").hydrate(
+      "sess-evicted-head",
+    );
+
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledTimes(2);
+    expect(api.uploadBrowserCheckpoint.mock.calls[0]![2]).toEqual({
+      silentCodes: ["invalid_checkpoint"],
+    });
+    expect(api.uploadBrowserCheckpoint.mock.calls[1]![1].pluginData).toEqual(
+      [],
+    );
+    expect(
+      (await vault.getLatestCheckpoint("sess-evicted-head"))?.pluginData,
+    ).toEqual([]);
+  });
 });
